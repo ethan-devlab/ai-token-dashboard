@@ -1,0 +1,14 @@
+{
+  "name": "codex-token-dashboard",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Codex JSONL token and API-equivalent cost dashboard",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
