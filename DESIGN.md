@@ -35,12 +35,12 @@ The supported product surface is desktop only: 1440–1600px content frame and a
 | `SecondaryBreakdown` | Cached, uncached, cache-write, and reasoning figures; loading and populated states. |
 | `SystemMetadata` | Operating facts such as source directory, session count, timing, and pricing date; distinct from quality status. |
 | `DataQuality` | Hidden while healthy. Warning/error panels appear only for parse failures, unpriced/partial-priced models, or a file cap. |
-| `SessionTable` | A semantic table with a local scroll owner, sticky header, loading, populated, and empty states. Current Phase 1 retains the complete accounting columns; later phases compact them deliberately. |
+| `SessionTable` | A semantic table with a local scroll owner, sticky header, loading, populated, empty, and server-paginated states. The current page retains the complete accounting columns; density and column visibility are local view preferences. |
 | `PricingDisclosure` | Native `<details>` disclosure with collapsed and expanded states. |
 
 ## 6. Interaction and motion
 
-The refresh action is the only header action. Range, unit, detail, search, and sorting controls update visible data without changing accounting rules. Focus indication is a 3px teal outline with offset; hover only clarifies actionable controls and table rows. Loading uses a low-contrast 1.2s opacity skeleton and must not shift layout. `prefers-reduced-motion: reduce` suppresses nonessential animation and transitions while preserving actual loading/error text. Keyboard menu escape and the session drawer are deferred to their later implementation task.
+The refresh action is the only header action. Range, search, and sort state are mirrored in the URL, while density, unit, detail, trend, and column preferences stay in local storage. These controls update visible data without changing accounting rules. Focus indication is a 3px teal outline with offset; hover only clarifies actionable controls and table rows. Loading uses a low-contrast 1.2s opacity skeleton and must not shift layout. `prefers-reduced-motion: reduce` suppresses nonessential animation and transitions while preserving actual loading/error text. Escape closes the session drawer first, then clears search or closes the view menu.
 
 ## 7. Accessibility and security constraints
 
@@ -48,4 +48,6 @@ Controls have explicit labels; the summary exposes `aria-busy`; quality/error te
 
 ## 8. Scope, verification, and accepted debt
 
-Task 2 verifies syntax, the server’s static/root/CSP boundary, route traversal rejection, and parser fixture semantics through the native contract harness. Direct visual verification checks the one currently shipped page and its loading, populated, warning, error, range, and disclosure states. No mobile/tablet work, remote dependencies, analytics, glass effects, neon gradients, fake data, or silent data-semantic changes are accepted. There is no accepted design debt in this task; intentionally later work (Explorer drawer, density controls, trend, model view, API pagination, URL state, and local preferences) remains explicitly deferred by the implementation plan.
+Focused verification covers syntax, the server’s static/root/CSP boundary, route traversal rejection, parser fixture semantics, server-side aggregation, pagination, URL state, and local view preferences. Direct visual verification checks the shipped desktop page and its loading, populated, warning, error, range, explorer, drawer, pagination, and disclosure states. No mobile/tablet work, remote dependencies, analytics, glass effects, neon gradients, fake data, or silent data-semantic changes are accepted.
+
+The server keeps `GET /api/summary` as its compatibility response. `GET /api/dashboard` accepts the validated range, search, sort, offset, and limit query parameters and returns range aggregates plus the first session page. `GET /api/sessions` returns subsequent filtered pages only. Both dashboard routes expose summaries rather than raw JSONL or conversation content; model pricing is loaded from `server/pricing.json`.

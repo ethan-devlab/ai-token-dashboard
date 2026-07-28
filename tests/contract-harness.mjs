@@ -154,6 +154,31 @@ test('local dashboard contract fixture', async () => {
     assert.equal(unknownSession?.model, 'fixture-unknown-model');
     assert.equal(Object.hasOwn(summary.pricing.rates, 'fixture-unknown-model'), false);
 
+    const dashboardResponse = await fetch(`${baseUri}/api/dashboard?mode=all&limit=1&sort=recent`);
+    assert.equal(dashboardResponse.status, 200);
+    assertSecurityHeaders(dashboardResponse, "default-src 'none'; frame-ancestors 'none'");
+    const dashboardData = await dashboardResponse.json();
+    assert.equal(dashboardData.totals.totalTokens, 231);
+    assert.equal(dashboardData.sessionCount, 3);
+    assert.equal(dashboardData.matchedSessionCount, 3);
+    assert.equal(dashboardData.sessions.length, 1);
+    assert.equal(dashboardData.hasNext, true);
+    assert.equal(dashboardData.sessions[0].usageEvents.some((event) => Object.hasOwn(event, 'payload')), false);
+    assert.equal(dashboardData.cost.unknownModels.includes('fixture-unknown-model'), true);
+
+    const sessionsResponse = await fetch(`${baseUri}/api/sessions?mode=all&limit=1&offset=1&sort=recent`);
+    assert.equal(sessionsResponse.status, 200);
+    assertSecurityHeaders(sessionsResponse, "default-src 'none'; frame-ancestors 'none'");
+    const sessionsData = await sessionsResponse.json();
+    assert.equal(sessionsData.offset, 1);
+    assert.equal(sessionsData.sessions.length, 1);
+    assert.equal(sessionsData.hasPrevious, true);
+
+    const invalidRangeResponse = await fetch(`${baseUri}/api/dashboard?from=4&to=4`);
+    assert.equal(invalidRangeResponse.status, 400);
+    assert.deepEqual(await invalidRangeResponse.json(), { error: 'The from timestamp must be earlier than to.' });
+    assertSecurityHeaders(invalidRangeResponse, "default-src 'none'; frame-ancestors 'none'");
+
     const notFoundResponse = await fetch(`${baseUri}/not-found`);
     assert.equal(notFoundResponse.status, 404);
     assert.deepEqual(await notFoundResponse.json(), { error: 'Not found' });

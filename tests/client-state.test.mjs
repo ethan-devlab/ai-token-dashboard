@@ -8,8 +8,12 @@ import {
   aggregateSessions,
   deriveSessions,
   filterEvents,
+  queryStateFromSearch,
+  queryStateToSearch,
+  readViewPreferences,
   readViewState,
   resolveRange,
+  saveViewPreferences,
   selectExplorerSessions,
 } from '../public/scripts/state.mjs';
 
@@ -93,6 +97,28 @@ test('view state records table density and optional Explorer columns', () => {
     showDetails: true,
     trendMetric: 'tokens',
     density: 'compact',
+    visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
+  });
+});
+
+test('shared query state round-trips through a URL while view preferences stay local', () => {
+  const defaults = {
+    rangeMode: 'month', weekValue: '2026-W27', monthValue: '2026-07', yearValue: '2026',
+    customStart: '', customEnd: '', search: '', sort: 'recent',
+  };
+  const query = queryStateFromSearch(defaults, '?range=custom&start=2026-07-01T00%3A00&end=2026-07-02T00%3A00&q=alpha&sort=total');
+  assert.equal(query.rangeMode, 'custom');
+  assert.equal(query.search, 'alpha');
+  assert.equal(new URLSearchParams(queryStateToSearch(query)).get('sort'), 'total');
+
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
+  assert.equal(saveViewPreferences(storage, {
+    unit: 'M', showExact: false, showDetails: true, trendMetric: 'tokens', density: 'compact',
+    visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
+  }), true);
+  assert.deepEqual(readViewPreferences(storage), {
+    unit: 'M', showExact: false, showDetails: true, trendMetric: 'tokens', density: 'compact',
     visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
   });
 });

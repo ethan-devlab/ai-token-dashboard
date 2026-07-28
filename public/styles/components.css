@@ -77,6 +77,8 @@ body[data-table-density="compact"] .expand-session { min-block-size: 1.75rem; }
 .pill.unknown, .warning { color: var(--color-warning); }
 .good { color: var(--color-success); }
 .empty { padding: var(--space-10); color: var(--color-muted); text-align: center; }
+.explorer-pagination { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); border-block-start: 1px solid var(--color-border); padding: var(--space-3) var(--space-5); }
+.explorer-pagination button { min-block-size: 2rem; padding-inline: var(--space-3); }
 body:not(.show-exact) .exact, body:not(.show-exact) .cell-exact, body:not(.show-details) .detail-col { display: none; }
 .pricing { padding: var(--space-4) var(--space-5); }
 .pricing summary { cursor: pointer; color: var(--color-text); }

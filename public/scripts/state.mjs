@@ -1,5 +1,11 @@
 import { addUsage, isoWeekStart, zeroUsage } from './format.mjs';
 
+export const VIEW_PREFERENCES_KEY = 'codex-token-dashboard:view-preferences:v1';
+
+const RANGE_MODES = new Set(['all', 'last24h', 'today', 'week', 'month', 'year', 'custom']);
+const SORT_MODES = new Set(['recent', 'cost', 'total', 'input', 'cache', 'output']);
+const UNITS = new Set(['auto', 'exact', 'K', 'M', 'B']);
+
 export function createDashboardState() {
   return {
     source: { data: null, status: 'loading' },
@@ -13,6 +19,7 @@ export function createDashboardState() {
       visibleColumns: { lastUsed: true, model: true, input: true, output: true, cost: true },
     },
     derived: { explorerSessions: [] },
+    page: { offset: 0, limit: 100 },
     lastValidRange: null,
   };
 }
@@ -44,6 +51,114 @@ export function readViewState(controls) {
       output: controls.columnOutput.checked,
       cost: controls.columnCost.checked,
     },
+  };
+}
+
+export function queryStateFromSearch(defaults, search) {
+  const params = new URLSearchParams(search);
+  const rangeMode = params.get('range');
+  const sort = params.get('sort');
+  return {
+    ...defaults,
+    rangeMode: RANGE_MODES.has(rangeMode) ? rangeMode : defaults.rangeMode,
+    weekValue: params.get('week') ?? defaults.weekValue,
+    monthValue: params.get('month') ?? defaults.monthValue,
+    yearValue: params.get('year') ?? defaults.yearValue,
+    customStart: params.get('start') ?? defaults.customStart,
+    customEnd: params.get('end') ?? defaults.customEnd,
+    search: (params.get('q') ?? defaults.search).trim(),
+    sort: SORT_MODES.has(sort) ? sort : defaults.sort,
+  };
+}
+
+export function queryStateToSearch(query) {
+  const params = new URLSearchParams();
+  const values = [
+    ['range', query.rangeMode], ['week', query.weekValue], ['month', query.monthValue],
+    ['year', query.yearValue], ['start', query.customStart], ['end', query.customEnd],
+    ['q', query.search], ['sort', query.sort],
+  ];
+  for (const [name, value] of values) {
+    if (value && !(name === 'sort' && value === 'recent')) params.set(name, value);
+  }
+  return params.toString();
+}
+
+export function applyQueryStateToControls(controls, query) {
+  controls.rangeMode.value = query.rangeMode;
+  controls.weekInput.value = query.weekValue;
+  controls.monthInput.value = query.monthValue;
+  controls.yearInput.value = query.yearValue;
+  controls.customStart.value = query.customStart;
+  controls.customEnd.value = query.customEnd;
+  controls.search.value = query.search;
+  controls.sort.value = query.sort;
+}
+
+export function readViewPreferences(storage) {
+  try {
+    const parsed = JSON.parse(storage.getItem(VIEW_PREFERENCES_KEY) || '{}');
+    const visibleColumns = parsed.visibleColumns && typeof parsed.visibleColumns === 'object'
+      ? parsed.visibleColumns
+      : {};
+    return {
+      unit: UNITS.has(parsed.unit) ? parsed.unit : null,
+      showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null,
+      showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null,
+      trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null,
+      density: ['comfortable', 'compact'].includes(parsed.density) ? parsed.density : null,
+      visibleColumns: Object.fromEntries(
+        ['lastUsed', 'model', 'input', 'output', 'cost']
+          .filter((key) => typeof visibleColumns[key] === 'boolean')
+          .map((key) => [key, visibleColumns[key]])
+      ),
+    };
+  } catch {
+    return { unit: null, showExact: null, showDetails: null, trendMetric: null, density: null, visibleColumns: {} };
+  }
+}
+
+export function applyViewPreferencesToControls(controls, preferences) {
+  if (preferences.unit) controls.unit.value = preferences.unit;
+  if (preferences.showExact != null) controls.showExact.checked = preferences.showExact;
+  if (preferences.showDetails != null) controls.showDetails.checked = preferences.showDetails;
+  if (preferences.trendMetric) controls.trendMetric.value = preferences.trendMetric;
+  if (preferences.density) controls.density.value = preferences.density;
+  const columns = {
+    lastUsed: controls.columnLastUsed, model: controls.columnModel, input: controls.columnInput,
+    output: controls.columnOutput, cost: controls.columnCost,
+  };
+  for (const [key, control] of Object.entries(columns)) {
+    if (preferences.visibleColumns[key] != null) control.checked = preferences.visibleColumns[key];
+  }
+}
+
+export function saveViewPreferences(storage, view) {
+  try {
+    storage.setItem(VIEW_PREFERENCES_KEY, JSON.stringify({
+      unit: view.unit,
+      showExact: view.showExact,
+      showDetails: view.showDetails,
+      trendMetric: view.trendMetric,
+      density: view.density,
+      visibleColumns: view.visibleColumns,
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function restoreCost(cost = {}) {
+  return {
+    total: Number(cost.total || 0),
+    input: Number(cost.input || 0),
+    cached: Number(cost.cached || 0),
+    cacheWrite: Number(cost.cacheWrite || 0),
+    output: Number(cost.output || 0),
+    pricedTokens: Number(cost.pricedTokens || 0),
+    unknownModels: new Set(cost.unknownModels || []),
+    unavailableComponents: new Set(cost.unavailableComponents || []),
   };
 }
 
@@ -187,11 +302,12 @@ export function selectExplorerSessions(sessions, query) {
 
 export function qualityMessages(source, cost) {
   const messages = [];
-  const invalidLines = source.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0);
-  const resets = source.sessions.reduce((sum, session) => sum + session.cumulativeResetCount, 0);
+  const invalidLines = source.quality?.invalidLines ?? source.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0);
+  const resets = source.quality?.cumulativeResets ?? source.sessions.reduce((sum, session) => sum + session.cumulativeResetCount, 0);
   if (source.errors.length) messages.push(`${source.errors.length} 個 JSONL 檔案無法解析`);
   if (invalidLines) messages.push(`${invalidLines} 行 JSONL 已略過`);
   if (resets) messages.push(`${resets} 次累積計數器重設已以增量修正`);
+  if (source.quality?.estimatedTimestamps) messages.push(`${source.quality.estimatedTimestamps} 筆使用事件採估算時間戳`);
   if (cost.unknownModels.size) messages.push(`未定價模型：${[...cost.unknownModels].join(', ')}`);
   if (cost.unavailableComponents.size) messages.push('部分計價元件未提供公開單價');
   if (source.truncated) messages.push(`已達 MAX_FILES=${source.maxFiles}`);

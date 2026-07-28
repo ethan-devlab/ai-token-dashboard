@@ -1,18 +1,23 @@
 import { escapeHtml, formatDate, integerFormat, isoWeekValue, localDateTimeValue, moneyFormat } from './format.mjs';
 import {
-  aggregateSessions,
+  applyQueryStateToControls,
+  applyViewPreferencesToControls,
   createDashboardState,
   deriveSessions,
   qualityMessages,
+  queryStateFromSearch,
+  queryStateToSearch,
   readQueryState,
+  readViewPreferences,
   readViewState,
   resolveRange,
-  selectExplorerSessions,
+  restoreCost,
+  saveViewPreferences,
 } from './state.mjs';
 import { createSessionDrawerController } from './drawer-controller.mjs';
 import { renderExplorerRows } from './explorer.mjs';
-import { buildModelBreakdown, renderModelBreakdown } from './model-breakdown.mjs';
-import { buildTrendSeries, renderUsageTrend } from './trend.mjs';
+import { renderModelBreakdown } from './model-breakdown.mjs';
+import { renderUsageTrend } from './trend.mjs';
 
 const state = createDashboardState();
 const $ = (id) => document.getElementById(id);
@@ -25,13 +30,17 @@ const controls = Object.freeze({
   columnOutput: $('columnOutput'), columnCost: $('columnCost'),
 });
 const drawerController = createSessionDrawerController({ getState: () => state, getElement: $, showNotice });
+let defaultQuery;
+let activeRequest = 0;
+let searchTimer = 0;
 
-function syncState() {
+function syncState({ persistView = false } = {}) {
   const { drawerSession, drawerTrigger } = state.view;
   state.query = readQueryState(controls);
   state.view = { ...readViewState(controls), drawerSession, drawerTrigger };
   document.body.classList.toggle('show-exact', state.view.showExact);
   document.body.classList.toggle('show-details', state.view.showDetails);
+  if (persistView) saveViewPreferences(window.localStorage, state.view);
 }
 
 function compactNumber(value) {
@@ -61,8 +70,8 @@ function rangeDetail(range) {
 
 function readableLoadError(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return message.startsWith('Sessions directory does not exist:')
-    ? '找不到 sessions 目錄。請確認本機 Codex sessions 設定後重試。'
+  return /sessions directory|failed to fetch|network/i.test(message)
+    ? '無法讀取本機 sessions。請確認伺服器仍在 localhost 執行。'
     : message;
 }
 
@@ -103,12 +112,18 @@ function renderTotals(usage, cost) {
 
 function renderExplorer(sessions, data, range) {
   const query = state.query.search;
-  $('explorerCount').textContent = `顯示 ${integerFormat.format(sessions.length)} / ${integerFormat.format(data.length)} sessions`;
+  const pageStart = data.matchedSessionCount ? data.offset + 1 : 0;
+  const pageEnd = data.offset + sessions.length;
+  $('explorerCount').textContent = `顯示 ${integerFormat.format(pageStart)}–${integerFormat.format(pageEnd)} / ${integerFormat.format(data.matchedSessionCount)} sessions`;
   $('clearSearch').hidden = !query;
-  $('rows').innerHTML = renderExplorerRows(sessions, { pricing: state.source.data.pricing, selectedFile: state.view.drawerSession?.file, unit: state.view.unit });
+  $('rows').innerHTML = renderExplorerRows(sessions, { pricing: data.pricing, selectedFile: state.view.drawerSession?.file, unit: state.view.unit });
   const empty = $('empty');
   empty.hidden = sessions.length !== 0;
-  empty.textContent = query && data.length ? '找不到符合搜尋條件的 session。按 Escape 或使用「清除搜尋」返回完整表格。' : `此範圍（${range.label}）沒有 token 使用紀錄。`;
+  empty.textContent = query && data.sessionCount ? '找不到符合搜尋條件的 session。按 Escape 或使用「清除搜尋」返回完整表格。' : `此範圍（${range.label}）沒有 token 使用紀錄。`;
+  $('explorerPagination').hidden = data.matchedSessionCount <= data.limit;
+  $('pagePrevious').disabled = !data.hasPrevious;
+  $('pageNext').disabled = !data.hasNext;
+  $('pageStatus').textContent = `${integerFormat.format(pageStart)}–${integerFormat.format(pageEnd)} / ${integerFormat.format(data.matchedSessionCount)}`;
 }
 
 function applyExplorerView() {
@@ -118,25 +133,28 @@ function applyExplorerView() {
   });
 }
 
-function renderLoaded(data) {
-  syncState();
+function currentRange() {
   const requestedRange = resolveRange(state.query);
   renderRangeErrors(requestedRange);
   if (requestedRange.valid) state.lastValidRange = requestedRange;
-  const range = state.lastValidRange || requestedRange;
-  const rangedSessions = deriveSessions(data, range);
-  const totals = aggregateSessions(rangedSessions);
-  const explorerSessions = selectExplorerSessions(rangedSessions, state.query);
-  state.derived = { explorerSessions };
+  return { requestedRange, range: state.lastValidRange || requestedRange };
+}
+
+function renderLoaded(data) {
+  syncState();
+  const { requestedRange, range } = currentRange();
   const usingPreviousRange = !requestedRange.valid && state.lastValidRange;
+  const cost = restoreCost(data.cost);
+  const explorerSessions = deriveSessions({ pricing: data.pricing, sessions: data.sessions }, { mode: 'all', fromMs: null, toMs: null });
+  state.derived = { explorerSessions };
   $('rangeLabel').textContent = usingPreviousRange ? `${requestedRange.label}（未套用）` : range.label;
   $('rangeDetail').textContent = usingPreviousRange ? `請修正日期；目前仍顯示 ${rangeDetail(range)}` : rangeDetail(range);
-  $('info').innerHTML = `<span>來源：<code>local sessions root</code></span><span>範圍內 sessions：${integerFormat.format(rangedSessions.length)}</span><span>JSONL：${integerFormat.format(data.scannedFileCount)}</span><span>解析：${integerFormat.format(data.durationMs)} ms</span><span>定價版本：${escapeHtml(data.pricing.updatedAt)}</span>`;
-  renderTotals(totals.usage, totals.cost);
-  renderQuality(data, totals.cost);
-  renderUsageTrend($('usageTrend'), buildTrendSeries(rangedSessions, data.pricing, range), state.view.trendMetric);
-  renderModelBreakdown($('modelBreakdown'), buildModelBreakdown(rangedSessions, data.pricing), state.view.trendMetric);
-  renderExplorer(explorerSessions, rangedSessions, range);
+  $('info').innerHTML = `<span>來源：<code>local sessions root</code></span><span>範圍內 sessions：${integerFormat.format(data.sessionCount)}</span><span>JSONL：${integerFormat.format(data.scannedFileCount)}</span><span>解析：${integerFormat.format(data.durationMs)} ms</span><span>定價版本：${escapeHtml(data.pricing.updatedAt)}</span>`;
+  renderTotals(data.totals, cost);
+  renderQuality(data, cost);
+  renderUsageTrend($('usageTrend'), data.trend, state.view.trendMetric);
+  renderModelBreakdown($('modelBreakdown'), data.models, state.view.trendMetric);
+  renderExplorer(explorerSessions, data, range);
   applyExplorerView();
   drawerController.render();
 }
@@ -156,6 +174,7 @@ function renderEmptySource() {
   $('modelBreakdown').textContent = state.source.status === 'error' ? '無法載入模型用量。' : '載入模型用量…';
   $('empty').hidden = state.source.status !== 'error';
   $('empty').textContent = '無法載入 Codex sessions。請確認本機 sessions 目錄後重試。';
+  $('explorerPagination').hidden = true;
 }
 
 function render() {
@@ -166,8 +185,9 @@ function render() {
 }
 
 function updateRangeControls() {
-  document.querySelectorAll('.range-control').forEach((element) => { element.hidden = element.dataset.range !== controls.rangeMode.value; });
-  render();
+  document.querySelectorAll('.range-control').forEach((element) => {
+    element.hidden = element.dataset.range !== controls.rangeMode.value;
+  });
 }
 
 function showNotice(message) {
@@ -175,7 +195,33 @@ function showNotice(message) {
   $('notice').textContent = message;
 }
 
-async function load() {
+function updateUrl() {
+  const search = queryStateToSearch(state.query);
+  const next = `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`;
+  window.history.replaceState(null, '', next);
+}
+
+function requestUrl(pathname, range) {
+  const params = new URLSearchParams({
+    mode: range.mode,
+    search: state.query.search,
+    sort: state.query.sort,
+    offset: String(state.page.offset),
+    limit: String(state.page.limit),
+  });
+  if (range.fromMs != null) params.set('from', String(range.fromMs));
+  if (range.toMs != null) params.set('to', String(range.toMs));
+  return `${pathname}?${params}`;
+}
+
+async function load({ sessionsOnly = false, announceRefresh = false } = {}) {
+  syncState();
+  const { requestedRange, range } = currentRange();
+  if (!requestedRange.valid) {
+    render();
+    return;
+  }
+  const requestId = ++activeRequest;
   const hadData = Boolean(state.source.data);
   state.source.status = hadData ? 'refreshing' : 'loading';
   state.source.error = '';
@@ -183,25 +229,56 @@ async function load() {
   $('refresh').textContent = hadData ? '重新掃描中…' : '解析中…';
   render();
   try {
-    const response = await fetch('/api/summary', { cache: 'no-store' });
+    const response = await fetch(requestUrl(sessionsOnly ? '/api/sessions' : '/api/dashboard', range), { cache: 'no-store' });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'Request failed');
-    state.source = { data: payload, status: 'ready', error: '' };
+    if (requestId !== activeRequest) return;
+    state.source = {
+      data: sessionsOnly ? { ...state.source.data, ...payload } : payload,
+      status: 'ready',
+      error: '',
+    };
     state.view.drawerSession = null;
     state.view.drawerTrigger = null;
-    renderPricing(payload);
+    if (!sessionsOnly) renderPricing(payload);
     render();
-    if (hadData) showNotice(`已重新掃描 ${integerFormat.format(payload.scannedFileCount)} 個 JSONL，耗時 ${integerFormat.format(payload.durationMs)} ms。`);
+    if (announceRefresh) showNotice(`已重新掃描 ${integerFormat.format(payload.scannedFileCount)} 個 JSONL，耗時 ${integerFormat.format(payload.durationMs)} ms。`);
   } catch (error) {
+    if (requestId !== activeRequest) return;
     state.source.status = 'error';
     state.source.error = readableLoadError(error);
     render();
   } finally {
-    if (state.source.data) state.source.status = 'ready';
-    $('summary').setAttribute('aria-busy', 'false');
-    $('refresh').disabled = false;
-    $('refresh').textContent = '重新解析 JSONL';
+    if (requestId === activeRequest) {
+      if (state.source.data) state.source.status = 'ready';
+      $('summary').setAttribute('aria-busy', 'false');
+      $('refresh').disabled = false;
+      $('refresh').textContent = '重新解析 JSONL';
+    }
   }
+}
+
+function queryChanged({ defer = false } = {}) {
+  window.clearTimeout(searchTimer);
+  const apply = () => {
+    syncState();
+    const range = resolveRange(state.query);
+    renderRangeErrors(range);
+    if (!range.valid) {
+      render();
+      return;
+    }
+    state.page.offset = 0;
+    updateUrl();
+    load();
+  };
+  if (defer) searchTimer = window.setTimeout(apply, 250);
+  else apply();
+}
+
+function viewChanged() {
+  syncState({ persistView: true });
+  render();
 }
 
 function initialiseInputs() {
@@ -213,15 +290,32 @@ function initialiseInputs() {
   start.setDate(start.getDate() - 7);
   controls.customStart.value = localDateTimeValue(start);
   controls.customEnd.value = localDateTimeValue(now);
+  defaultQuery = readQueryState(controls);
+  applyQueryStateToControls(controls, queryStateFromSearch(defaultQuery, window.location.search));
+  applyViewPreferencesToControls(controls, readViewPreferences(window.localStorage));
+  syncState();
+  state.lastValidRange = resolveRange(state.query);
   updateRangeControls();
 }
 
-for (const input of [controls.search, controls.sort, controls.unit, controls.showExact, controls.showDetails, controls.trendMetric, controls.density, controls.columnLastUsed, controls.columnModel, controls.columnInput, controls.columnOutput, controls.columnCost, controls.weekInput, controls.monthInput, controls.yearInput, controls.customStart, controls.customEnd]) {
-  input.addEventListener(input === controls.search ? 'input' : 'change', render);
+for (const input of [controls.weekInput, controls.monthInput, controls.yearInput, controls.customStart, controls.customEnd, controls.sort]) {
+  input.addEventListener('change', () => queryChanged());
 }
-controls.rangeMode.addEventListener('change', updateRangeControls);
-$('clearSearch').addEventListener('click', () => { controls.search.value = ''; render(); controls.search.focus(); });
-$('refresh').addEventListener('click', load);
+controls.search.addEventListener('input', () => queryChanged({ defer: true }));
+controls.rangeMode.addEventListener('change', () => { updateRangeControls(); queryChanged(); });
+for (const input of [controls.unit, controls.showExact, controls.showDetails, controls.trendMetric, controls.density, controls.columnLastUsed, controls.columnModel, controls.columnInput, controls.columnOutput, controls.columnCost]) {
+  input.addEventListener('change', viewChanged);
+}
+$('clearSearch').addEventListener('click', () => { controls.search.value = ''; queryChanged(); controls.search.focus(); });
+$('refresh').addEventListener('click', () => { state.page.offset = 0; load({ announceRefresh: true }); });
+$('pagePrevious').addEventListener('click', () => { state.page.offset = Math.max(0, state.page.offset - state.page.limit); load({ sessionsOnly: true }); });
+$('pageNext').addEventListener('click', () => { state.page.offset += state.page.limit; load({ sessionsOnly: true }); });
+window.addEventListener('popstate', () => {
+  applyQueryStateToControls(controls, queryStateFromSearch(defaultQuery, window.location.search));
+  state.page.offset = 0;
+  updateRangeControls();
+  load();
+});
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (state.view.drawerSession) { event.preventDefault(); drawerController.close(); return; }
@@ -229,7 +323,8 @@ document.addEventListener('keydown', (event) => {
   const menuWasOpen = $('viewMenu').open;
   if (hadSearch) controls.search.value = '';
   if (menuWasOpen) $('viewMenu').open = false;
-  if (hadSearch || menuWasOpen) { event.preventDefault(); render(); }
+  if (hadSearch) { event.preventDefault(); queryChanged(); }
+  else if (menuWasOpen) { event.preventDefault(); render(); }
 });
 $('rows').addEventListener('click', (event) => {
   const row = event.target.closest('tr[data-session-index]');
