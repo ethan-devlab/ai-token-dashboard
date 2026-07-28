@@ -1,0 +1,15 @@
+* { box-sizing: border-box; }
+html { background: var(--color-canvas); }
+body { margin: 0; min-inline-size: 960px; background: var(--color-canvas); color: var(--color-text); font-family: var(--font-sans); font-size: var(--text-base); line-height: var(--line-normal); }
+button, input, select { font: inherit; }
+button, input, select, .view-menu summary { min-block-size: 2.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-muted); color: var(--color-text); padding-inline: var(--space-3); }
+button { cursor: pointer; font-weight: 700; }
+button:disabled { cursor: wait; opacity: 0.65; }
+button:hover { background: var(--color-surface-raised); }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+input[aria-invalid="true"] { border-color: var(--color-danger); }
+h1, h2, p { margin: 0; }
+h1 { font-size: var(--text-2xl); letter-spacing: -0.04em; }
+h2 { font-size: var(--text-xl); letter-spacing: -0.025em; }
+table { border-collapse: collapse; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; } }

@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.mjs",
     "check": "node --check server.mjs",
+    "test:client": "node --test tests/client-state.test.mjs",
     "test:contract": "node --test tests/contract-harness.mjs"
   },
   "engines": {

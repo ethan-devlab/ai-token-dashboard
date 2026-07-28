@@ -106,8 +106,28 @@ test('local dashboard contract fixture', async () => {
 
     const homeResponse = await fetch(`${baseUri}/`);
     assert.equal(homeResponse.status, 200);
-    assert.match(await homeResponse.text(), /Codex Token Dashboard/);
-    assertSecurityHeaders(homeResponse, "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+    const homeDocument = await homeResponse.text();
+    assert.match(homeDocument, /Codex Token Dashboard/);
+    assert.match(homeDocument, /href="\/styles\/tokens\.css"/);
+    assert.match(homeDocument, /src="\/scripts\/dashboard\.mjs"/);
+    assert.doesNotMatch(homeDocument, /<style|<script(?! type="module" src=)/);
+    assertSecurityHeaders(homeResponse, "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+
+    const cssResponse = await fetch(`${baseUri}/styles/tokens.css`);
+    assert.equal(cssResponse.status, 200);
+    assert.match(cssResponse.headers.get('content-type') ?? '', /^text\/css/);
+    assertSecurityHeaders(cssResponse, "default-src 'none'; frame-ancestors 'none'");
+    assert.match(await cssResponse.text(), /--color-canvas/);
+
+    const scriptResponse = await fetch(`${baseUri}/scripts/dashboard.mjs`);
+    assert.equal(scriptResponse.status, 200);
+    assert.match(scriptResponse.headers.get('content-type') ?? '', /^text\/javascript/);
+    assertSecurityHeaders(scriptResponse, "default-src 'none'; frame-ancestors 'none'");
+    assert.match(await scriptResponse.text(), /from '\.\/format\.mjs'/);
+
+    const traversalResponse = await fetch(`${baseUri}/styles/%2e%2e%2f%2e%2e%2fserver.mjs`);
+    assert.equal(traversalResponse.status, 404);
+    assert.deepEqual(await traversalResponse.json(), { error: 'Not found' });
 
     const summaryResponse = await fetch(`${baseUri}/api/summary`);
     assert.equal(summaryResponse.status, 200);
