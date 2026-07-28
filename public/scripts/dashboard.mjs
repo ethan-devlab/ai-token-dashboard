@@ -11,6 +11,8 @@ import {
 } from './state.mjs';
 import { createSessionDrawerController } from './drawer-controller.mjs';
 import { renderExplorerRows } from './explorer.mjs';
+import { buildModelBreakdown, renderModelBreakdown } from './model-breakdown.mjs';
+import { buildTrendSeries, renderUsageTrend } from './trend.mjs';
 
 const state = createDashboardState();
 const $ = (id) => document.getElementById(id);
@@ -18,6 +20,7 @@ const controls = Object.freeze({
   rangeMode: $('rangeMode'), weekInput: $('weekInput'), monthInput: $('monthInput'), yearInput: $('yearInput'),
   customStart: $('customStart'), customEnd: $('customEnd'), search: $('search'), sort: $('sort'),
   unit: $('unit'), showExact: $('showExact'), showDetails: $('showDetails'), density: $('density'),
+  trendMetric: $('trendMetric'),
   columnLastUsed: $('columnLastUsed'), columnModel: $('columnModel'), columnInput: $('columnInput'),
   columnOutput: $('columnOutput'), columnCost: $('columnCost'),
 });
@@ -131,6 +134,8 @@ function renderLoaded(data) {
   $('info').innerHTML = `<span>來源：<code>local sessions root</code></span><span>範圍內 sessions：${integerFormat.format(rangedSessions.length)}</span><span>JSONL：${integerFormat.format(data.scannedFileCount)}</span><span>解析：${integerFormat.format(data.durationMs)} ms</span><span>定價版本：${escapeHtml(data.pricing.updatedAt)}</span>`;
   renderTotals(totals.usage, totals.cost);
   renderQuality(data, totals.cost);
+  renderUsageTrend($('usageTrend'), buildTrendSeries(rangedSessions, data.pricing, range), state.view.trendMetric);
+  renderModelBreakdown($('modelBreakdown'), buildModelBreakdown(rangedSessions, data.pricing), state.view.trendMetric);
   renderExplorer(explorerSessions, rangedSessions, range);
   applyExplorerView();
   drawerController.render();
@@ -147,6 +152,8 @@ function renderEmptySource() {
   quality.dataset.state = 'error';
   quality.textContent = state.source.error || '';
   $('rows').innerHTML = '';
+  $('usageTrend').textContent = state.source.status === 'error' ? '無法載入趨勢資料。' : '載入趨勢資料…';
+  $('modelBreakdown').textContent = state.source.status === 'error' ? '無法載入模型用量。' : '載入模型用量…';
   $('empty').hidden = state.source.status !== 'error';
   $('empty').textContent = '無法載入 Codex sessions。請確認本機 sessions 目錄後重試。';
 }
@@ -209,7 +216,7 @@ function initialiseInputs() {
   updateRangeControls();
 }
 
-for (const input of [controls.search, controls.sort, controls.unit, controls.showExact, controls.showDetails, controls.density, controls.columnLastUsed, controls.columnModel, controls.columnInput, controls.columnOutput, controls.columnCost, controls.weekInput, controls.monthInput, controls.yearInput, controls.customStart, controls.customEnd]) {
+for (const input of [controls.search, controls.sort, controls.unit, controls.showExact, controls.showDetails, controls.trendMetric, controls.density, controls.columnLastUsed, controls.columnModel, controls.columnInput, controls.columnOutput, controls.columnCost, controls.weekInput, controls.monthInput, controls.yearInput, controls.customStart, controls.customEnd]) {
   input.addEventListener(input === controls.search ? 'input' : 'change', render);
 }
 controls.rangeMode.addEventListener('change', updateRangeControls);

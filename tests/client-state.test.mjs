@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { redactPath } from '../public/scripts/drawer.mjs';
+import { buildModelBreakdown } from '../public/scripts/model-breakdown.mjs';
+import { buildTrendSeries } from '../public/scripts/trend.mjs';
 import {
   aggregateSessions,
   deriveSessions,
@@ -76,6 +78,7 @@ test('view state records table density and optional Explorer columns', () => {
     unit: control('M'),
     showExact: control('', false),
     showDetails: control('', true),
+    trendMetric: control('tokens'),
     density: control('compact'),
     columnLastUsed: control('', false),
     columnModel: control('', true),
@@ -88,7 +91,33 @@ test('view state records table density and optional Explorer columns', () => {
     unit: 'M',
     showExact: false,
     showDetails: true,
+    trendMetric: 'tokens',
     density: 'compact',
     visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
   });
+});
+
+test('usage trend aggregates filtered sessions at the requested temporal grain', () => {
+  const range = { mode: 'week', fromMs: Date.parse('2026-07-01T00:00:00Z'), toMs: Date.parse('2026-07-08T00:00:00Z') };
+  const sessions = deriveSessions(source, { mode: 'all', fromMs: null, toMs: null });
+  const trend = buildTrendSeries(sessions, source.pricing, range);
+
+  assert.equal(trend.unit, 'day');
+  assert.equal(trend.points.length, 7);
+  assert.equal(trend.points.find((point) => point.label === '07/01')?.tokens, 130);
+  assert.equal(trend.points.find((point) => point.label === '07/02')?.tokens, 160);
+  assert.equal(trend.partialCost, true);
+});
+
+test('model breakdown preserves unpriced models as an incomplete cost group', () => {
+  const sessions = deriveSessions(source, { mode: 'all', fromMs: null, toMs: null });
+  const models = buildModelBreakdown(sessions, source.pricing);
+  const known = models.find((item) => item.model === 'gpt-test');
+  const unknown = models.find((item) => item.model === 'unknown-test');
+
+  assert.equal(known?.tokens, 190);
+  assert.ok((known?.cost || 0) > 0);
+  assert.equal(unknown?.tokens, 100);
+  assert.equal(unknown?.cost, 0);
+  assert.equal(unknown?.partialCost, true);
 });

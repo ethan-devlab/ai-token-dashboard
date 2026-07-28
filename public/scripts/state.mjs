@@ -8,6 +8,7 @@ export function createDashboardState() {
       unit: 'auto',
       showExact: true,
       showDetails: true,
+      trendMetric: 'cost',
       density: 'comfortable',
       visibleColumns: { lastUsed: true, model: true, input: true, output: true, cost: true },
     },
@@ -34,6 +35,7 @@ export function readViewState(controls) {
     unit: controls.unit.value,
     showExact: controls.showExact.checked,
     showDetails: controls.showDetails.checked,
+    trendMetric: controls.trendMetric.value,
     density: controls.density.value,
     visibleColumns: {
       lastUsed: controls.columnLastUsed.checked,

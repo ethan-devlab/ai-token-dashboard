@@ -103,6 +103,31 @@
         </section>
       </section>
 
+      <section class="usage-insight surface" aria-labelledby="trendHeading">
+        <div class="insight-heading">
+          <div>
+            <p class="eyebrow">USAGE INSIGHT</p>
+            <h2 id="trendHeading">使用趨勢</h2>
+          </div>
+          <label class="control">趨勢指標
+            <select id="trendMetric">
+              <option value="cost" selected>估算費用</option>
+              <option value="tokens">Total tokens</option>
+            </select>
+          </label>
+        </div>
+        <div id="usageTrend" aria-live="polite"></div>
+      </section>
+      <section class="model-insight surface" aria-labelledby="modelHeading">
+        <div class="insight-heading">
+          <div>
+            <p class="eyebrow">MODEL USAGE</p>
+            <h2 id="modelHeading">模型用量</h2>
+          </div>
+        </div>
+        <div id="modelBreakdown" aria-live="polite"></div>
+      </section>
+
       <section id="info" class="system-metadata surface" aria-label="System metadata"><span>載入中…</span></section>
       <section id="quality" class="data-quality surface" aria-live="polite" hidden></section>
 
