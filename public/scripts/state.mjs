@@ -4,7 +4,14 @@ export function createDashboardState() {
   return {
     source: { data: null, status: 'loading' },
     query: { rangeMode: 'month', weekValue: '', monthValue: '', yearValue: '', customStart: '', customEnd: '', search: '', sort: 'recent' },
-    view: { unit: 'auto', showExact: true, showDetails: true },
+    view: {
+      unit: 'auto',
+      showExact: true,
+      showDetails: true,
+      density: 'comfortable',
+      visibleColumns: { lastUsed: true, model: true, input: true, output: true, cost: true },
+    },
+    derived: { explorerSessions: [] },
     lastValidRange: null,
   };
 }
@@ -27,6 +34,14 @@ export function readViewState(controls) {
     unit: controls.unit.value,
     showExact: controls.showExact.checked,
     showDetails: controls.showDetails.checked,
+    density: controls.density.value,
+    visibleColumns: {
+      lastUsed: controls.columnLastUsed.checked,
+      model: controls.columnModel.checked,
+      input: controls.columnInput.checked,
+      output: controls.columnOutput.checked,
+      cost: controls.columnCost.checked,
+    },
   };
 }
 

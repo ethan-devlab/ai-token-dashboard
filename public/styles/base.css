@@ -12,4 +12,5 @@ h1, h2, p { margin: 0; }
 h1 { font-size: var(--text-2xl); letter-spacing: -0.04em; }
 h2 { font-size: var(--text-xl); letter-spacing: -0.025em; }
 table { border-collapse: collapse; }
+.visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; } }

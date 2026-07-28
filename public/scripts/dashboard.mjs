@@ -1,37 +1,32 @@
-import {
-  addUsage,
-  escapeHtml,
-  formatDate,
-  integerFormat,
-  isoWeekValue,
-  localDateTimeValue,
-  moneyFormat,
-  text,
-  zeroUsage,
-} from './format.mjs';
+import { escapeHtml, formatDate, integerFormat, isoWeekValue, localDateTimeValue, moneyFormat } from './format.mjs';
 import {
   aggregateSessions,
   createDashboardState,
   deriveSessions,
-  findRate,
   qualityMessages,
   readQueryState,
   readViewState,
   resolveRange,
   selectExplorerSessions,
 } from './state.mjs';
+import { createSessionDrawerController } from './drawer-controller.mjs';
+import { renderExplorerRows } from './explorer.mjs';
 
 const state = createDashboardState();
 const $ = (id) => document.getElementById(id);
 const controls = Object.freeze({
   rangeMode: $('rangeMode'), weekInput: $('weekInput'), monthInput: $('monthInput'), yearInput: $('yearInput'),
   customStart: $('customStart'), customEnd: $('customEnd'), search: $('search'), sort: $('sort'),
-  unit: $('unit'), showExact: $('showExact'), showDetails: $('showDetails'),
+  unit: $('unit'), showExact: $('showExact'), showDetails: $('showDetails'), density: $('density'),
+  columnLastUsed: $('columnLastUsed'), columnModel: $('columnModel'), columnInput: $('columnInput'),
+  columnOutput: $('columnOutput'), columnCost: $('columnCost'),
 });
+const drawerController = createSessionDrawerController({ getState: () => state, getElement: $, showNotice });
 
 function syncState() {
+  const { drawerSession, drawerTrigger } = state.view;
   state.query = readQueryState(controls);
-  state.view = readViewState(controls);
+  state.view = { ...readViewState(controls), drawerSession, drawerTrigger };
   document.body.classList.toggle('show-exact', state.view.showExact);
   document.body.classList.toggle('show-details', state.view.showDetails);
 }
@@ -47,11 +42,6 @@ function compactNumber(value) {
   const scaled = number / divisor;
   const digits = Math.abs(scaled) >= 100 ? 1 : Math.abs(scaled) >= 10 ? 2 : 3;
   return `${scaled.toLocaleString('zh-TW', { maximumFractionDigits: digits })}${suffix}`;
-}
-
-function tokenCell(value, strong = false) {
-  const main = strong ? `<strong>${compactNumber(value)}</strong>` : compactNumber(value);
-  return `${main}<span class="cell-exact">${integerFormat.format(value || 0)}</span>`;
 }
 
 function costText(cost) {
@@ -112,17 +102,17 @@ function renderExplorer(sessions, data, range) {
   const query = state.query.search;
   $('explorerCount').textContent = `顯示 ${integerFormat.format(sessions.length)} / ${integerFormat.format(data.length)} sessions`;
   $('clearSearch').hidden = !query;
-  $('rows').innerHTML = sessions.map((session) => {
-    const usage = session.filteredUsage;
-    const cost = session.filteredCost;
-    const modelClass = findRate(state.source.data.pricing, session.model) ? 'pill' : 'pill unknown';
-    const invalid = session.invalidLineCount ? ` · invalid ${integerFormat.format(session.invalidLineCount)}` : '';
-    const duplicate = session.duplicateTokenCountEventCount ? ` · duplicate ${integerFormat.format(session.duplicateTokenCountEventCount)}` : '';
-    return `<tr><td>${escapeHtml(formatDate(session.filteredLastTimestamp || session.lastTimestamp || session.modifiedAt))}</td><td class="session" title="${escapeHtml(session.file)}"><strong>${escapeHtml(text(session.sessionId))}</strong><br /><span class="muted">${escapeHtml(session.file)}</span><br /><span class="usage-source">${escapeHtml(session.usageSource)}</span></td><td class="session" title="${escapeHtml(session.cwd || '')}"><span class="${modelClass}">${escapeHtml(text(session.model))}</span><br /><span class="muted">${escapeHtml(text(session.cwd))}</span></td><td>${tokenCell(usage.inputTokens)}</td><td class="detail-col">${tokenCell(usage.cachedInputTokens)}</td><td class="detail-col">${tokenCell(usage.uncachedInputTokens)}</td><td class="detail-col">${tokenCell(usage.cacheWriteTokens)}</td><td>${tokenCell(usage.outputTokens)}</td><td class="detail-col">${tokenCell(usage.reasoningOutputTokens)}</td><td>${tokenCell(usage.totalTokens, true)}</td><td><strong>${escapeHtml(costText(cost))}</strong></td><td class="detail-col usage-source">Input ${moneyFormat.format(cost.input)}<br />Cached ${moneyFormat.format(cost.cached)}<br />Output ${moneyFormat.format(cost.output)}${cost.unknownModels.size ? '<br /><span class="warning">部分未定價</span>' : ''}</td><td class="detail-col">${integerFormat.format(session.lineCount)}<span class="usage-source">${invalid}${duplicate}</span></td></tr>`;
-  }).join('');
+  $('rows').innerHTML = renderExplorerRows(sessions, { pricing: state.source.data.pricing, selectedFile: state.view.drawerSession?.file, unit: state.view.unit });
   const empty = $('empty');
   empty.hidden = sessions.length !== 0;
   empty.textContent = query && data.length ? '找不到符合搜尋條件的 session。按 Escape 或使用「清除搜尋」返回完整表格。' : `此範圍（${range.label}）沒有 token 使用紀錄。`;
+}
+
+function applyExplorerView() {
+  document.body.dataset.tableDensity = state.view.density;
+  document.querySelectorAll('[data-column]').forEach((element) => {
+    element.hidden = state.view.visibleColumns[element.dataset.column] === false;
+  });
 }
 
 function renderLoaded(data) {
@@ -134,6 +124,7 @@ function renderLoaded(data) {
   const rangedSessions = deriveSessions(data, range);
   const totals = aggregateSessions(rangedSessions);
   const explorerSessions = selectExplorerSessions(rangedSessions, state.query);
+  state.derived = { explorerSessions };
   const usingPreviousRange = !requestedRange.valid && state.lastValidRange;
   $('rangeLabel').textContent = usingPreviousRange ? `${requestedRange.label}（未套用）` : range.label;
   $('rangeDetail').textContent = usingPreviousRange ? `請修正日期；目前仍顯示 ${rangeDetail(range)}` : rangeDetail(range);
@@ -141,6 +132,8 @@ function renderLoaded(data) {
   renderTotals(totals.usage, totals.cost);
   renderQuality(data, totals.cost);
   renderExplorer(explorerSessions, rangedSessions, range);
+  applyExplorerView();
+  drawerController.render();
 }
 
 function renderEmptySource() {
@@ -187,6 +180,8 @@ async function load() {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'Request failed');
     state.source = { data: payload, status: 'ready', error: '' };
+    state.view.drawerSession = null;
+    state.view.drawerTrigger = null;
     renderPricing(payload);
     render();
     if (hadData) showNotice(`已重新掃描 ${integerFormat.format(payload.scannedFileCount)} 個 JSONL，耗時 ${integerFormat.format(payload.durationMs)} ms。`);
@@ -214,7 +209,7 @@ function initialiseInputs() {
   updateRangeControls();
 }
 
-for (const input of [controls.search, controls.sort, controls.unit, controls.showExact, controls.showDetails, controls.weekInput, controls.monthInput, controls.yearInput, controls.customStart, controls.customEnd]) {
+for (const input of [controls.search, controls.sort, controls.unit, controls.showExact, controls.showDetails, controls.density, controls.columnLastUsed, controls.columnModel, controls.columnInput, controls.columnOutput, controls.columnCost, controls.weekInput, controls.monthInput, controls.yearInput, controls.customStart, controls.customEnd]) {
   input.addEventListener(input === controls.search ? 'input' : 'change', render);
 }
 controls.rangeMode.addEventListener('change', updateRangeControls);
@@ -222,11 +217,24 @@ $('clearSearch').addEventListener('click', () => { controls.search.value = ''; r
 $('refresh').addEventListener('click', load);
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  if (state.view.drawerSession) { event.preventDefault(); drawerController.close(); return; }
   const hadSearch = Boolean(controls.search.value);
   const menuWasOpen = $('viewMenu').open;
   if (hadSearch) controls.search.value = '';
   if (menuWasOpen) $('viewMenu').open = false;
   if (hadSearch || menuWasOpen) { event.preventDefault(); render(); }
 });
+$('rows').addEventListener('click', (event) => {
+  const row = event.target.closest('tr[data-session-index]');
+  const session = row && state.derived?.explorerSessions?.[Number(row.dataset.sessionIndex)];
+  if (session) drawerController.open(session, event.target.closest('button') || row);
+});
+$('rows').addEventListener('keydown', (event) => {
+  if (!['Enter', ' '].includes(event.key)) return;
+  const row = event.target.closest('tr[data-session-index]');
+  const session = row && state.derived?.explorerSessions?.[Number(row.dataset.sessionIndex)];
+  if (session) { event.preventDefault(); drawerController.open(session, row); }
+});
+drawerController.bind();
 initialiseInputs();
 load();

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { redactPath } from '../public/scripts/drawer.mjs';
 import {
   aggregateSessions,
   deriveSessions,
   filterEvents,
+  readViewState,
   resolveRange,
   selectExplorerSessions,
 } from '../public/scripts/state.mjs';
@@ -60,4 +62,33 @@ test('explorer search does not change range totals or pricing completeness', () 
   assert.equal(aggregate.cost.unknownModels.has('unknown-test'), true);
   assert.equal(explorer.length, 1);
   assert.equal(explorer[0].sessionId, 'alpha');
+});
+
+test('drawer redacts home directories before rendering or copying', () => {
+  assert.equal(redactPath('C:\\Users\\fixture\\secret-workspace'), '~/secret-workspace');
+  assert.equal(redactPath('/Users/fixture/secret-workspace'), '~/secret-workspace');
+  assert.equal(redactPath('2026/07/session.jsonl'), '2026/07/session.jsonl');
+});
+
+test('view state records table density and optional Explorer columns', () => {
+  const control = (value, checked) => ({ value, checked });
+  const view = readViewState({
+    unit: control('M'),
+    showExact: control('', false),
+    showDetails: control('', true),
+    density: control('compact'),
+    columnLastUsed: control('', false),
+    columnModel: control('', true),
+    columnInput: control('', false),
+    columnOutput: control('', true),
+    columnCost: control('', false),
+  });
+
+  assert.deepEqual(view, {
+    unit: 'M',
+    showExact: false,
+    showDetails: true,
+    density: 'compact',
+    visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
+  });
 });
