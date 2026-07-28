@@ -6,7 +6,8 @@
   "description": "Local Codex JSONL token and API-equivalent cost dashboard",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs"
+    "check": "node --check server.mjs",
+    "test:contract": "node --test tests/contract-harness.mjs"
   },
   "engines": {
     "node": ">=18"
