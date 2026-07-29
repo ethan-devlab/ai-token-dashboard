@@ -1,6 +1,8 @@
 # Codex Token Dashboard
 
-A dependency-free local Node.js dashboard that recursively parses Codex session JSONL files and shows token usage by time range plus an OpenAI API-equivalent cost estimate.
+A dependency-free, desktop-local Node.js dashboard that recursively parses Codex session JSONL files and shows token usage, trends, model breakdowns, session details, and an OpenAI API-equivalent cost estimate.
+
+It requires Node.js 18 or newer and listens on loopback by default. The dashboard is a local observability surface: it does not use a CDN, analytics, or remote application services.
 
 ## Run
 
@@ -36,8 +38,9 @@ npm start
 
 ## Features
 
+- Desktop-only observability console with a restrictive same-origin CSP
 - Token units: Auto, exact integer, K, M, or B
-- Optional exact values and detailed columns
+- Optional exact values, detailed Explorer columns, and compact table density
 - Rolling last 24 hours
 - Current local day
 - ISO week selector
@@ -45,15 +48,33 @@ npm start
 - Year selector
 - Custom local date/time range
 - Total, input, cached input, uncached input, cache-write, output, and reasoning tokens
+- Server-side range aggregation, usage trend, and model breakdown
+- Server-side Session Explorer pagination (100 sessions per page by default)
+- Search and sort state preserved in the URL; display preferences stored only in local storage
+- Per-session detail drawer with redacted home-directory paths
 - Per-session and aggregate API-equivalent cost estimates
 - Pricing breakdown by input, cached input, cache write, and output
 - Unknown-model and incomplete-pricing warnings
 - Recursive streaming JSONL parsing with no third-party dependencies
 - Duplicate cumulative `token_count` snapshots are not double-counted
 
+## API
+
+The browser client uses these local, read-only JSON endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/summary` | Backward-compatible complete summary response. |
+| `GET /api/dashboard` | Range aggregates, trend, model data, quality facts, and the first session page. |
+| `GET /api/sessions` | A subsequent filtered session page without duplicate aggregate data. |
+
+`/api/dashboard` and `/api/sessions` accept `mode`, `from`, `to`, `search`, `sort`, `offset`, and `limit`. `mode` is one of `all`, `last24h`, `today`, `week`, `month`, `year`, or `custom`; `limit` is capped at 200. Invalid query values return `400`.
+
+The paged endpoints return parsed session summaries and token events only. They do not return raw JSONL events or conversation content.
+
 ## Pricing caveat
 
-The built-in table is OpenAI API **Standard** text-token pricing in USD, checked on 2026-07-26 against the official API pricing documentation. It is only an equivalent-cost estimate.
+The pricing table lives in `server/pricing.json`. It is OpenAI API **Standard** text-token pricing in USD, checked on 2026-07-26 against the official API pricing documentation. It is only an equivalent-cost estimate.
 
 Actual billing may differ because Codex/ChatGPT subscriptions, service tier, regional processing, Batch/Flex/Priority, tools, enterprise discounts, and future pricing changes are not fully represented in session JSONL.
 
@@ -75,4 +96,12 @@ HOST=127.0.0.1
 PORT=3333
 MAX_FILES=10000
 CODEX_SESSIONS_DIR=/path/to/.codex/sessions
+```
+
+## Validation
+
+```bash
+npm run check
+npm run test:client
+npm run test:contract
 ```
