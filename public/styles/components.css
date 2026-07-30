@@ -104,3 +104,18 @@ footer { margin-block-start: var(--space-4); color: var(--color-subtle); font-si
 .update-asset { display: block; margin-block-start: var(--space-1); }
 #summary[aria-busy="true"] .metric-card strong, #summary[aria-busy="true"] .secondary-breakdown dd { color: transparent; background: var(--color-border); border-radius: var(--radius-sm); animation: loading-pulse 1.2s ease-in-out infinite alternate; }
 @keyframes loading-pulse { to { opacity: 0.55; } }
+.filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: var(--space-3); border-block-start: 1px solid var(--color-border); padding-block-start: var(--space-4); }
+.filter-grid .control { display: grid; align-items: start; }
+.filter-grid select { min-block-size: calc(var(--space-10) + var(--space-4) + var(--space-2)); inline-size: 100%; padding-block: var(--space-1); }
+.comparison-budget-grid, .operations-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-block: var(--space-4); }
+.compact-panel { min-block-size: calc(var(--space-10) * 3); padding: var(--space-4) var(--space-5); }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.panel-heading button, .compact-panel button { min-block-size: 2rem; padding-inline: var(--space-2); font-size: var(--text-xs); }
+.budget-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); border-block-start: 1px solid var(--color-border); color: var(--color-muted); font-family: var(--font-mono); font-size: var(--text-xs); padding-block: var(--space-2); }
+.budget-row[data-status="warning"] { color: var(--color-warning); }
+.budget-row[data-status="exceeded"] { color: var(--color-danger); }
+.budget-row button { min-block-size: 1.5rem; inline-size: 1.5rem; padding: 0; }
+.watcher-status { margin-block-end: var(--space-4); padding: var(--space-3) var(--space-4); }
+.watcher-status summary { cursor: pointer; color: var(--color-text); }
+.watcher-status p { color: var(--color-muted); font-family: var(--font-mono); font-size: var(--text-sm); margin-block-start: var(--space-3); }
+#diagnostics { max-block-size: calc(var(--space-10) * 8); overflow: auto; margin: var(--space-3) 0 0; color: var(--color-muted); font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; }

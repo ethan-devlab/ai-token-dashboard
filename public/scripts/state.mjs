@@ -1,28 +1,31 @@
-import { addUsage, isoWeekStart, zeroUsage } from './format.mjs';
-import { getLocale, t } from './i18n.mjs';
-
-export const VIEW_PREFERENCES_KEY = 'codex-token-dashboard:view-preferences:v1';
+export const VIEW_PREFERENCES_KEY = 'codex-token-dashboard:view-preferences:v2';
 
 const RANGE_MODES = new Set(['all', 'last24h', 'today', 'week', 'month', 'year', 'custom']);
 const SORT_MODES = new Set(['recent', 'cost', 'total', 'input', 'cache', 'output']);
 const UNITS = new Set(['auto', 'exact', 'K', 'M', 'B']);
+const FILTER_KEYS = Object.freeze(['models', 'workspaces', 'pricingStatus', 'usageSource', 'cliVersion', 'originator', 'quality']);
+
+function stringList(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value).trim()).filter(Boolean))].slice(0, 100);
+}
+
+function safeTimezone(value, fallback = 'UTC') {
+  const timezone = String(value || '').trim();
+  try {
+    if (timezone) Intl.DateTimeFormat('en', { timeZone: timezone });
+    return timezone || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export function createDashboardState() {
   return {
-    source: { data: null, status: 'loading' },
-    query: { rangeMode: 'month', weekValue: '', monthValue: '', yearValue: '', customStart: '', customEnd: '', search: '', sort: 'recent' },
-    view: {
-      unit: 'auto',
-      showExact: true,
-      showDetails: true,
-      trendMetric: 'cost',
-      locale: 'zh-Hant',
-      density: 'comfortable',
-      visibleColumns: { lastUsed: true, model: true, input: true, output: true, cost: true },
-    },
-    derived: { explorerSessions: [] },
+    source: { data: null, status: 'loading', error: '' },
+    query: { rangeMode: 'month', weekValue: '', monthValue: '', yearValue: '', customStart: '', customEnd: '', search: '', sort: 'recent', timezone: 'UTC', filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, []])) },
+    view: { unit: 'auto', showExact: true, showDetails: true, trendMetric: 'cost', locale: 'zh-Hant', density: 'comfortable', visibleColumns: { lastUsed: true, model: true, input: true, output: true, cost: true }, budgets: [] },
     page: { offset: 0, limit: 100 },
-    lastValidRange: null,
+    drawer: { sessionKey: null, trigger: null, detail: null, status: 'idle', error: '' },
   };
 }
 
@@ -34,26 +37,18 @@ export function readQueryState(controls) {
     yearValue: controls.yearInput.value,
     customStart: controls.customStart.value,
     customEnd: controls.customEnd.value,
-    search: controls.search.value.trim(),
-    sort: controls.sort.value,
+    search: controls.search.value.trim().slice(0, 256),
+    sort: SORT_MODES.has(controls.sort.value) ? controls.sort.value : 'recent',
+    timezone: safeTimezone(controls.timezone.value, controls.timezone.dataset.fallback || 'UTC'),
+    filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, stringList([...controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].selectedOptions].map((option) => option.value))])),
   };
 }
 
 export function readViewState(controls) {
   return {
-    unit: controls.unit.value,
-    showExact: controls.showExact.checked,
-    showDetails: controls.showDetails.checked,
-    trendMetric: controls.trendMetric.value,
-    locale: controls.locale?.value || 'zh-Hant',
-    density: controls.density.value,
-    visibleColumns: {
-      lastUsed: controls.columnLastUsed.checked,
-      model: controls.columnModel.checked,
-      input: controls.columnInput.checked,
-      output: controls.columnOutput.checked,
-      cost: controls.columnCost.checked,
-    },
+    unit: UNITS.has(controls.unit.value) ? controls.unit.value : 'auto', showExact: controls.showExact.checked, showDetails: controls.showDetails.checked,
+    trendMetric: controls.trendMetric.value === 'tokens' ? 'tokens' : 'cost', locale: controls.locale?.value || 'zh-Hant', density: controls.density.value === 'compact' ? 'compact' : 'comfortable',
+    visibleColumns: { lastUsed: controls.columnLastUsed.checked, model: controls.columnModel.checked, input: controls.columnInput.checked, output: controls.columnOutput.checked, cost: controls.columnCost.checked },
   };
 }
 
@@ -64,258 +59,74 @@ export function queryStateFromSearch(defaults, search) {
   return {
     ...defaults,
     rangeMode: RANGE_MODES.has(rangeMode) ? rangeMode : defaults.rangeMode,
-    weekValue: params.get('week') ?? defaults.weekValue,
-    monthValue: params.get('month') ?? defaults.monthValue,
-    yearValue: params.get('year') ?? defaults.yearValue,
-    customStart: params.get('start') ?? defaults.customStart,
-    customEnd: params.get('end') ?? defaults.customEnd,
-    search: (params.get('q') ?? defaults.search).trim(),
-    sort: SORT_MODES.has(sort) ? sort : defaults.sort,
+    weekValue: params.get('week') ?? defaults.weekValue, monthValue: params.get('month') ?? defaults.monthValue, yearValue: params.get('year') ?? defaults.yearValue,
+    customStart: params.get('start') ?? defaults.customStart, customEnd: params.get('end') ?? defaults.customEnd,
+    search: (params.get('q') ?? defaults.search).trim().slice(0, 256), sort: SORT_MODES.has(sort) ? sort : defaults.sort,
+    timezone: safeTimezone(params.get('timezone'), defaults.timezone),
+    filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, stringList(params.getAll(key))])),
   };
 }
 
 export function queryStateToSearch(query) {
   const params = new URLSearchParams();
-  const values = [
-    ['range', query.rangeMode], ['week', query.weekValue], ['month', query.monthValue],
-    ['year', query.yearValue], ['start', query.customStart], ['end', query.customEnd],
-    ['q', query.search], ['sort', query.sort],
-  ];
-  for (const [name, value] of values) {
-    if (value && !(name === 'sort' && value === 'recent')) params.set(name, value);
-  }
+  const values = [['range', query.rangeMode], ['week', query.weekValue], ['month', query.monthValue], ['year', query.yearValue], ['start', query.customStart], ['end', query.customEnd], ['q', query.search], ['sort', query.sort], ['timezone', query.timezone]];
+  for (const [name, value] of values) if (value && !(name === 'sort' && value === 'recent')) params.set(name, value);
+  for (const key of FILTER_KEYS) for (const value of stringList(query.filters?.[key])) params.append(key, value);
   return params.toString();
 }
 
 export function applyQueryStateToControls(controls, query) {
-  controls.rangeMode.value = query.rangeMode;
-  controls.weekInput.value = query.weekValue;
-  controls.monthInput.value = query.monthValue;
-  controls.yearInput.value = query.yearValue;
-  controls.customStart.value = query.customStart;
-  controls.customEnd.value = query.customEnd;
-  controls.search.value = query.search;
-  controls.sort.value = query.sort;
+  controls.rangeMode.value = query.rangeMode; controls.weekInput.value = query.weekValue; controls.monthInput.value = query.monthValue; controls.yearInput.value = query.yearValue;
+  controls.customStart.value = query.customStart; controls.customEnd.value = query.customEnd; controls.search.value = query.search; controls.sort.value = query.sort; controls.timezone.value = query.timezone;
+  for (const key of FILTER_KEYS) {
+    const selected = new Set(query.filters?.[key] || []);
+    for (const value of selected) {
+      if (![...controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].options].some((option) => option.value === value)) {
+        controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].append(new Option(value, value, true, true));
+      }
+    }
+    for (const option of controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].options) option.selected = selected.has(option.value);
+  }
+}
+
+export function requestParameters(query, page = {}) {
+  const params = new URLSearchParams({ mode: query.rangeMode, timezone: query.timezone, q: query.search, sort: query.sort, offset: String(page.offset || 0), limit: String(page.limit || 100) });
+  const period = query.rangeMode === 'week' ? query.weekValue : query.rangeMode === 'month' ? query.monthValue : query.rangeMode === 'year' ? query.yearValue : '';
+  if (period) params.set('period', period);
+  if (query.rangeMode === 'custom') for (const [name, value] of [['start', query.customStart], ['end', query.customEnd]]) if (value) params.set(name, value);
+  for (const key of FILTER_KEYS) for (const value of stringList(query.filters?.[key])) params.append(key, value);
+  return params;
+}
+
+export function setFacetOptions(select, values, selected) {
+  const active = new Set(selected || []);
+  const items = Array.isArray(values) ? values : [];
+  const normalised = items.map((item) => typeof item === 'string' ? { value: item, label: item } : { value: String(item.value ?? item.key ?? ''), label: String(item.label ?? item.value ?? item.key ?? ''), count: item.count }).filter((item) => item.value);
+  select.replaceChildren(...normalised.map((item) => {
+    const option = document.createElement('option'); option.value = item.value; option.textContent = item.count == null ? item.label : `${item.label} (${item.count})`; option.selected = active.has(item.value); return option;
+  }));
 }
 
 export function readViewPreferences(storage) {
   try {
-    const parsed = JSON.parse(storage.getItem(VIEW_PREFERENCES_KEY) || '{}');
-    const visibleColumns = parsed.visibleColumns && typeof parsed.visibleColumns === 'object'
-      ? parsed.visibleColumns
-      : {};
-    return {
-      unit: UNITS.has(parsed.unit) ? parsed.unit : null,
-      showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null,
-      showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null,
-      trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null,
-      locale: ['en', 'zh-Hant'].includes(parsed.locale) ? parsed.locale : null,
-      density: ['comfortable', 'compact'].includes(parsed.density) ? parsed.density : null,
-      visibleColumns: Object.fromEntries(
-        ['lastUsed', 'model', 'input', 'output', 'cost']
-          .filter((key) => typeof visibleColumns[key] === 'boolean')
-          .map((key) => [key, visibleColumns[key]])
-      ),
-    };
-  } catch {
-    return { unit: null, showExact: null, showDetails: null, trendMetric: null, locale: null, density: null, visibleColumns: {} };
-  }
+    const parsed = JSON.parse(storage.getItem(VIEW_PREFERENCES_KEY) || '{}'); const columns = parsed.visibleColumns && typeof parsed.visibleColumns === 'object' ? parsed.visibleColumns : {};
+    return { unit: UNITS.has(parsed.unit) ? parsed.unit : null, showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null, showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null, trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null, locale: ['en', 'zh-Hant'].includes(parsed.locale) ? parsed.locale : null, density: ['comfortable', 'compact'].includes(parsed.density) ? parsed.density : null, visibleColumns: Object.fromEntries(['lastUsed', 'model', 'input', 'output', 'cost'].filter((key) => typeof columns[key] === 'boolean').map((key) => [key, columns[key]])), budgets: Array.isArray(parsed.budgets) ? parsed.budgets.slice(0, 50) : [] };
+  } catch { return { unit: null, showExact: null, showDetails: null, trendMetric: null, locale: null, density: null, visibleColumns: {}, budgets: [] }; }
 }
 
 export function applyViewPreferencesToControls(controls, preferences) {
-  if (preferences.unit) controls.unit.value = preferences.unit;
-  if (preferences.showExact != null) controls.showExact.checked = preferences.showExact;
-  if (preferences.showDetails != null) controls.showDetails.checked = preferences.showDetails;
-  if (preferences.trendMetric) controls.trendMetric.value = preferences.trendMetric;
-  if (preferences.locale) controls.locale.value = preferences.locale;
-  if (preferences.density) controls.density.value = preferences.density;
-  const columns = {
-    lastUsed: controls.columnLastUsed, model: controls.columnModel, input: controls.columnInput,
-    output: controls.columnOutput, cost: controls.columnCost,
-  };
-  for (const [key, control] of Object.entries(columns)) {
-    if (preferences.visibleColumns[key] != null) control.checked = preferences.visibleColumns[key];
-  }
+  if (preferences.unit) controls.unit.value = preferences.unit; if (preferences.showExact != null) controls.showExact.checked = preferences.showExact; if (preferences.showDetails != null) controls.showDetails.checked = preferences.showDetails;
+  if (preferences.trendMetric) controls.trendMetric.value = preferences.trendMetric; if (preferences.locale) controls.locale.value = preferences.locale; if (preferences.density) controls.density.value = preferences.density;
+  for (const [key, control] of Object.entries({ lastUsed: controls.columnLastUsed, model: controls.columnModel, input: controls.columnInput, output: controls.columnOutput, cost: controls.columnCost })) if (preferences.visibleColumns[key] != null) control.checked = preferences.visibleColumns[key];
 }
 
 export function saveViewPreferences(storage, view) {
-  try {
-    storage.setItem(VIEW_PREFERENCES_KEY, JSON.stringify({
-      unit: view.unit,
-      showExact: view.showExact,
-      showDetails: view.showDetails,
-      trendMetric: view.trendMetric,
-      locale: view.locale,
-      density: view.density,
-      visibleColumns: view.visibleColumns,
-    }));
-    return true;
-  } catch {
-    return false;
-  }
+  try { storage.setItem(VIEW_PREFERENCES_KEY, JSON.stringify({ unit: view.unit, showExact: view.showExact, showDetails: view.showDetails, trendMetric: view.trendMetric, locale: view.locale, density: view.density, visibleColumns: view.visibleColumns, budgets: view.budgets })); return true; } catch { return false; }
 }
 
-export function restoreCost(cost = {}) {
-  return {
-    total: Number(cost.total || 0),
-    input: Number(cost.input || 0),
-    cached: Number(cost.cached || 0),
-    cacheWrite: Number(cost.cacheWrite || 0),
-    output: Number(cost.output || 0),
-    pricedTokens: Number(cost.pricedTokens || 0),
-    unknownModels: new Set(cost.unknownModels || []),
-    unavailableComponents: new Set(cost.unavailableComponents || []),
-  };
-}
-
-function validTime(rawValue) {
-  if (!rawValue) return { value: null, error: '' };
-  const value = new Date(rawValue).getTime();
-  return Number.isFinite(value)
-    ? { value, error: '' }
-    : { value: null, error: t('range.invalidDate') };
-}
-
-export function resolveRange(query, now = new Date()) {
-  const mode = query.rangeMode;
-  let fromMs = null;
-  let toMs = null;
-  let label = t('range.all');
-  const errors = { start: '', end: '' };
-
-  if (mode === 'last24h') {
-    fromMs = now.getTime() - 24 * 3600_000;
-    toMs = now.getTime();
-    label = t('range.last24h');
-  } else if (mode === 'today') {
-    const from = new Date(now);
-    from.setHours(0, 0, 0, 0);
-    fromMs = from.getTime();
-    toMs = now.getTime();
-    label = t('range.today');
-  } else if (mode === 'week') {
-    const from = isoWeekStart(query.weekValue);
-    if (!from) errors.start = t('range.invalidWeek');
-    else {
-      fromMs = from.getTime();
-      toMs = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 7).getTime();
-      label = query.weekValue;
-    }
-  } else if (mode === 'month') {
-    const match = /^(\d{4})-(\d{2})$/.exec(query.monthValue);
-    if (!match) errors.start = t('range.invalidMonth');
-    else {
-      const year = Number(match[1]);
-      const month = Number(match[2]);
-      fromMs = new Date(year, month - 1, 1).getTime();
-      toMs = new Date(year, month, 1).getTime();
-      label = new Intl.DateTimeFormat(getLocale(), { year: 'numeric', month: 'long' }).format(new Date(year, month - 1, 1));
-    }
-  } else if (mode === 'year') {
-    const year = Number(query.yearValue);
-    if (!Number.isInteger(year) || year < 2000 || year > 2200) errors.start = t('range.invalidYear');
-    else {
-      fromMs = new Date(year, 0, 1).getTime();
-      toMs = new Date(year + 1, 0, 1).getTime();
-      label = new Intl.DateTimeFormat(getLocale(), { year: 'numeric' }).format(new Date(year, 0, 1));
-    }
-  } else if (mode === 'custom') {
-    const start = validTime(query.customStart);
-    const end = validTime(query.customEnd);
-    fromMs = start.value;
-    toMs = end.value;
-    errors.start = start.error;
-    errors.end = end.error;
-    if (!errors.start && !errors.end && fromMs != null && toMs != null && fromMs >= toMs) {
-      errors.end = t('range.endBeforeStart');
-    }
-    label = t('range.custom');
-  }
-
-  return { mode, fromMs, toMs, label, errors, valid: !errors.start && !errors.end };
-}
-
-export function filterEvents(session, range) {
-  return session.usageEvents.filter((event) => {
-    const timestamp = Date.parse(event.timestamp);
-    return (Number.isFinite(timestamp) || range.mode === 'all')
-      && (range.fromMs == null || timestamp >= range.fromMs)
-      && (range.toMs == null || timestamp < range.toMs);
-  });
-}
-
-export function findRate(pricing, model) {
-  const normalized = String(model || '').trim().toLowerCase();
-  return Object.keys(pricing?.rates || {})
-    .sort((left, right) => right.length - left.length)
-    .find((key) => normalized === key || normalized.startsWith(`${key}-`)) || null;
-}
-
-export function calculateCost(pricing, events) {
-  const result = { total: 0, input: 0, cached: 0, cacheWrite: 0, output: 0, unknownModels: new Set(), unavailableComponents: new Set(), pricedTokens: 0 };
-  for (const event of events) {
-    const matchedModel = findRate(pricing, event.model);
-    if (!matchedModel) { result.unknownModels.add(event.model || 'unknown'); continue; }
-    const rate = pricing.rates[matchedModel];
-    for (const [name, tokens, price] of [['input', event.usage.uncachedInputTokens, rate.input], ['cached', event.usage.cachedInputTokens, rate.cachedInput], ['cacheWrite', event.usage.cacheWriteTokens, rate.cacheWrite], ['output', event.usage.outputTokens, rate.output]]) {
-      if (!tokens) continue;
-      if (price == null) { result.unavailableComponents.add(`${matchedModel}:${name}`); continue; }
-      const amount = tokens / pricing.unitTokens * price;
-      result[name] += amount;
-      result.total += amount;
-      result.pricedTokens += tokens;
-    }
-  }
-  return result;
-}
-
-export function deriveSessions(source, range) {
-  return source.sessions.map((session) => {
-    const filteredEvents = filterEvents(session, range);
-    const filteredUsage = filteredEvents.reduce((sum, event) => addUsage(sum, event.usage), zeroUsage());
-    const filteredCost = calculateCost(source.pricing, filteredEvents);
-    const latest = filteredEvents.reduce((current, event) => (
-      Date.parse(event.timestamp) > Date.parse(current?.timestamp || 0) ? event : current
-    ), null);
-    return { ...session, filteredEvents, filteredUsage, filteredCost, filteredLastTimestamp: latest?.timestamp || null };
-  }).filter((session) => session.filteredEvents.length);
-}
-
-export function aggregateSessions(sessions) {
-  const usage = sessions.reduce((sum, session) => addUsage(sum, session.filteredUsage), zeroUsage());
-  const cost = sessions.reduce((sum, session) => {
-    for (const key of ['total', 'input', 'cached', 'cacheWrite', 'output', 'pricedTokens']) sum[key] += session.filteredCost[key];
-    for (const model of session.filteredCost.unknownModels) sum.unknownModels.add(model);
-    for (const item of session.filteredCost.unavailableComponents) sum.unavailableComponents.add(item);
-    return sum;
-  }, { total: 0, input: 0, cached: 0, cacheWrite: 0, output: 0, pricedTokens: 0, unknownModels: new Set(), unavailableComponents: new Set() });
-  return { usage, cost };
-}
-
-export function selectExplorerSessions(sessions, query) {
-  const search = query.search.toLowerCase();
-  const matched = sessions.filter((session) => !search || [session.sessionId, session.file, session.model, session.cwd, session.originator]
-    .filter(Boolean).join(' ').toLowerCase().includes(search));
-  const sortKey = { cost: 'total', total: 'totalTokens', input: 'inputTokens', cache: 'cachedInputTokens', output: 'outputTokens' }[query.sort];
-  return [...matched].sort((left, right) => {
-    if (sortKey) return query.sort === 'cost'
-      ? right.filteredCost.total - left.filteredCost.total
-      : right.filteredUsage[sortKey] - left.filteredUsage[sortKey];
-    return (Date.parse(right.filteredLastTimestamp || right.lastTimestamp || right.modifiedAt) || 0)
-      - (Date.parse(left.filteredLastTimestamp || left.lastTimestamp || left.modifiedAt) || 0);
-  });
-}
-
-export function qualityMessages(source, cost) {
-  const messages = [];
-  const invalidLines = source.quality?.invalidLines ?? source.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0);
-  const resets = source.quality?.cumulativeResets ?? source.sessions.reduce((sum, session) => sum + session.cumulativeResetCount, 0);
-  if (source.errors.length) messages.push(t('quality.files', { count: source.errors.length }));
-  if (invalidLines) messages.push(t('quality.lines', { count: invalidLines }));
-  if (resets) messages.push(t('quality.resets', { count: resets }));
-  if (source.quality?.estimatedTimestamps) messages.push(t('quality.estimated', { count: source.quality.estimatedTimestamps }));
-  if (cost.unknownModels.size) messages.push(t('quality.unpriced', { models: [...cost.unknownModels].join(', ') }));
-  if (cost.unavailableComponents.size) messages.push(t('quality.partial'));
-  if (source.truncated) messages.push(t('quality.truncated', { count: source.maxFiles }));
-  return messages;
+export function budgetState(budget, aggregate) {
+  const limit = Number(budget?.limit); const actual = Number(aggregate?.value ?? aggregate ?? 0);
+  if (!Number.isFinite(limit) || limit <= 0) return { actual, limit: null, ratio: null, status: 'disabled' };
+  const ratio = actual / limit;
+  return { actual, limit, ratio, status: ratio >= 1 ? 'exceeded' : ratio >= 0.8 ? 'warning' : 'ok' };
 }

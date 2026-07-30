@@ -1,59 +1,33 @@
 import { renderSessionDrawer } from './drawer.mjs';
-import { t } from './i18n.mjs';
 
-async function copyValue(event, showNotice) {
-  const value = event.currentTarget.dataset.copyValue || '';
-  let copied = false;
-  try {
-    await navigator.clipboard.writeText(value);
-    copied = true;
-  } catch {
-    const input = document.createElement('textarea');
-    input.value = value;
-    document.body.append(input);
-    input.select();
-    copied = document.execCommand('copy');
-    input.remove();
-  }
-  showNotice(copied ? t('copy.success') : t('copy.failure'));
-}
-
-export function createSessionDrawerController({ getState, getElement, showNotice }) {
+export function createSessionDrawerController({ getState, getElement, loadDetail }) {
+  const backdrop = getElement('drawerBackdrop');
   function render(focus = false) {
-    const state = getState();
-    const drawer = getElement('sessionDrawer');
-    const session = state.view.drawerSession;
-    drawer.hidden = !session;
-    getElement('drawerBackdrop').hidden = !session;
-    if (!session) return;
-    drawer.innerHTML = renderSessionDrawer(session, state.source.data.pricing, state.view.showDetails);
-    getElement('closeDrawer').addEventListener('click', close);
-    drawer.querySelectorAll('.copy-value').forEach((button) => button.addEventListener('click', (event) => copyValue(event, showNotice)));
-    if (focus) getElement('closeDrawer').focus();
+    const state = getState(); const drawer = getElement('sessionDrawer'); const active = state.drawer.sessionKey;
+    drawer.hidden = !active; getElement('drawerBackdrop').hidden = !active;
+    if (!active) return;
+    drawer.innerHTML = renderSessionDrawer({ detail: state.drawer.detail, status: state.drawer.status, error: state.drawer.error, showDetails: state.view.showDetails });
+    drawer.querySelector('#closeDrawer')?.addEventListener('click', close);
+    if (focus) drawer.querySelector('#closeDrawer')?.focus();
   }
-
   function open(session, trigger) {
-    const state = getState();
-    state.view.drawerSession = session;
-    state.view.drawerTrigger = trigger;
-    document.querySelectorAll('#rows tr[aria-selected="true"]').forEach((row) => row.setAttribute('aria-selected', 'false'));
-    trigger.closest('tr')?.setAttribute('aria-selected', 'true');
+    const state = getState(); const sessionKey = session.sessionKey || session.id || session.sessionId;
+    if (!sessionKey) return;
+    state.drawer = { sessionKey: String(sessionKey), trigger, detail: null, status: 'loading', error: '' };
     render(true);
+    loadDetail(state.drawer.sessionKey).then((detail) => {
+      if (getState().drawer.sessionKey !== sessionKey) return;
+      state.drawer.detail = detail; state.drawer.status = 'ready'; render();
+    }).catch((error) => {
+      if (getState().drawer.sessionKey !== sessionKey || error?.name === 'AbortError') return;
+      state.drawer.status = 'error'; state.drawer.error = error instanceof Error ? error.message : String(error); render();
+    });
   }
-
   function close() {
-    const state = getState();
-    const trigger = state.view.drawerTrigger;
-    state.view.drawerSession = null;
-    state.view.drawerTrigger = null;
-    document.querySelectorAll('#rows tr[aria-selected="true"]').forEach((row) => row.setAttribute('aria-selected', 'false'));
-    render();
-    if (trigger?.isConnected) trigger.focus();
+    const state = getState(); const trigger = state.drawer.trigger; state.drawer = { sessionKey: null, trigger: null, detail: null, status: 'idle', error: '' };
+    render(); if (trigger?.isConnected) trigger.focus();
   }
-
-  function bind() {
-    getElement('drawerBackdrop').addEventListener('click', close);
-  }
-
-  return { bind, close, open, render };
+  function bind() { backdrop.addEventListener('click', close); }
+  function destroy() { backdrop.removeEventListener('click', close); }
+  return { bind, close, destroy, open, render };
 }
