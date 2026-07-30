@@ -1,4 +1,5 @@
 import { renderSessionDrawer } from './drawer.mjs';
+import { t } from './i18n.mjs';
 
 async function copyValue(event, showNotice) {
   const value = event.currentTarget.dataset.copyValue || '';
@@ -14,7 +15,7 @@ async function copyValue(event, showNotice) {
     copied = document.execCommand('copy');
     input.remove();
   }
-  showNotice(copied ? '已複製到剪貼簿。' : '瀏覽器未允許複製；請手動選取內容。');
+  showNotice(copied ? t('copy.success') : t('copy.failure'));
 }
 
 export function createSessionDrawerController({ getState, getElement, showNotice }) {

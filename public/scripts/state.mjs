@@ -1,4 +1,5 @@
 import { addUsage, isoWeekStart, zeroUsage } from './format.mjs';
+import { getLocale, t } from './i18n.mjs';
 
 export const VIEW_PREFERENCES_KEY = 'codex-token-dashboard:view-preferences:v1';
 
@@ -15,6 +16,7 @@ export function createDashboardState() {
       showExact: true,
       showDetails: true,
       trendMetric: 'cost',
+      locale: 'zh-Hant',
       density: 'comfortable',
       visibleColumns: { lastUsed: true, model: true, input: true, output: true, cost: true },
     },
@@ -43,6 +45,7 @@ export function readViewState(controls) {
     showExact: controls.showExact.checked,
     showDetails: controls.showDetails.checked,
     trendMetric: controls.trendMetric.value,
+    locale: controls.locale?.value || 'zh-Hant',
     density: controls.density.value,
     visibleColumns: {
       lastUsed: controls.columnLastUsed.checked,
@@ -106,6 +109,7 @@ export function readViewPreferences(storage) {
       showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null,
       showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null,
       trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null,
+      locale: ['en', 'zh-Hant'].includes(parsed.locale) ? parsed.locale : null,
       density: ['comfortable', 'compact'].includes(parsed.density) ? parsed.density : null,
       visibleColumns: Object.fromEntries(
         ['lastUsed', 'model', 'input', 'output', 'cost']
@@ -114,7 +118,7 @@ export function readViewPreferences(storage) {
       ),
     };
   } catch {
-    return { unit: null, showExact: null, showDetails: null, trendMetric: null, density: null, visibleColumns: {} };
+    return { unit: null, showExact: null, showDetails: null, trendMetric: null, locale: null, density: null, visibleColumns: {} };
   }
 }
 
@@ -123,6 +127,7 @@ export function applyViewPreferencesToControls(controls, preferences) {
   if (preferences.showExact != null) controls.showExact.checked = preferences.showExact;
   if (preferences.showDetails != null) controls.showDetails.checked = preferences.showDetails;
   if (preferences.trendMetric) controls.trendMetric.value = preferences.trendMetric;
+  if (preferences.locale) controls.locale.value = preferences.locale;
   if (preferences.density) controls.density.value = preferences.density;
   const columns = {
     lastUsed: controls.columnLastUsed, model: controls.columnModel, input: controls.columnInput,
@@ -140,6 +145,7 @@ export function saveViewPreferences(storage, view) {
       showExact: view.showExact,
       showDetails: view.showDetails,
       trendMetric: view.trendMetric,
+      locale: view.locale,
       density: view.density,
       visibleColumns: view.visibleColumns,
     }));
@@ -167,29 +173,29 @@ function validTime(rawValue) {
   const value = new Date(rawValue).getTime();
   return Number.isFinite(value)
     ? { value, error: '' }
-    : { value: null, error: '請輸入有效的日期時間。' };
+    : { value: null, error: t('range.invalidDate') };
 }
 
 export function resolveRange(query, now = new Date()) {
   const mode = query.rangeMode;
   let fromMs = null;
   let toMs = null;
-  let label = '全部時間';
+  let label = t('range.all');
   const errors = { start: '', end: '' };
 
   if (mode === 'last24h') {
     fromMs = now.getTime() - 24 * 3600_000;
     toMs = now.getTime();
-    label = '最近 24 小時';
+    label = t('range.last24h');
   } else if (mode === 'today') {
     const from = new Date(now);
     from.setHours(0, 0, 0, 0);
     fromMs = from.getTime();
     toMs = now.getTime();
-    label = '當日使用';
+    label = t('range.today');
   } else if (mode === 'week') {
     const from = isoWeekStart(query.weekValue);
-    if (!from) errors.start = '請選擇有效週別。';
+    if (!from) errors.start = t('range.invalidWeek');
     else {
       fromMs = from.getTime();
       toMs = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 7).getTime();
@@ -197,21 +203,21 @@ export function resolveRange(query, now = new Date()) {
     }
   } else if (mode === 'month') {
     const match = /^(\d{4})-(\d{2})$/.exec(query.monthValue);
-    if (!match) errors.start = '請選擇有效月份。';
+    if (!match) errors.start = t('range.invalidMonth');
     else {
       const year = Number(match[1]);
       const month = Number(match[2]);
       fromMs = new Date(year, month - 1, 1).getTime();
       toMs = new Date(year, month, 1).getTime();
-      label = `${year} 年 ${month} 月`;
+      label = new Intl.DateTimeFormat(getLocale(), { year: 'numeric', month: 'long' }).format(new Date(year, month - 1, 1));
     }
   } else if (mode === 'year') {
     const year = Number(query.yearValue);
-    if (!Number.isInteger(year) || year < 2000 || year > 2200) errors.start = '請輸入 2000 至 2200 的年份。';
+    if (!Number.isInteger(year) || year < 2000 || year > 2200) errors.start = t('range.invalidYear');
     else {
       fromMs = new Date(year, 0, 1).getTime();
       toMs = new Date(year + 1, 0, 1).getTime();
-      label = `${year} 年`;
+      label = new Intl.DateTimeFormat(getLocale(), { year: 'numeric' }).format(new Date(year, 0, 1));
     }
   } else if (mode === 'custom') {
     const start = validTime(query.customStart);
@@ -221,9 +227,9 @@ export function resolveRange(query, now = new Date()) {
     errors.start = start.error;
     errors.end = end.error;
     if (!errors.start && !errors.end && fromMs != null && toMs != null && fromMs >= toMs) {
-      errors.end = '結束時間必須晚於起始時間。';
+      errors.end = t('range.endBeforeStart');
     }
-    label = '自訂範圍';
+    label = t('range.custom');
   }
 
   return { mode, fromMs, toMs, label, errors, valid: !errors.start && !errors.end };
@@ -304,12 +310,12 @@ export function qualityMessages(source, cost) {
   const messages = [];
   const invalidLines = source.quality?.invalidLines ?? source.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0);
   const resets = source.quality?.cumulativeResets ?? source.sessions.reduce((sum, session) => sum + session.cumulativeResetCount, 0);
-  if (source.errors.length) messages.push(`${source.errors.length} 個 JSONL 檔案無法解析`);
-  if (invalidLines) messages.push(`${invalidLines} 行 JSONL 已略過`);
-  if (resets) messages.push(`${resets} 次累積計數器重設已以增量修正`);
-  if (source.quality?.estimatedTimestamps) messages.push(`${source.quality.estimatedTimestamps} 筆使用事件採估算時間戳`);
-  if (cost.unknownModels.size) messages.push(`未定價模型：${[...cost.unknownModels].join(', ')}`);
-  if (cost.unavailableComponents.size) messages.push('部分計價元件未提供公開單價');
-  if (source.truncated) messages.push(`已達 MAX_FILES=${source.maxFiles}`);
+  if (source.errors.length) messages.push(t('quality.files', { count: source.errors.length }));
+  if (invalidLines) messages.push(t('quality.lines', { count: invalidLines }));
+  if (resets) messages.push(t('quality.resets', { count: resets }));
+  if (source.quality?.estimatedTimestamps) messages.push(t('quality.estimated', { count: source.quality.estimatedTimestamps }));
+  if (cost.unknownModels.size) messages.push(t('quality.unpriced', { models: [...cost.unknownModels].join(', ') }));
+  if (cost.unavailableComponents.size) messages.push(t('quality.partial'));
+  if (source.truncated) messages.push(t('quality.truncated', { count: source.maxFiles }));
   return messages;
 }

@@ -1,4 +1,5 @@
 import { escapeHtml, formatDate, integerFormat, moneyFormat, text } from './format.mjs';
+import { t } from './i18n.mjs';
 import { calculateCost, findRate } from './state.mjs';
 
 export function redactPath(value) {
@@ -20,11 +21,11 @@ function drawerItem(label, value, className = '') {
 }
 
 function copyButton(label, value) {
-  return `<button type="button" class="copy-value" data-copy-value="${escapeHtml(value)}">複製${label}</button>`;
+  return `<button type="button" class="copy-value" data-copy-value="${escapeHtml(value)}">${escapeHtml(t('drawer.copy', { label }))}</button>`;
 }
 
 function price(value) {
-  return value == null ? '未提供' : `$${value} / 1M`;
+  return value == null ? t('price.unavailable') : `$${value} / 1M`;
 }
 
 function tokenItems(session, detailsClass) {
@@ -45,12 +46,12 @@ function costItems(cost, rateKey, rate, detailsClass) {
     ? `${cost.unknownModels.size || cost.unavailableComponents.size ? '≥ ' : ''}${moneyFormat.format(cost.total)}`
     : '—';
   return [
-    drawerItem('估算費用', estimated),
-    drawerItem('定價匹配', escapeHtml(rateKey || '未知模型')),
-    drawerItem('Input 單價', price(rate?.input), detailsClass),
-    drawerItem('Cached 單價', price(rate?.cachedInput), detailsClass),
-    drawerItem('Cache write 單價', price(rate?.cacheWrite), detailsClass),
-    drawerItem('Output 單價', price(rate?.output), detailsClass),
+    drawerItem(t('trend.cost'), estimated),
+    drawerItem(t('table.model'), escapeHtml(rateKey || t('status.unpriced'))),
+    drawerItem(`${t('table.input')} ${t('trend.value')}`, price(rate?.input), detailsClass),
+    drawerItem(`${t('cached.input')} ${t('trend.value')}`, price(rate?.cachedInput), detailsClass),
+    drawerItem(`${t('cache.write')} ${t('trend.value')}`, price(rate?.cacheWrite), detailsClass),
+    drawerItem(`${t('table.output')} ${t('trend.value')}`, price(rate?.output), detailsClass),
   ].join('');
 }
 
@@ -60,21 +61,21 @@ export function renderSessionDrawer(session, pricing, showDetails) {
   const rate = rateKey ? pricing.rates[rateKey] : null;
   const detailsClass = showDetails ? 'drawer-detail' : 'drawer-detail drawer-detail--hidden';
   const diagnostics = [
-    `JSONL 行數 ${integerFormat.format(session.lineCount)}`,
-    `略過 ${integerFormat.format(session.invalidLineCount)} 行`,
-    `略過 ${integerFormat.format(session.duplicateTokenCountEventCount)} 個重複累計事件`,
-    `修正 ${integerFormat.format(session.cumulativeResetCount)} 次累計重設`,
+    t('drawer.lines', { count: integerFormat.format(session.lineCount) }),
+    t('drawer.skipped', { count: integerFormat.format(session.invalidLineCount) }),
+    t('drawer.duplicates', { count: integerFormat.format(session.duplicateTokenCountEventCount) }),
+    t('drawer.resets', { count: integerFormat.format(session.cumulativeResetCount) }),
   ].join(' · ');
   const identityItems = [
-    drawerItem('Session ID', escapeHtml(text(session.sessionId))),
-    drawerItem('模型', escapeHtml(text(session.model))),
-    drawerItem('JSONL', escapeHtml(redactPath(session.file))),
-    drawerItem('CWD', escapeHtml(redactPath(session.cwd))),
-    session.originator ? drawerItem('CLI 來源', escapeHtml(text(session.originator))) : '',
-    drawerItem('首次使用', escapeHtml(formatDate(session.firstTimestamp || session.modifiedAt))),
-    drawerItem('最後使用', escapeHtml(formatDate(session.filteredLastTimestamp || session.lastTimestamp || session.modifiedAt))),
+    drawerItem(t('drawer.sessionId'), escapeHtml(text(session.sessionId))),
+    drawerItem(t('table.model'), escapeHtml(text(session.model))),
+    drawerItem(t('drawer.jsonl'), escapeHtml(redactPath(session.file))),
+    drawerItem(t('drawer.cwd'), escapeHtml(redactPath(session.cwd))),
+    session.originator ? drawerItem(t('drawer.originator'), escapeHtml(text(session.originator))) : '',
+    drawerItem(t('drawer.firstUsed'), escapeHtml(formatDate(session.firstTimestamp || session.modifiedAt))),
+    drawerItem(t('table.lastUsed'), escapeHtml(formatDate(session.filteredLastTimestamp || session.lastTimestamp || session.modifiedAt))),
   ].join('');
   const timestampEstimated = session.filteredEvents?.some((event) => event.timestampEstimated);
 
-  return `<div class="drawer-heading"><div><p class="eyebrow">SESSION DETAIL</p><h2 id="drawerTitle">${escapeHtml(text(session.sessionId))}</h2></div><button id="closeDrawer" type="button">關閉</button></div><section class="drawer-section"><p class="eyebrow">IDENTITY</p><dl class="drawer-grid">${identityItems}</dl><div class="drawer-actions">${copyButton(' Session ID', session.sessionId)}${copyButton(' JSONL 路徑', redactPath(session.file))}${copyButton(' 顯示中的 CWD', redactPath(session.cwd))}</div></section><section class="drawer-section"><p class="eyebrow">TOKENS</p><dl class="drawer-grid">${tokenItems(session, detailsClass)}</dl></section><section class="drawer-section"><p class="eyebrow">ESTIMATED API COST</p><dl class="drawer-grid">${costItems(cost, rateKey, rate, detailsClass)}</dl></section><section class="drawer-section"><p class="eyebrow">DATA QUALITY</p><p class="drawer-diagnostics">${escapeHtml(diagnostics)}</p><p class="drawer-diagnostics">來源：${escapeHtml(session.usageSource)}${timestampEstimated ? ' · 包含估算時間戳' : ''}</p></section>`;
+  return `<div class="drawer-heading"><div><p class="eyebrow">${escapeHtml(t('drawer.title'))}</p><h2 id="drawerTitle">${escapeHtml(text(session.sessionId))}</h2></div><button id="closeDrawer" type="button">${escapeHtml(t('drawer.close'))}</button></div><section class="drawer-section"><p class="eyebrow">${escapeHtml(t('drawer.identity'))}</p><dl class="drawer-grid">${identityItems}</dl><div class="drawer-actions">${copyButton(t('drawer.sessionId'), session.sessionId)}${copyButton(t('drawer.jsonl'), redactPath(session.file))}${copyButton(t('drawer.cwd'), redactPath(session.cwd))}</div></section><section class="drawer-section"><p class="eyebrow">${escapeHtml(t('drawer.tokens'))}</p><dl class="drawer-grid">${tokenItems(session, detailsClass)}</dl></section><section class="drawer-section"><p class="eyebrow">${escapeHtml(t('drawer.cost'))}</p><dl class="drawer-grid">${costItems(cost, rateKey, rate, detailsClass)}</dl></section><section class="drawer-section"><p class="eyebrow">${escapeHtml(t('drawer.quality'))}</p><p class="drawer-diagnostics">${escapeHtml(diagnostics)}</p><p class="drawer-diagnostics">${escapeHtml(session.usageSource)}${timestampEstimated ? ` · ${escapeHtml(t('drawer.estimatedTimestamp'))}` : ''}</p></section>`;
 }

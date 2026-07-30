@@ -1,11 +1,29 @@
-export const integerFormat = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 0 });
-export const dateFormat = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
-export const moneyFormat = new Intl.NumberFormat('en-GB', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 6,
+import { getLocale } from './i18n.mjs';
+
+export const integerFormat = Object.freeze({
+  format: (value) => new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 0 }).format(value),
 });
+export const dateFormat = Object.freeze({
+  format: (value) => new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(value),
+});
+export const moneyFormat = Object.freeze({
+  format: (value) => new Intl.NumberFormat(getLocale(), {
+    style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6,
+  }).format(value),
+});
+
+export function formatCompactNumber(value, unit) {
+  const number = Number(value || 0);
+  if (unit === 'exact') return integerFormat.format(number);
+  const table = unit === 'auto'
+    ? (Math.abs(number) >= 1e9 ? ['B', 1e9] : Math.abs(number) >= 1e6 ? ['M', 1e6] : Math.abs(number) >= 1e3 ? ['K', 1e3] : ['', 1])
+    : [unit, unit === 'B' ? 1e9 : unit === 'M' ? 1e6 : 1e3];
+  const [suffix, divisor] = table;
+  if (!suffix) return integerFormat.format(number);
+  const scaled = number / divisor;
+  const digits = Math.abs(scaled) >= 100 ? 1 : Math.abs(scaled) >= 10 ? 2 : 3;
+  return `${scaled.toLocaleString(getLocale(), { maximumFractionDigits: digits })}${suffix}`;
+}
 
 export function zeroUsage() {
   return {

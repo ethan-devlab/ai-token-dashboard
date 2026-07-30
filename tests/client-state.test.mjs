@@ -3,7 +3,8 @@ import test from 'node:test';
 
 import { redactPath } from '../public/scripts/drawer.mjs';
 import { buildModelBreakdown } from '../public/scripts/model-breakdown.mjs';
-import { buildTrendSeries } from '../public/scripts/trend.mjs';
+import { buildTrendSeries, nearestPointIndex } from '../public/scripts/trend.mjs';
+import { detectLocale, setLocale, t } from '../public/scripts/i18n.mjs';
 import {
   aggregateSessions,
   deriveSessions,
@@ -83,6 +84,7 @@ test('view state records table density and optional Explorer columns', () => {
     showExact: control('', false),
     showDetails: control('', true),
     trendMetric: control('tokens'),
+    locale: control('en'),
     density: control('compact'),
     columnLastUsed: control('', false),
     columnModel: control('', true),
@@ -96,6 +98,7 @@ test('view state records table density and optional Explorer columns', () => {
     showExact: false,
     showDetails: true,
     trendMetric: 'tokens',
+    locale: 'en',
     density: 'compact',
     visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
   });
@@ -114,11 +117,11 @@ test('shared query state round-trips through a URL while view preferences stay l
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
   assert.equal(saveViewPreferences(storage, {
-    unit: 'M', showExact: false, showDetails: true, trendMetric: 'tokens', density: 'compact',
+    unit: 'M', showExact: false, showDetails: true, trendMetric: 'tokens', locale: 'en', density: 'compact',
     visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
   }), true);
   assert.deepEqual(readViewPreferences(storage), {
-    unit: 'M', showExact: false, showDetails: true, trendMetric: 'tokens', density: 'compact',
+    unit: 'M', showExact: false, showDetails: true, trendMetric: 'tokens', locale: 'en', density: 'compact',
     visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false },
   });
 });
@@ -133,6 +136,23 @@ test('usage trend aggregates filtered sessions at the requested temporal grain',
   assert.equal(trend.points.find((point) => point.label === '07/01')?.tokens, 130);
   assert.equal(trend.points.find((point) => point.label === '07/02')?.tokens, 160);
   assert.equal(trend.partialCost, true);
+});
+
+test('i18n selects a saved language before browser fallback and localizes interpolation', () => {
+  const saved = new Map([['codex-token-dashboard:locale:v1', 'en']]);
+  const storage = { getItem: (key) => saved.get(key) || null };
+  assert.equal(detectLocale(storage, ['zh-TW']), 'en');
+  assert.equal(detectLocale({ getItem: () => null }, ['zh-TW']), 'zh-Hant');
+  setLocale('en');
+  assert.equal(t('explorer.showing', { start: 1, end: 2, count: 3 }), 'Showing 1–2 / 3 sessions');
+  setLocale('zh-Hant');
+});
+
+test('canvas trend selection chooses the nearest point and clamps keyboard-equivalent bounds', () => {
+  const points = [{}, {}, {}, {}];
+  assert.equal(nearestPointIndex(points, 16, 216), 0);
+  assert.equal(nearestPointIndex(points, 116, 216), 2);
+  assert.equal(nearestPointIndex(points, 999, 216), 3);
 });
 
 test('model breakdown preserves unpriced models as an incomplete cost group', () => {

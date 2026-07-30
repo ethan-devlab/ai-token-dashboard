@@ -1,4 +1,5 @@
 import { escapeHtml, integerFormat, moneyFormat, text } from './format.mjs';
+import { t } from './i18n.mjs';
 import { calculateCost } from './state.mjs';
 
 function modelKey(event, session) {
@@ -26,21 +27,21 @@ function metricValue(item, metric) {
 }
 
 function metricLabel(item, metric) {
-  if (metric === 'tokens') return `${integerFormat.format(item.tokens)} tokens`;
+  if (metric === 'tokens') return `${integerFormat.format(item.tokens)} ${t('total.tokens')}`;
   return item.cost ? `${item.partialCost ? '≥ ' : ''}${moneyFormat.format(item.cost)}` : '—';
 }
 
 export function renderModelBreakdown(host, models, metric) {
   if (!models.length) {
-    host.innerHTML = '<p class="insight-empty">此範圍沒有可分組的模型事件。</p>';
+    host.innerHTML = `<p class="insight-empty">${escapeHtml(t('model.empty'))}</p>`;
     return;
   }
   const visibleModels = [...models]
     .sort((left, right) => metricValue(right, metric) - metricValue(left, metric) || left.model.localeCompare(right.model))
     .slice(0, 8);
   const max = Math.max(1, ...visibleModels.map((item) => metricValue(item, metric)));
-  const metricName = metric === 'cost' ? '估算費用' : 'Total tokens';
-  const summary = `依 ${metricName} 排序，顯示 ${visibleModels.length} / ${models.length} 個模型。`;
+  const metricName = t(metric === 'cost' ? 'trend.cost' : 'trend.tokens');
+  const summary = t('model.summary', { metric: metricName, visible: visibleModels.length, total: models.length });
   const rows = visibleModels.map((item) => {
     const value = metricValue(item, metric);
     const width = Math.max(value ? 2 : 0, (value / max) * 100);

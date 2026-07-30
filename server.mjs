@@ -6,6 +6,9 @@ import { fileURLToPath, URL } from 'node:url';
 import { buildDashboardPayload, buildSessionsPayload } from './server/dashboard-data.mjs';
 import { PRICING } from './server/pricing.mjs';
 import { buildSessionSummary } from './server/session-reader.mjs';
+import { createSummaryCache } from './server/summary-cache.mjs';
+import { createUpdateChecker } from './server/update-checker.mjs';
+import { createRequire } from 'node:module';
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number.parseInt(process.env.PORT || '3333', 10);
@@ -14,6 +17,8 @@ const SESSIONS_DIR = path.resolve(process.env.CODEX_SESSIONS_DIR || DEFAULT_SESS
 const MAX_FILES = Number.parseInt(process.env.MAX_FILES || '10000', 10);
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 200;
+const require = createRequire(import.meta.url);
+const { version: CURRENT_VERSION } = require('./package.json');
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error(`Invalid PORT: ${process.env.PORT}`);
@@ -26,6 +31,12 @@ async function buildSummary() {
     pricing: PRICING,
   });
 }
+
+const summaryCache = createSummaryCache(buildSummary);
+const updateChecker = createUpdateChecker({
+  repository: process.env.UPDATE_REPOSITORY,
+  currentVersion: CURRENT_VERSION,
+});
 
 class RequestValidationError extends Error {}
 
@@ -140,17 +151,35 @@ const server = http.createServer(async (req, res) => {
     const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
     if (req.method === 'GET' && requestUrl.pathname === '/api/summary') {
-      jsonResponse(res, 200, await buildSummary());
+      const cached = await summaryCache.get();
+      jsonResponse(res, 200, { ...cached.summary, scan: cached.metadata });
       return;
     }
 
     if (req.method === 'GET' && requestUrl.pathname === '/api/dashboard') {
-      jsonResponse(res, 200, buildDashboardPayload(await buildSummary(), readDashboardRequest(requestUrl)));
+      const cached = await summaryCache.get();
+      jsonResponse(res, 200, buildDashboardPayload(cached.summary, readDashboardRequest(requestUrl), cached.metadata));
       return;
     }
 
     if (req.method === 'GET' && requestUrl.pathname === '/api/sessions') {
-      jsonResponse(res, 200, buildSessionsPayload(await buildSummary(), readDashboardRequest(requestUrl)));
+      const cached = await summaryCache.get();
+      jsonResponse(res, 200, buildSessionsPayload(cached.summary, readDashboardRequest(requestUrl), cached.metadata));
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/api/refresh') {
+      const snapshot = await summaryCache.refresh();
+      jsonResponse(res, 200, buildDashboardPayload(
+        snapshot.summary,
+        readDashboardRequest(requestUrl),
+        summaryCache.status()
+      ));
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/api/update') {
+      jsonResponse(res, 200, await updateChecker.check());
       return;
     }
 

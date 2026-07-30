@@ -24,6 +24,7 @@
     "gpt-5-mini": { "input": 0.25, "cachedInput": 0.025, "cacheWrite": null, "output": 2.0 },
     "gpt-5-nano": { "input": 0.05, "cachedInput": 0.005, "cacheWrite": null, "output": 0.4 },
     "gpt-5": { "input": 1.25, "cachedInput": 0.125, "cacheWrite": null, "output": 10.0 },
-    "codex-mini-latest": { "input": 1.5, "cachedInput": 0.375, "cacheWrite": null, "output": 6.0 }
+    "codex-mini-latest": { "input": 1.5, "cachedInput": 0.375, "cacheWrite": null, "output": 6.0 },
+    "codex-auto-review": { "input": 2.5, "cachedInput": null, "cacheWrite": null, "output": 15.0 }
   }
 }

@@ -44,11 +44,13 @@
 .insight-heading h2 { margin: 0; font-size: var(--text-xl); }
 .trend-summary, .insight-empty { color: var(--color-muted); font-size: var(--text-sm); }
 .trend-visual { margin-block-start: var(--space-4); }
-.trend-chart { display: block; inline-size: 100%; min-block-size: 11.5rem; overflow: visible; }
-.trend-chart line { stroke: var(--color-border); stroke-width: 1; }
-.trend-chart polyline { fill: none; stroke: var(--color-accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; }
-.trend-chart circle { fill: var(--color-surface-raised); stroke: var(--color-accent); stroke-width: 2; }
-.trend-chart text { fill: var(--color-subtle); font-family: var(--font-mono); font-size: 11px; }
+.trend-visual { position: relative; }
+.trend-chart { display: block; inline-size: 100%; block-size: 11.5rem; cursor: crosshair; }
+.trend-tooltip { max-inline-size: max-content; margin: var(--space-2) 0 0; color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.trend-table { margin-block-start: var(--space-3); color: var(--color-muted); font-size: var(--text-sm); }
+.trend-table summary { cursor: pointer; }
+.trend-table table { min-inline-size: 0; margin-block-start: var(--space-3); }
+.trend-table th, .trend-table td { text-align: start; }
 .model-summary { color: var(--color-muted); font-size: var(--text-sm); }
 .model-breakdown-list { display: grid; gap: var(--space-3); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
 .model-breakdown-label { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); font-family: var(--font-mono); font-size: var(--text-sm); }
@@ -98,5 +100,7 @@ body:not(.show-exact) .exact, body:not(.show-exact) .cell-exact, body:not(.show-
 .drawer-diagnostics { color: var(--color-muted); font-family: var(--font-mono); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .drawer-detail--hidden { display: none; }
 footer { margin-block-start: var(--space-4); color: var(--color-subtle); font-size: var(--text-xs); }
+.notice a { color: var(--color-accent); }
+.update-asset { display: block; margin-block-start: var(--space-1); }
 #summary[aria-busy="true"] .metric-card strong, #summary[aria-busy="true"] .secondary-breakdown dd { color: transparent; background: var(--color-border); border-radius: var(--radius-sm); animation: loading-pulse 1.2s ease-in-out infinite alternate; }
 @keyframes loading-pulse { to { opacity: 0.55; } }

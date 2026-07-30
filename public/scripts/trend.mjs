@@ -1,66 +1,30 @@
 import { escapeHtml, integerFormat, moneyFormat } from './format.mjs';
+import { getLocale, t } from './i18n.mjs';
 import { calculateCost } from './state.mjs';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 const MONTH_MS = 31 * DAY_MS;
 const YEAR_MS = 366 * DAY_MS;
+const PADDING = Object.freeze({ top: 16, right: 16, bottom: 30, left: 16 });
 
-function validEvents(sessions) {
-  return sessions.flatMap((session) => session.filteredEvents)
-    .filter((event) => Number.isFinite(Date.parse(event.timestamp)));
-}
-
+function validEvents(sessions) { return sessions.flatMap((session) => session.filteredEvents).filter((event) => Number.isFinite(Date.parse(event.timestamp))); }
 function granularity(range, events) {
   if (range.mode === 'last24h' || range.mode === 'today') return 'hour';
   if (range.mode === 'week' || range.mode === 'month') return 'day';
   if (range.mode === 'year') return 'month';
   const times = events.map((event) => Date.parse(event.timestamp));
-  const from = range.fromMs ?? Math.min(...times);
-  const to = range.toMs ?? Math.max(...times);
-  const span = Math.max(0, to - from);
-  if (span <= 2 * DAY_MS) return 'hour';
-  if (span <= 13 * MONTH_MS) return 'day';
-  if (span <= 6 * YEAR_MS) return 'month';
-  return 'year';
+  const span = Math.max(0, (range.toMs ?? Math.max(...times)) - (range.fromMs ?? Math.min(...times)));
+  return span <= 2 * DAY_MS ? 'hour' : span <= 13 * MONTH_MS ? 'day' : span <= 6 * YEAR_MS ? 'month' : 'year';
 }
-
-function bucketStart(value, unit) {
-  const date = new Date(value);
-  if (unit === 'hour') date.setMinutes(0, 0, 0);
-  if (unit === 'day') date.setHours(0, 0, 0, 0);
-  if (unit === 'month') date.setDate(1), date.setHours(0, 0, 0, 0);
-  if (unit === 'year') date.setMonth(0, 1), date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function nextBucket(date, unit) {
-  const next = new Date(date);
-  if (unit === 'hour') next.setHours(next.getHours() + 1);
-  if (unit === 'day') next.setDate(next.getDate() + 1);
-  if (unit === 'month') next.setMonth(next.getMonth() + 1);
-  if (unit === 'year') next.setFullYear(next.getFullYear() + 1);
-  return next;
-}
-
+function bucketStart(value, unit) { const date = new Date(value); if (unit === 'hour') date.setMinutes(0, 0, 0); if (unit === 'day') date.setHours(0, 0, 0, 0); if (unit === 'month') date.setDate(1), date.setHours(0, 0, 0, 0); if (unit === 'year') date.setMonth(0, 1), date.setHours(0, 0, 0, 0); return date; }
+function nextBucket(date, unit) { const next = new Date(date); if (unit === 'hour') next.setHours(next.getHours() + 1); if (unit === 'day') next.setDate(next.getDate() + 1); if (unit === 'month') next.setMonth(next.getMonth() + 1); if (unit === 'year') next.setFullYear(next.getFullYear() + 1); return next; }
 function bucketLabel(value, unit) {
   const date = new Date(value);
-  const pad = (number) => String(number).padStart(2, '0');
-  if (unit === 'hour') return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:00`;
-  if (unit === 'day') return `${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
-  if (unit === 'month') return `${date.getFullYear()}/${pad(date.getMonth() + 1)}`;
-  return String(date.getFullYear());
+  const options = unit === 'hour' ? { month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false } : unit === 'day' ? { month: '2-digit', day: '2-digit' } : unit === 'month' ? { year: 'numeric', month: '2-digit' } : { year: 'numeric' };
+  return new Intl.DateTimeFormat(getLocale(), options).format(date);
 }
-
-function rangeBounds(range, events, unit) {
-  if (!events.length) return null;
-  const times = events.map((event) => Date.parse(event.timestamp));
-  const from = range.fromMs ?? Math.min(...times);
-  const to = range.toMs ?? Math.max(...times);
-  const start = bucketStart(from, unit);
-  const end = range.toMs == null ? nextBucket(bucketStart(to, unit), unit) : bucketStart(to, unit);
-  return end > start ? { start, end } : { start, end: nextBucket(start, unit) };
-}
+function rangeBounds(range, events, unit) { if (!events.length) return null; const times = events.map((event) => Date.parse(event.timestamp)); const start = bucketStart(range.fromMs ?? Math.min(...times), unit); const end = range.toMs == null ? nextBucket(bucketStart(Math.max(...times), unit), unit) : bucketStart(range.toMs, unit); return end > start ? { start, end } : { start, end: nextBucket(start, unit) }; }
 
 export function buildTrendSeries(sessions, pricing, range) {
   const events = validEvents(sessions);
@@ -68,64 +32,56 @@ export function buildTrendSeries(sessions, pricing, range) {
   const unit = granularity(range, events);
   const bounds = rangeBounds(range, events, unit);
   const pointMap = new Map();
-  for (let cursor = bounds.start; cursor < bounds.end; cursor = nextBucket(cursor, unit)) {
-    pointMap.set(cursor.getTime(), { time: cursor.getTime(), label: bucketLabel(cursor, unit), tokens: 0, cost: 0 });
-  }
-
+  for (let cursor = bounds.start; cursor < bounds.end; cursor = nextBucket(cursor, unit)) pointMap.set(cursor.getTime(), { time: cursor.getTime(), label: bucketLabel(cursor, unit), tokens: 0, cost: 0 });
   let partialCost = false;
-  for (const event of events) {
-    const timestamp = Date.parse(event.timestamp);
-    const key = bucketStart(timestamp, unit).getTime();
-    const point = pointMap.get(key);
-    if (!point) continue;
-    point.tokens += event.usage.totalTokens;
-    const eventCost = calculateCost(pricing, [event]);
-    point.cost += eventCost.total;
-    partialCost ||= eventCost.unknownModels.size > 0 || eventCost.unavailableComponents.size > 0;
-  }
-
+  for (const event of events) { const point = pointMap.get(bucketStart(Date.parse(event.timestamp), unit).getTime()); if (!point) continue; point.tokens += event.usage.totalTokens; const cost = calculateCost(pricing, [event]); point.cost += cost.total; partialCost ||= cost.unknownModels.size > 0 || cost.unavailableComponents.size > 0; }
   return { points: [...pointMap.values()], unit, partialCost };
 }
 
-function measure(points, metric) {
-  return points.map((point) => ({ ...point, value: point[metric] }));
+function valueLabel(value, metric) { return metric === 'cost' ? moneyFormat.format(value) : `${integerFormat.format(value)} ${t('total.tokens')}`; }
+function unitLabel(unit) { return t(`trend.${unit}`); }
+
+export function nearestPointIndex(points, x, width, padding = PADDING) {
+  if (!points.length) return -1;
+  if (points.length === 1) return 0;
+  const plotWidth = Math.max(1, width - padding.left - padding.right);
+  return Math.max(0, Math.min(points.length - 1, Math.round(((x - padding.left) / plotWidth) * (points.length - 1))));
 }
 
-function valueLabel(value, metric) {
-  return metric === 'cost' ? moneyFormat.format(value) : `${integerFormat.format(value)} tokens`;
+function colors(canvas) {
+  const style = getComputedStyle(canvas);
+  return { accent: style.getPropertyValue('--color-accent').trim(), border: style.getPropertyValue('--color-border').trim(), surface: style.getPropertyValue('--color-surface-raised').trim(), subtle: style.getPropertyValue('--color-subtle').trim() };
 }
 
-function granularityLabel(unit) {
-  return { hour: '每小時', day: '每日', month: '每月', year: '每年' }[unit];
+function draw(canvas, points, selectedIndex) {
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(184, Math.floor(rect.height));
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(width * ratio); canvas.height = Math.floor(height * ratio);
+  const context = canvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
+  const palette = colors(canvas); const plotWidth = width - PADDING.left - PADDING.right; const plotHeight = height - PADDING.top - PADDING.bottom; const max = Math.max(1, ...points.map((point) => point.value));
+  const coordinates = points.map((point, index) => ({ ...point, x: points.length === 1 ? width / 2 : PADDING.left + (plotWidth * index) / (points.length - 1), y: PADDING.top + plotHeight - (point.value / max) * plotHeight }));
+  context.strokeStyle = palette.border; context.lineWidth = 1; context.beginPath(); context.moveTo(PADDING.left, height - PADDING.bottom); context.lineTo(width - PADDING.right, height - PADDING.bottom); context.stroke();
+  context.strokeStyle = palette.accent; context.lineWidth = 3; context.lineCap = 'round'; context.lineJoin = 'round'; context.beginPath(); coordinates.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)); context.stroke();
+  context.font = '12px var(--font-mono)'; context.fillStyle = palette.subtle; context.textBaseline = 'alphabetic'; context.fillText(coordinates[0].label, PADDING.left, height - 8); context.textAlign = 'right'; context.fillText(coordinates.at(-1).label, width - PADDING.right, height - 8); context.textAlign = 'start';
+  coordinates.forEach((point, index) => { context.beginPath(); context.arc(point.x, point.y, index === selectedIndex ? 5 : 3, 0, Math.PI * 2); context.fillStyle = index === selectedIndex ? palette.accent : palette.surface; context.fill(); context.strokeStyle = palette.accent; context.lineWidth = 2; context.stroke(); });
+  return { width, coordinates };
 }
 
-function chartMarkup(points, metric) {
-  const width = 720;
-  const height = 184;
-  const padding = { top: 16, right: 16, bottom: 30, left: 16 };
-  const max = Math.max(1, ...points.map((point) => point.value));
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const coordinates = points.map((point, index) => {
-    const x = points.length === 1 ? width / 2 : padding.left + (plotWidth * index) / (points.length - 1);
-    const y = padding.top + plotHeight - (point.value / max) * plotHeight;
-    return { ...point, x, y };
-  });
-  const polyline = coordinates.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
-  const labels = [coordinates[0], coordinates.at(-1)].filter(Boolean);
-  const dots = coordinates.map((point) => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3"><title>${escapeHtml(`${point.label} · ${valueLabel(point.value, metric)}`)}</title></circle>`).join('');
-  const axis = labels.map((point, index) => `<text x="${point.x.toFixed(1)}" y="${height - 8}" text-anchor="${index ? 'end' : 'start'}">${escapeHtml(point.label)}</text>`).join('');
-  return `<svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img"><line x1="${padding.left}" x2="${width - padding.right}" y1="${height - padding.bottom}" y2="${height - padding.bottom}" /><polyline points="${polyline}" />${dots}${axis}</svg>`;
-}
+function dataTable(points, metric) { return `<details class="trend-table"><summary>${escapeHtml(t('trend.table'))}</summary><table><thead><tr><th>${escapeHtml(t('trend.time'))}</th><th>${escapeHtml(t('trend.value'))}</th></tr></thead><tbody>${points.map((point) => `<tr><td>${escapeHtml(point.label)}</td><td>${escapeHtml(valueLabel(point.value, metric))}</td></tr>`).join('')}</tbody></table></details>`; }
 
 export function renderUsageTrend(host, trend, metric) {
-  const series = measure(trend.points, metric);
-  if (!series.length) {
-    host.innerHTML = '<p class="insight-empty">此範圍沒有可繪製的使用事件。</p>';
-    return;
-  }
-  const peak = series.reduce((highest, point) => point.value > highest.value ? point : highest, series[0]);
-  const metricLabel = metric === 'cost' ? '估算費用' : 'Total tokens';
-  const summary = `${granularityLabel(trend.unit)}彙整 ${series.length} 個區間；峰值 ${peak.label}，${valueLabel(peak.value, metric)}。${metric === 'cost' && trend.partialCost ? ' 未知模型或缺失單價未納入趨勢。' : ''}`;
-  host.innerHTML = `<p id="trendSummary" class="trend-summary">${escapeHtml(summary)}</p><div class="trend-visual" role="img" aria-describedby="trendSummary" aria-label="${escapeHtml(`${metricLabel} trend`)}">${chartMarkup(series, metric)}</div>`;
+  const points = trend.points.map((point) => ({ ...point, value: Number(point[metric] || 0) }));
+  if (!points.length) { host.innerHTML = `<p class="insight-empty">${escapeHtml(t('trend.empty'))}</p>`; return; }
+  const peak = points.reduce((highest, point) => point.value > highest.value ? point : highest, points[0]);
+  const metricLabel = t(metric === 'cost' ? 'trend.cost' : 'trend.tokens');
+  const summary = t('trend.summary', { unit: unitLabel(trend.unit), count: integerFormat.format(points.length), label: peak.label, value: valueLabel(peak.value, metric), partial: metric === 'cost' && trend.partialCost ? t('trend.partial') : '' });
+  host.innerHTML = `<p id="trendSummary" class="trend-summary">${escapeHtml(summary)}</p><div class="trend-visual"><canvas class="trend-chart" tabindex="0" role="img" aria-describedby="trendSummary trendSelection" aria-label="${escapeHtml(t('trend.aria', { metric: metricLabel }))}"></canvas><p id="trendSelection" class="trend-tooltip" aria-live="polite"></p></div>${dataTable(points, metric)}`;
+  const canvas = host.querySelector('canvas'); const tooltip = host.querySelector('.trend-tooltip'); let selectedIndex = points.length - 1; let drawing = null;
+  const update = () => { drawing = draw(canvas, points, selectedIndex); const point = points[selectedIndex]; tooltip.textContent = t('trend.point', { label: point.label, value: valueLabel(point.value, metric) }); tooltip.style.setProperty('--tooltip-x', `${drawing.coordinates[selectedIndex].x}px`); };
+  const selectFromPointer = (event) => { const rect = canvas.getBoundingClientRect(); selectedIndex = nearestPointIndex(points, event.clientX - rect.left, rect.width); update(); };
+  canvas.addEventListener('pointermove', selectFromPointer); canvas.addEventListener('pointerdown', selectFromPointer); canvas.addEventListener('keydown', (event) => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); if (event.key === 'ArrowLeft') selectedIndex = Math.max(0, selectedIndex - 1); if (event.key === 'ArrowRight') selectedIndex = Math.min(points.length - 1, selectedIndex + 1); if (event.key === 'Home') selectedIndex = 0; if (event.key === 'End') selectedIndex = points.length - 1; update(); });
+  const observer = new ResizeObserver(update); observer.observe(canvas); update();
 }

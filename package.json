@@ -8,7 +8,8 @@
     "start": "node server.mjs",
     "check": "node --check server.mjs",
     "test:client": "node --test tests/client-state.test.mjs",
-    "test:contract": "node --test tests/contract-harness.mjs"
+    "test:contract": "node --test tests/contract-harness.mjs",
+    "test:server": "node --test tests/server-services.test.mjs"
   },
   "engines": {
     "node": ">=18"

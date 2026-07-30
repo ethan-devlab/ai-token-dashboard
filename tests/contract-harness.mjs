@@ -22,7 +22,7 @@ async function getAvailablePort() {
   return port;
 }
 
-function startDashboard({ port, sessionsDirectory }) {
+function startDashboard({ port, sessionsDirectory, updateRepository }) {
   const child = spawn(process.execPath, ['server.mjs'], {
     cwd: projectRoot,
     env: {
@@ -30,6 +30,7 @@ function startDashboard({ port, sessionsDirectory }) {
       HOST: '127.0.0.1',
       PORT: String(port),
       CODEX_SESSIONS_DIR: sessionsDirectory,
+      ...(updateRepository ? { UPDATE_REPOSITORY: updateRepository } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -135,6 +136,9 @@ test('local dashboard contract fixture', async () => {
     assertSecurityHeaders(summaryResponse, "default-src 'none'; frame-ancestors 'none'");
     const summary = await summaryResponse.json();
 
+    assert.equal(summary.scan.snapshotVersion, 1);
+    assert.equal(summary.scan.refreshing, false);
+
     const resetSession = summary.sessions.find((session) => session.sessionId === 'fixture-reset');
     assert.ok(resetSession);
     assert.equal(resetSession.invalidLineCount, 1);
@@ -165,6 +169,7 @@ test('local dashboard contract fixture', async () => {
     assert.equal(dashboardData.hasNext, true);
     assert.equal(dashboardData.sessions[0].usageEvents.some((event) => Object.hasOwn(event, 'payload')), false);
     assert.equal(dashboardData.cost.unknownModels.includes('fixture-unknown-model'), true);
+    assert.equal(dashboardData.scan.snapshotVersion, 1);
 
     const sessionsResponse = await fetch(`${baseUri}/api/sessions?mode=all&limit=1&offset=1&sort=recent`);
     assert.equal(sessionsResponse.status, 200);
@@ -173,6 +178,25 @@ test('local dashboard contract fixture', async () => {
     assert.equal(sessionsData.offset, 1);
     assert.equal(sessionsData.sessions.length, 1);
     assert.equal(sessionsData.hasPrevious, true);
+    assert.equal(sessionsData.scan.snapshotVersion, 1);
+
+    await writeFile(path.join(sessionsDirectory, 'later.jsonl'), [
+      '{"timestamp":"2026-07-29T00:03:00Z","type":"session_meta","payload":{"id":"fixture-later","model":"gpt-5.6-terra"}}',
+      '{"timestamp":"2026-07-29T00:03:01Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":25,"output_tokens":5,"total_tokens":30}}}}',
+    ].join('\n'));
+    const cachedDashboardResponse = await fetch(`${baseUri}/api/dashboard?mode=all`);
+    const cachedDashboard = await cachedDashboardResponse.json();
+    assert.equal(cachedDashboard.sessionCount, 3);
+    assert.equal(cachedDashboard.scan.snapshotVersion, 1);
+
+    const refreshResponse = await fetch(`${baseUri}/api/refresh?mode=all`, { method: 'POST' });
+    assert.equal(refreshResponse.status, 200);
+    const refreshedDashboard = await refreshResponse.json();
+    assert.equal(refreshedDashboard.sessionCount, 4);
+    assert.equal(refreshedDashboard.scan.snapshotVersion, 2);
+
+    const updateDisabledResponse = await fetch(`${baseUri}/api/update`);
+    assert.deepEqual(await updateDisabledResponse.json(), { enabled: false, status: 'disabled' });
 
     const invalidRangeResponse = await fetch(`${baseUri}/api/dashboard?from=4&to=4`);
     assert.equal(invalidRangeResponse.status, 400);

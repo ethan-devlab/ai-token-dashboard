@@ -1,0 +1,44 @@
+name: Release source archive
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate source
+        run: |
+          npm run check
+          npm run test:server
+          npm run test:client
+          npm run test:contract
+      - name: Create source archive and digest
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p release
+          git archive --format=zip --prefix="codex-token-dashboard-${TAG}/" --output="release/codex-token-dashboard-${TAG}.zip" "$GITHUB_SHA"
+          sha256sum "release/codex-token-dashboard-${TAG}.zip" > release/SHA256SUMS
+      - name: Attest source archive
+        uses: actions/attest@v4
+        with:
+          subject-path: release/codex-token-dashboard-${{ github.ref_name }}.zip
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" "release/codex-token-dashboard-${TAG}.zip" release/SHA256SUMS --generate-notes

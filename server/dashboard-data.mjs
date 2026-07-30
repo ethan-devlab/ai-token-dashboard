@@ -244,7 +244,7 @@ function pageSessions(sessions, pricing, { search, sort, offset, limit }) {
   };
 }
 
-function publicContext(summary, range) {
+function publicContext(summary, range, scan = null) {
   return {
     generatedAt: summary.generatedAt,
     durationMs: summary.durationMs,
@@ -255,16 +255,17 @@ function publicContext(summary, range) {
     errors: summary.errors,
     pricing: summary.pricing,
     range,
+    scan,
   };
 }
 
-export function buildDashboardPayload(summary, request) {
+export function buildDashboardPayload(summary, request, scan) {
   const sessions = filterSessions(summary, request.range);
   const events = sessions.flatMap((session) => session.usageEvents);
   const totals = sessions.reduce((sum, session) => addUsage(sum, session.usage), zeroUsage());
   const cost = events.reduce((sum, event) => addCost(sum, calculateCost(summary.pricing, [event])), createCost());
   return {
-    ...publicContext(summary, request.range),
+    ...publicContext(summary, request.range, scan),
     sessionCount: sessions.length,
     totals,
     cost: serialiseCost(cost),
@@ -275,10 +276,10 @@ export function buildDashboardPayload(summary, request) {
   };
 }
 
-export function buildSessionsPayload(summary, request) {
+export function buildSessionsPayload(summary, request, scan) {
   const sessions = filterSessions(summary, request.range);
   return {
-    ...publicContext(summary, request.range),
+    ...publicContext(summary, request.range, scan),
     ...pageSessions(sessions, summary.pricing, request),
   };
 }

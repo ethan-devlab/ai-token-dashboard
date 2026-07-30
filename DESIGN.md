@@ -19,7 +19,7 @@ All presentation values come from `public/styles/tokens.css`; no remote font, CD
 
 ## 3. Typography and content hierarchy
 
-The interface is Traditional Chinese first, retaining established technical English labels such as `Input`, `Output`, `Cached`, and model names. The hierarchy is: selected period and refresh action; four executive KPIs; the token breakdown; system metadata and any real data-quality warning; then the session explorer and pricing disclosure. KPI numerals are prominent without becoming marketing headlines. Exact values, paths, and diagnostic source labels use the mono stack with lower contrast.
+The interface supports Traditional Chinese and English, retaining established technical English labels such as `Input`, `Output`, `Cached`, and model names where they are the clearest domain terms. The hierarchy is: selected period and refresh/update actions; four executive KPIs; the token breakdown; system metadata and any real data-quality warning; then the interactive trend, session explorer, and pricing disclosure. KPI numerals are prominent without becoming marketing headlines. Exact values, paths, and diagnostic source labels use the mono stack with lower contrast.
 
 ## 4. Layout, responsive behavior, and scroll ownership
 
@@ -29,7 +29,7 @@ The supported product surface is desktop only: 1440–1600px content frame and a
 
 | Primitive | Required state behavior |
 | --- | --- |
-| `AppHeader` | Identity, local-data explanation, and a refresh action: default, loading (`解析中…`), and disabled. |
+| `AppHeader` | Identity, local-data explanation, language/view settings, explicit refresh, and user-initiated update check: default, loading (`解析中…`), success, unavailable, and disabled. |
 | `PeriodContext` | Search, range, range-specific input, display unit, exact/detail toggles, and sort: default, keyboard-focus, selected, and custom-range states. |
 | `MetricCard` | Exactly four executive cards: API-equivalent cost, Total, Input, Output; loading skeleton, populated, and unavailable (`—`) states. |
 | `SecondaryBreakdown` | Cached, uncached, cache-write, and reasoning figures; loading and populated states. |
@@ -37,17 +37,18 @@ The supported product surface is desktop only: 1440–1600px content frame and a
 | `DataQuality` | Hidden while healthy. Warning/error panels appear only for parse failures, unpriced/partial-priced models, or a file cap. |
 | `SessionTable` | A semantic table with a local scroll owner, sticky header, loading, populated, empty, and server-paginated states. The current page retains the complete accounting columns; density and column visibility are local view preferences. |
 | `PricingDisclosure` | Native `<details>` disclosure with collapsed and expanded states. |
+| `UsageTrend` | Native Canvas line trend with pointer-nearest-point selection, Left/Right/Home/End keyboard selection, text tooltip, and a native disclosure table alternative. It has no decorative animation. |
 
 ## 6. Interaction and motion
 
-The refresh action is the only header action. Range, search, and sort state are mirrored in the URL, while density, unit, detail, trend, and column preferences stay in local storage. These controls update visible data without changing accounting rules. Focus indication is a 3px teal outline with offset; hover only clarifies actionable controls and table rows. Loading uses a low-contrast 1.2s opacity skeleton and must not shift layout. `prefers-reduced-motion: reduce` suppresses nonessential animation and transitions while preserving actual loading/error text. Escape closes the session drawer first, then clears search or closes the view menu.
+Range, search, sort, and paging obtain projections from the latest successful in-memory snapshot without starting a new JSONL parse. Only the explicit refresh control calls the rescan endpoint; the server double-buffers the result and retains the previous snapshot if parsing fails. Range, search, and sort state are mirrored in the URL, while language, density, unit, detail, trend, and column preferences stay in local storage. The GitHub update check is a separate explicit user action and never runs automatically. The Canvas trend is a recorded novel interaction informed by the nearest restrained data-table pattern: it uses direct pointer/keyboard state with no motion because no state transition benefits from animation. Focus indication is a 3px teal outline with offset; hover only clarifies actionable controls and table rows. Loading uses a low-contrast 1.2s opacity skeleton and must not shift layout. `prefers-reduced-motion: reduce` suppresses nonessential animation and transitions while preserving actual loading/error text. Escape closes the session drawer first, then clears search or closes the view menu.
 
 ## 7. Accessibility and security constraints
 
-Controls have explicit labels; the summary exposes `aria-busy`; quality/error text is a polite live region; and the semantic table keeps headers. `lang="zh-Hant"`, legible contrast, focus visibility, tabular numbers, and text-based state labels are required. The local static shell stays same-origin under a restrictive CSP and `nosniff`; it must not expose raw session JSONL or conversation content. Browser visual QA is directly performed by the root agent at desktop widths only; it is not delegated.
+Controls have explicit labels; the summary exposes `aria-busy`; quality/error text is a polite live region; and the semantic table keeps headers. The active `lang`, metadata, title, dates, numbers, and currency follow the selected `zh-Hant` or `en` locale. The Canvas trend exposes a short summary, a live selected-point value, keyboard navigation, and a semantic table alternative. The local static shell stays same-origin under a restrictive CSP and `nosniff`; it must not expose raw session JSONL or conversation content. GitHub checking only reads a fixed `owner/repo` latest-release endpoint when a user asks. Browser visual QA is directly performed by the root agent at desktop widths only; it is not delegated.
 
 ## 8. Scope, verification, and accepted debt
 
 Focused verification covers syntax, the server’s static/root/CSP boundary, route traversal rejection, parser fixture semantics, server-side aggregation, pagination, URL state, and local view preferences. Direct visual verification checks the shipped desktop page and its loading, populated, warning, error, range, explorer, drawer, pagination, and disclosure states. No mobile/tablet work, remote dependencies, analytics, glass effects, neon gradients, fake data, or silent data-semantic changes are accepted.
 
-The server keeps `GET /api/summary` as its compatibility response. `GET /api/dashboard` accepts the validated range, search, sort, offset, and limit query parameters and returns range aggregates plus the first session page. `GET /api/sessions` returns subsequent filtered pages only. Both dashboard routes expose summaries rather than raw JSONL or conversation content; model pricing is loaded from `server/pricing.json`.
+The server keeps `GET /api/summary` as its compatibility response. `GET /api/dashboard` accepts the validated range, search, sort, offset, and limit query parameters and returns range aggregates plus the first session page. `GET /api/sessions` returns subsequent filtered pages only. `POST /api/refresh` is the only rescan path; all current snapshot responses contain scan timestamp, snapshot version, and refreshing state. `GET /api/update` is disabled unless `UPDATE_REPOSITORY=owner/repo` is valid and never accepts a caller-provided URL. Dashboard routes expose summaries rather than raw JSONL or conversation content; model pricing is loaded from `server/pricing.json`.
