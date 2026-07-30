@@ -4,6 +4,8 @@
 # Local orchestration and code-index artifacts
 .omo/
 .codegraph/
+@lazycodex-clone-fidelity-reviewer
+codex-token-dashboard-design-report.md
 
 # Node diagnostics
 npm-debug.log*

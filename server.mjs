@@ -11,19 +11,20 @@ import { createUpdateChecker } from './server/update-checker.mjs';
 import { readEnvFile } from './server/config.mjs';
 import { createRequire } from 'node:module';
 
-const HOST = process.env.HOST || '127.0.0.1';
-const PORT = Number.parseInt(process.env.PORT || '3333', 10);
+const LOCAL_CONFIG = readEnvFile(fileURLToPath(new URL('./.env', import.meta.url)));
+const HOST = process.env.HOST || LOCAL_CONFIG.HOST || '127.0.0.1';
+const PORT_VALUE = process.env.PORT || LOCAL_CONFIG.PORT || '3333';
+const PORT = Number.parseInt(PORT_VALUE, 10);
 const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.codex', 'sessions');
-const SESSIONS_DIR = path.resolve(process.env.CODEX_SESSIONS_DIR || DEFAULT_SESSIONS_DIR);
-const MAX_FILES = Number.parseInt(process.env.MAX_FILES || '10000', 10);
+const SESSIONS_DIR = path.resolve(process.env.CODEX_SESSIONS_DIR || LOCAL_CONFIG.CODEX_SESSIONS_DIR || DEFAULT_SESSIONS_DIR);
+const MAX_FILES = Number.parseInt(process.env.MAX_FILES || LOCAL_CONFIG.MAX_FILES || '10000', 10);
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 200;
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
-const LOCAL_CONFIG = readEnvFile(fileURLToPath(new URL('./.env', import.meta.url)));
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
-  throw new Error(`Invalid PORT: ${process.env.PORT}`);
+  throw new Error(`Invalid PORT: ${PORT_VALUE}`);
 }
 
 async function buildSummary() {
