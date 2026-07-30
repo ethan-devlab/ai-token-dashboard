@@ -39,14 +39,17 @@ function requestContext(requestUrl) {
   if (!VALID_MODES.has(mode)) throw new ApiError(400, 'INVALID_QUERY', 'Invalid mode.');
   const fromMs = parseTimestamp(requestUrl.searchParams.get('from'), 'from');
   const toMs = parseTimestamp(requestUrl.searchParams.get('to'), 'to');
-  if ((mode === 'custom' && (fromMs == null || toMs == null)) || (fromMs != null && toMs != null && fromMs >= toMs)) throw new ApiError(400, 'INVALID_RANGE', 'The from timestamp must be earlier than to.');
+  const period = requestUrl.searchParams.get('period');
+  const start = requestUrl.searchParams.get('start');
+  const end = requestUrl.searchParams.get('end');
+  if ((period != null && !/^\d{4}(?:-\d{2}|-W\d{2})?$/.test(period)) || (start != null && start.length > 32) || (end != null && end.length > 32) || (fromMs != null && toMs != null && fromMs >= toMs)) throw new ApiError(400, 'INVALID_RANGE', 'Invalid selected time range.');
   const q = requestUrl.searchParams.get('q') ?? requestUrl.searchParams.get('search') ?? '';
   if (q.length > 256) throw new ApiError(400, 'INVALID_QUERY', 'Search is too long.');
   const sort = requestUrl.searchParams.get('sort') || 'recent';
   if (!VALID_SORTS.has(sort)) throw new ApiError(400, 'INVALID_QUERY', 'Invalid sort.');
   let range;
-  try { range = resolveRange({ mode, fromMs, toMs, timezone: requestUrl.searchParams.get('timezone') || undefined }); }
-  catch (error) { if (error?.code === 'INVALID_TIMEZONE') throw new ApiError(400, error.code, error.message); throw error; }
+  try { range = resolveRange({ mode, fromMs, toMs, period, start, end, timezone: requestUrl.searchParams.get('timezone') || undefined }); }
+  catch (error) { if (error?.code === 'INVALID_TIMEZONE' || error?.code === 'INVALID_RANGE') throw new ApiError(400, error.code, error.message); throw error; }
   return { range, q, sort, offset: parseInteger(requestUrl.searchParams.get('offset'), 'offset', 0, 1_000_000), limit: parseInteger(requestUrl.searchParams.get('limit'), 'limit', 100, 200), filters: { models: parseList(requestUrl.searchParams, 'models'), workspaces: parseList(requestUrl.searchParams, 'workspaces'), pricingStatus: parseList(requestUrl.searchParams, 'pricingStatus'), usageSource: parseList(requestUrl.searchParams, 'usageSource'), cliVersion: parseList(requestUrl.searchParams, 'cliVersion'), originator: parseList(requestUrl.searchParams, 'originator'), quality: parseList(requestUrl.searchParams, 'quality') } };
 }
 function headers(contentType, length, csp, id, attachment = null) { return { 'Content-Type': contentType, 'Content-Length': length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': csp, 'X-Request-Id': id, ...(attachment ? { 'Content-Disposition': attachment } : {}) }; }

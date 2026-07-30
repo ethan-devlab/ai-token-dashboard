@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { bucketFor } from './timezone.mjs';
+import { bucketFor, nextBucketFor } from './timezone.mjs';
+import { matchPricingRule } from './pricing.mjs';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -7,23 +8,18 @@ const USAGE_KEYS = Object.freeze(['inputTokens', 'cachedInputTokens', 'cacheWrit
 
 function zeroUsage() { return Object.fromEntries(USAGE_KEYS.map((key) => [key, 0])); }
 function addUsage(left, right) { for (const key of USAGE_KEYS) left[key] += Number(right?.[key] || 0); return left; }
-function rateFor(pricing, model) {
-  const normalized = String(model || '').trim().toLowerCase();
-  return Object.keys(pricing.rates).sort((left, right) => right.length - left.length).find((key) => normalized === key || normalized.startsWith(`${key}-`)) || null;
-}
-
 export function calculateCost(pricing, events) {
   const cost = { total: 0, input: 0, cached: 0, cacheWrite: 0, output: 0, pricedTokens: 0, billableTokens: 0, unpricedTokens: 0, unknownModels: new Set(), unavailableComponents: new Set() };
   for (const event of events) {
     const eventUsage = event.usage || zeroUsage();
     const billable = eventUsage.uncachedInputTokens + eventUsage.cachedInputTokens + eventUsage.cacheWriteTokens + eventUsage.outputTokens;
     cost.billableTokens += billable;
-    const matched = rateFor(pricing, event.model);
+    const matched = matchPricingRule(pricing, event.model, event.timestamp);
     if (!matched) { cost.unpricedTokens += billable; cost.unknownModels.add(event.model || 'unknown'); continue; }
-    const rate = pricing.rates[matched];
+    const rate = matched.rates;
     for (const [name, tokens, price] of [['input', eventUsage.uncachedInputTokens, rate.input], ['cached', eventUsage.cachedInputTokens, rate.cachedInput], ['cacheWrite', eventUsage.cacheWriteTokens, rate.cacheWrite], ['output', eventUsage.outputTokens, rate.output]]) {
       if (!tokens) continue;
-      if (price == null) { cost.unpricedTokens += tokens; cost.unavailableComponents.add(`${matched}:${name}`); continue; }
+      if (price == null) { cost.unpricedTokens += tokens; cost.unavailableComponents.add(`${matched.id}:${name}`); continue; }
       const amount = tokens / pricing.unitTokens * price;
       cost[name] += amount; cost.total += amount; cost.pricedTokens += tokens;
     }
@@ -78,7 +74,7 @@ function trend(sessions, range) {
   const points = new Map();
   for (const session of sessions) for (const event of session.usageEvents) {
     const time = bucketFor(Date.parse(event.timestamp), unit, range.timezone);
-    const point = points.get(time) || { fromMs: time, toMs: time + (unit === 'hour' ? HOUR_MS : DAY_MS), label: new Intl.DateTimeFormat('en-CA', { timeZone: range.timezone, month: unit === 'year' ? undefined : '2-digit', day: unit === 'hour' || unit === 'day' ? '2-digit' : undefined, year: unit === 'month' || unit === 'year' ? 'numeric' : undefined, hour: unit === 'hour' ? '2-digit' : undefined, hourCycle: 'h23' }).format(new Date(time)), tokens: 0, cost: 0, partialCost: false };
+    const point = points.get(time) || { fromMs: time, toMs: nextBucketFor(time, unit, range.timezone), label: new Intl.DateTimeFormat('en-CA', { timeZone: range.timezone, month: unit === 'year' ? undefined : '2-digit', day: unit === 'hour' || unit === 'day' ? '2-digit' : undefined, year: unit === 'month' || unit === 'year' ? 'numeric' : undefined, hour: unit === 'hour' ? '2-digit' : undefined, hourCycle: 'h23' }).format(new Date(time)), tokens: 0, cost: 0, partialCost: false };
     point.tokens += event.usage.totalTokens;
     const itemCost = calculateCost(session.__pricing, [event]);
     point.cost += itemCost.total; point.partialCost ||= itemCost.unpricedTokens > 0;

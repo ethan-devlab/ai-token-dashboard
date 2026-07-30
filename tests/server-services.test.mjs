@@ -6,9 +6,9 @@ import test from 'node:test';
 import { createSummaryCache } from '../server/summary-cache.mjs';
 import { compareVersions, createUpdateChecker, validRepository } from '../server/update-checker.mjs';
 import { parseEnv, readRuntimeConfig } from '../server/config.mjs';
-import { PRICING } from '../server/pricing.mjs';
+import { createPricing, matchPricingRule, PRICING } from '../server/pricing.mjs';
 import { createSessionIndex, parseSessionFile } from '../server/session-index.mjs';
-import { resolveRange } from '../server/timezone.mjs';
+import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
 
 test('summary cache reuses its latest successful in-memory snapshot', async () => {
   let calls = 0;
@@ -86,6 +86,14 @@ test('codex-auto-review pricing leaves unsupported cache components unavailable'
   });
 });
 
+test('pricing rules are validated and choose effective aliases deterministically', () => {
+  assert.equal(matchPricingRule(PRICING, 'codex-auto-review', '2026-07-30T00:00:00Z').id, 'codex-auto-review');
+  assert.throws(() => createPricing({ unitTokens: 1_000_000, updatedAt: '2026-01-01', rules: [
+    { id: 'one', aliases: ['shared'], pattern: '^one$', effectiveFrom: '2026-01-01', rates: {} },
+    { id: 'two', aliases: ['shared'], pattern: '^two$', effectiveFrom: '2026-01-01', rates: {} },
+  ] }), /Overlapping pricing alias/);
+});
+
 test('local env parser accepts only simple uppercase configuration entries', () => {
   assert.deepEqual(parseEnv('# comment\nUPDATE_REPOSITORY="ethan-devlab/codex-token-dashboard"\nlowercase=ignored\nINVALID LINE'), {
     UPDATE_REPOSITORY: 'ethan-devlab/codex-token-dashboard',
@@ -106,6 +114,11 @@ test('timezone ranges use the selected IANA calendar boundary and preserve a hal
   assert.equal(new Date(range.fromMs).toISOString(), '2026-07-30T16:00:00.000Z');
   assert.equal(new Date(range.toMs).toISOString(), '2026-07-31T16:00:00.000Z');
   assert.throws(() => resolveRange({ mode: 'today', timezone: 'Not/A_Timezone' }), (error) => error.code === 'INVALID_TIMEZONE');
+  const monthStart = bucketFor(Date.parse('2026-07-30T16:00:00.000Z'), 'month', 'Asia/Taipei');
+  assert.equal(new Date(nextBucketFor(monthStart, 'month', 'Asia/Taipei')).toISOString(), '2026-07-31T16:00:00.000Z');
+  const selectedMonth = resolveRange({ mode: 'month', period: '2026-02', timezone: 'America/New_York' });
+  assert.equal(new Date(selectedMonth.fromMs).toISOString(), '2026-02-01T05:00:00.000Z');
+  assert.equal(new Date(selectedMonth.toMs).toISOString(), '2026-03-01T05:00:00.000Z');
 });
 
 test('session index reconciles observations and incrementally reuses an unchanged file', async () => {

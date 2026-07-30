@@ -1,4 +1,5 @@
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 
 function zonedParts(timestamp, timezone) {
   const fields = new Intl.DateTimeFormat('en-CA', {
@@ -47,11 +48,32 @@ function addDays(parts, days) {
   return dateParts(new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days)));
 }
 
-export function resolveRange({ mode, fromMs, toMs, timezone, nowMs = Date.now() }) {
+function localTimestamp(value, timezone) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(value || ''));
+  if (!match) return null;
+  const target = { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]), hour: Number(match[4]), minute: Number(match[5]), second: Number(match[6] || 0) };
+  if (target.month < 1 || target.month > 12 || target.day < 1 || target.day > 31 || target.hour > 23 || target.minute > 59 || target.second > 59) return null;
+  let candidate = civilValue(target);
+  for (let attempt = 0; attempt < 4; attempt += 1) candidate += civilValue(target) - civilValue(zonedParts(candidate, timezone));
+  return civilValue(zonedParts(candidate, timezone)) === civilValue(target) ? candidate : null;
+}
+
+function selectedParts(mode, period, today) {
+  if (mode === 'month' && /^\d{4}-\d{2}$/.test(period || '')) { const [year, month] = period.split('-').map(Number); if (month >= 1 && month <= 12) return { year, month, day: 1 }; }
+  if (mode === 'year' && /^\d{4}$/.test(period || '')) return { year: Number(period), month: 1, day: 1 };
+  return today;
+}
+
+export function resolveRange({ mode, fromMs, toMs, period, start, end, timezone, nowMs = Date.now() }) {
   const resolvedTimezone = resolveTimezone(timezone);
   const range = { mode, fromMs, toMs, timezone: resolvedTimezone, calendar: 'iso8601', interval: '[from,to)' };
   if (mode === 'all') return range;
-  if (mode === 'custom') return range;
+  if (mode === 'custom') {
+    const resolvedFrom = fromMs ?? localTimestamp(start, resolvedTimezone);
+    const resolvedTo = toMs ?? localTimestamp(end, resolvedTimezone);
+    if (resolvedFrom == null || resolvedTo == null || resolvedFrom >= resolvedTo) { const error = new Error('Invalid custom local time range.'); error.code = 'INVALID_RANGE'; throw error; }
+    return { ...range, fromMs: resolvedFrom, toMs: resolvedTo };
+  }
   if (mode === 'last24h') return { ...range, fromMs: nowMs - DAY_MS, toMs: nowMs };
   const today = zonedParts(nowMs, resolvedTimezone);
   const midnight = zonedMidnightMs(today, resolvedTimezone);
@@ -62,12 +84,13 @@ export function resolveRange({ mode, fromMs, toMs, timezone, nowMs = Date.now() 
     return { ...range, fromMs: zonedMidnightMs(start, resolvedTimezone), toMs: zonedMidnightMs(addDays(start, 7), resolvedTimezone) };
   }
   if (mode === 'month') {
-    const start = { ...today, day: 1 };
-    const end = today.month === 12 ? { year: today.year + 1, month: 1, day: 1 } : { year: today.year, month: today.month + 1, day: 1 };
-    return { ...range, fromMs: zonedMidnightMs(start, resolvedTimezone), toMs: zonedMidnightMs(end, resolvedTimezone) };
+    const selected = { ...selectedParts(mode, period, today), day: 1 };
+    const next = selected.month === 12 ? { year: selected.year + 1, month: 1, day: 1 } : { year: selected.year, month: selected.month + 1, day: 1 };
+    return { ...range, fromMs: zonedMidnightMs(selected, resolvedTimezone), toMs: zonedMidnightMs(next, resolvedTimezone) };
   }
   if (mode === 'year') {
-    return { ...range, fromMs: zonedMidnightMs({ ...today, month: 1, day: 1 }, resolvedTimezone), toMs: zonedMidnightMs({ ...today, year: today.year + 1, month: 1, day: 1 }, resolvedTimezone) };
+    const selected = selectedParts(mode, period, today);
+    return { ...range, fromMs: zonedMidnightMs({ ...selected, month: 1, day: 1 }, resolvedTimezone), toMs: zonedMidnightMs({ ...selected, year: selected.year + 1, month: 1, day: 1 }, resolvedTimezone) };
   }
   return range;
 }
@@ -79,4 +102,15 @@ export function bucketFor(timestamp, unit, timezone) {
   if (unit === 'day' || unit === 'month' || unit === 'year') { parts.hour = 0; parts.minute = 0; parts.second = 0; }
   if (unit === 'hour') { parts.minute = 0; parts.second = 0; }
   return zonedMidnightMs(parts, timezone) + (unit === 'hour' ? parts.hour * 3_600_000 : 0);
+}
+
+export function nextBucketFor(timestamp, unit, timezone) {
+  if (unit === 'hour') return timestamp + HOUR_MS;
+  const parts = zonedParts(timestamp, timezone);
+  if (unit === 'day') return zonedMidnightMs(addDays(parts, 1), timezone);
+  if (unit === 'month') {
+    const next = parts.month === 12 ? { year: parts.year + 1, month: 1, day: 1 } : { year: parts.year, month: parts.month + 1, day: 1 };
+    return zonedMidnightMs(next, timezone);
+  }
+  return zonedMidnightMs({ year: parts.year + 1, month: 1, day: 1 }, timezone);
 }
