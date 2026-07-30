@@ -10,13 +10,15 @@ import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.
 import { PRICING } from './server/pricing.mjs';
 import { createSessionIndex } from './server/session-index.mjs';
 import { createSummaryCache } from './server/summary-cache.mjs';
+import { saveSettings, settingsPayload } from './server/settings.mjs';
 import { resolveRange } from './server/timezone.mjs';
 import { createUpdateChecker } from './server/update-checker.mjs';
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(APP_DIR, 'public');
-const LOCAL_CONFIG = readEnvFile(path.join(APP_DIR, '.env'));
-const CONFIG = readRuntimeConfig({ localConfig: LOCAL_CONFIG });
+const ENV_PATH = path.join(APP_DIR, '.env');
+let localConfig = readEnvFile(ENV_PATH);
+const CONFIG = readRuntimeConfig({ localConfig });
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
 const index = createSessionIndex({ sessionsDirectory: CONFIG.sessionsDirectory, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, pricing: PRICING });
@@ -60,12 +62,23 @@ function allowedHost(host) {
   if (String(host || '').toLowerCase() === configured) return true;
   return isLoopbackHost(CONFIG.host) && new Set([`127.0.0.1:${CONFIG.port}`, `localhost:${CONFIG.port}`, `[::1]:${CONFIG.port}`]).has(String(host || '').toLowerCase());
 }
-function verifyPost(req) {
+function verifyPost(req, { bodyLimit = 0 } = {}) {
   if (!allowedHost(req.headers.host)) throw new ApiError(400, 'INVALID_HOST', 'Invalid Host header.');
   const origin = req.headers.origin;
   if (!origin || origin !== `http://${req.headers.host}`) throw new ApiError(403, 'INVALID_ORIGIN', 'Same-origin Origin is required.');
   const length = Number(req.headers['content-length'] || 0);
-  if (!Number.isSafeInteger(length) || length < 0 || length > 0) throw new ApiError(413, 'BODY_NOT_ALLOWED', 'Request body is not allowed.');
+  if (!Number.isSafeInteger(length) || length < 0 || length > bodyLimit) throw new ApiError(413, bodyLimit ? 'BODY_TOO_LARGE' : 'BODY_NOT_ALLOWED', bodyLimit ? 'Request body is too large.' : 'Request body is not allowed.');
+}
+async function readJsonBody(req, maximum) {
+  if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) throw new ApiError(415, 'INVALID_CONTENT_TYPE', 'Expected application/json.');
+  const chunks = []; let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maximum) throw new ApiError(413, 'BODY_TOO_LARGE', 'Request body is too large.');
+    chunks.push(chunk);
+  }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { throw new ApiError(400, 'INVALID_JSON', 'Invalid JSON request body.'); }
 }
 async function serveStatic(pathname, res, id) {
   let decoded; try { decoded = decodeURIComponent(pathname); } catch { return false; }
@@ -80,6 +93,8 @@ async function serveStatic(pathname, res, id) {
   res.writeHead(200, headers(contentType, body.length, contentType.startsWith('text/html') ? PAGE_CSP : API_CSP, id)); res.end(body); return true;
 }
 function options() { return { exposeFullPaths: CONFIG.exposeFullPaths }; }
+function watcherMetadata() { return { enabled: CONFIG.autoRefresh, status: watcherState, debounceMs: CONFIG.autoRefreshDebounceMs }; }
+function dashboardPayload(snapshot, context, scan = snapshot.metadata) { return { ...buildDashboardPayload(snapshot.summary, context, scan, options()), watcher: watcherMetadata() }; }
 function v1Summary(summary, scan, context) { const dashboard = buildDashboardPayload(summary, context, scan, options()); return { deprecated: true, generatedAt: summary.generatedAt, durationMs: summary.durationMs, scannedFileCount: summary.scannedFileCount, parsedSessionCount: summary.parsedSessionCount, maxFiles: summary.maxFiles, truncated: summary.truncated, totals: summary.totals, pricing: dashboard.pricing, sessions: dashboard.sessions, errors: summary.errors.map((item) => ({ file: path.basename(item.file), message: 'Session file could not be parsed.' })), scan }; }
 const startedAt = Date.now();
 let watcher = null;
@@ -97,12 +112,14 @@ const server = http.createServer(async (req, res) => {
     if (!['GET', 'POST'].includes(req.method || '')) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
     const requestUrl = new URL(req.url || '/', `http://${CONFIG.host}:${CONFIG.port}`);
     if (req.method === 'GET' && requestUrl.pathname === '/api/summary') { const cached = await summaryCache.get(); json(res, 200, v1Summary(cached.summary, cached.metadata, requestContext(requestUrl)), id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/dashboard') { const cached = await summaryCache.get(); json(res, 200, buildDashboardPayload(cached.summary, requestContext(requestUrl), cached.metadata, options()), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/dashboard') { const cached = await summaryCache.get(); json(res, 200, dashboardPayload(cached, requestContext(requestUrl)), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/sessions') { const cached = await summaryCache.get(); json(res, 200, buildSessionsPayload(cached.summary, requestContext(requestUrl), cached.metadata, options()), id); return; }
     if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/sessions/')) { const sessionKey = requestUrl.pathname.slice('/api/sessions/'.length); if (!/^[A-Za-z0-9_-]{1,512}$/.test(sessionKey)) throw new ApiError(400, 'INVALID_SESSION_KEY', 'Invalid session key.'); const cached = await summaryCache.get(); const detail = buildSessionDetail(cached.summary, requestContext(requestUrl), sessionKey, options()); if (!detail) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Session not found.'); json(res, 200, { ...detail, scan: cached.metadata }, id); return; }
-    if (req.method === 'POST' && requestUrl.pathname === '/api/refresh') { verifyPost(req); const snapshot = await summaryCache.refresh(); json(res, 200, buildDashboardPayload(snapshot.summary, requestContext(requestUrl), summaryCache.status(), options()), id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/refresh') { verifyPost(req); const snapshot = await summaryCache.refresh(); json(res, 200, dashboardPayload(snapshot, requestContext(requestUrl), summaryCache.status()), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/export') { const format = requestUrl.searchParams.get('format') || 'csv-sessions'; if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.'); const cached = await summaryCache.get(); const output = buildExport(format, buildDashboardPayload(cached.summary, { ...requestContext(requestUrl), limit: 200 }, cached.metadata, options())); const fileName = `codex-token-dashboard-${format}.${output.extension}`; res.writeHead(200, headers(output.contentType, Buffer.byteLength(output.body), API_CSP, id, `attachment; filename="${fileName}"`)); res.end(output.body); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const scan = summaryCache.status(); json(res, 200, { version: CURRENT_VERSION, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, snapshot: scan, watcher: watcherState, requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); localConfig = await saveSettings(ENV_PATH, await readJsonBody(req, 16 * 1024)); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/update') { json(res, 200, await updateChecker.check(), id); return; }
     if (req.method === 'GET' && await serveStatic(requestUrl.pathname, res, id)) return;
     throw new ApiError(404, 'NOT_FOUND', 'Not found.');

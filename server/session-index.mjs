@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
+import { Worker } from 'node:worker_threads';
 
 const ZERO_USAGE = Object.freeze({ inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0, uncachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0 });
 
@@ -127,13 +128,30 @@ async function discover(root, maxFiles) {
   return files;
 }
 
-async function bounded(items, concurrency, task) {
-  const output = new Array(items.length);
-  let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (cursor < items.length) { const index = cursor; cursor += 1; output[index] = await task(items[index]); }
-  }));
-  return output;
+function parseBatchInWorker(entries) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./session-parser-worker.mjs', import.meta.url), { workerData: { entries } });
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+    worker.once('message', (message) => {
+      if (settled) return;
+      settled = true;
+      resolve(message.results);
+    });
+    worker.once('error', fail);
+    worker.once('exit', (code) => { if (!settled && code !== 0) fail(new Error(`Session parser worker exited with code ${code}.`)); });
+  });
+}
+
+async function parseChangedEntries(entries, concurrency) {
+  if (!entries.length) return [];
+  const batches = Array.from({ length: Math.min(concurrency, entries.length) }, () => []);
+  entries.forEach((entry, index) => batches[index % batches.length].push({ entry, index }));
+  return (await Promise.all(batches.map(parseBatchInWorker))).flat().sort((left, right) => left.index - right.index);
 }
 
 export function createSessionIndex({ sessionsDirectory, maxFiles, parseConcurrency, pricing, now = () => new Date() }) {
@@ -152,11 +170,11 @@ export function createSessionIndex({ sessionsDirectory, maxFiles, parseConcurren
       }
       scan.deleted = [...index.keys()].filter((key) => !next.has(key) && !changed.some((entry) => entry.relativePath === key)).length;
       const parsingStarted = Date.now();
-      const parsed = await bounded(changed, parseConcurrency, async (entry) => {
-        try { return { entry, session: await parseSessionFile(entry.filePath, entry.relativePath) }; }
-        catch (error) { scan.failed += 1; return { entry, error: error instanceof Error ? error.message : String(error) }; }
-      });
+      let parsed;
+      try { parsed = await parseChangedEntries(changed, parseConcurrency); }
+      catch (error) { throw new Error(`Session parser worker failed: ${error instanceof Error ? error.message : String(error)}`); }
       scan.parseDurationMs = Date.now() - parsingStarted;
+      scan.failed = parsed.filter((item) => item.error).length;
       for (const item of parsed) if (item.session) next.set(item.entry.relativePath, { fingerprint: item.entry.fingerprint, session: item.session });
       const aggregateStarted = Date.now();
       const sessions = [...next.values()].map((item) => item.session).sort((left, right) => (Date.parse(right.lastTimestamp || right.modifiedAt) || 0) - (Date.parse(left.lastTimestamp || left.modifiedAt) || 0) || left.file.localeCompare(right.file));

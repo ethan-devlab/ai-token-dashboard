@@ -40,13 +40,15 @@ test('v2 dashboard HTTP contract is redacted, server-authoritative, and same-ori
     const dashboardResponse = await fetch(`${base}/api/dashboard?mode=all&timezone=Asia/Taipei`);
     assert.equal(dashboardResponse.status, 200); assert.equal(dashboardResponse.headers.get('x-content-type-options'), 'nosniff'); assert.equal(dashboardResponse.headers.get('cache-control'), 'no-store');
     const data = await dashboardResponse.json();
-    assert.equal(data.range.timezone, 'Asia/Taipei'); assert.equal(data.range.interval, '[from,to)'); assert.equal(data.totals.totalTokens, 140); assert.equal(data.sessions[0].workspace, 'project'); assert.equal(Object.hasOwn(data.sessions[0], 'usageEvents'), false); assert.equal(JSON.stringify(data).includes('secret'), false);
+    assert.equal(data.range.timezone, 'Asia/Taipei'); assert.equal(data.range.interval, '[from,to)'); assert.equal(data.totals.totalTokens, 140); assert.equal(data.sessions[0].workspace, 'project'); assert.equal(Object.hasOwn(data.sessions[0], 'usageEvents'), false); assert.equal(JSON.stringify(data).includes('secret'), false); assert.equal(data.pricing.rates['codex-auto-review'].input, 2.5); assert.equal(typeof data.watcher.enabled, 'boolean'); assert.equal(typeof data.watcher.status, 'string');
     const detailResponse = await fetch(`${base}/api/sessions/${data.sessions[0].sessionKey}?mode=all&timezone=Asia/Taipei`);
     assert.equal(detailResponse.status, 200); const detail = await detailResponse.json(); assert.equal(detail.observations.length, 1); assert.equal(Object.hasOwn(detail.observations[0], 'payload'), false);
     const invalidTimezone = await fetch(`${base}/api/dashboard?timezone=Not/A_Timezone`); assert.equal(invalidTimezone.status, 400); assertEnvelope(await invalidTimezone.json(), 'INVALID_TIMEZONE');
     const malformedQuery = await fetch(`${base}/api/dashboard?mode=custom&from=not-a-number&to=2`); assert.equal(malformedQuery.status, 400); assertEnvelope(await malformedQuery.json(), 'INVALID_QUERY');
     const traversal = await fetch(`${base}/styles/%2e%2e%2fserver.mjs`); assert.equal(traversal.status, 404); assertEnvelope(await traversal.json(), 'NOT_FOUND');
     const blockedRefresh = await fetch(`${base}/api/refresh?mode=all`, { method: 'POST' }); assert.equal(blockedRefresh.status, 403); assertEnvelope(await blockedRefresh.json(), 'INVALID_ORIGIN');
+    const settings = await fetch(`${base}/api/settings`); assert.equal(settings.status, 200); assert.equal((await settings.json()).restartRequired, true);
+    const invalidSettings = await fetch(`${base}/api/settings`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({}) }); assert.equal(invalidSettings.status, 400); assertEnvelope(await invalidSettings.json(), 'INVALID_SETTINGS');
     const refreshed = await fetch(`${base}/api/refresh?mode=all`, { method: 'POST', headers: { Origin: base } }); assert.equal(refreshed.status, 200); assert.equal((await refreshed.json()).scan.snapshotVersion, 2);
     const exported = await fetch(`${base}/api/export?format=csv-sessions&mode=all`); assert.equal(exported.status, 200); assert.match(await exported.text(), /'=formula/);
     const compatibility = await fetch(`${base}/api/summary?mode=all`); assert.equal(compatibility.status, 200); assert.equal((await compatibility.json()).deprecated, true);

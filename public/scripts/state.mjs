@@ -4,6 +4,8 @@ const RANGE_MODES = new Set(['all', 'last24h', 'today', 'week', 'month', 'year',
 const SORT_MODES = new Set(['recent', 'cost', 'total', 'input', 'cache', 'output']);
 const UNITS = new Set(['auto', 'exact', 'K', 'M', 'B']);
 const FILTER_KEYS = Object.freeze(['models', 'workspaces', 'pricingStatus', 'usageSource', 'cliVersion', 'originator', 'quality']);
+const DENSITY_LIMITS = Object.freeze({ comfortable: 100, compact: 150, dense: 200 });
+const VIEW_COLUMN_KEYS = Object.freeze(['lastUsed', 'model', 'input', 'output', 'cost']);
 
 function stringList(values) {
   return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value).trim()).filter(Boolean))].slice(0, 100);
@@ -19,11 +21,24 @@ function safeTimezone(value, fallback = 'UTC') {
   }
 }
 
+function densityValue(value, fallback = 'comfortable') { return Object.hasOwn(DENSITY_LIMITS, value) ? value : fallback; }
+
+function columnDatasetKey(key) { return `column${key[0].toUpperCase()}${key.slice(1)}`; }
+
+export function densityPageLimit(value) { return DENSITY_LIMITS[densityValue(value)]; }
+
+export function applyTableViewPreferences(target, view) {
+  const density = densityValue(view?.density);
+  target.dataset.tableDensity = density;
+  for (const key of VIEW_COLUMN_KEYS) target.dataset[columnDatasetKey(key)] = String(view?.visibleColumns?.[key] !== false);
+  return densityPageLimit(density);
+}
+
 export function createDashboardState() {
   return {
-    source: { data: null, status: 'loading', error: '' },
+    source: { data: null, status: 'loading', error: '', projectionStale: false },
     query: { rangeMode: 'month', weekValue: '', monthValue: '', yearValue: '', customStart: '', customEnd: '', search: '', sort: 'recent', timezone: 'UTC', filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, []])) },
-    view: { unit: 'auto', showExact: true, showDetails: true, trendMetric: 'cost', locale: 'zh-Hant', density: 'comfortable', visibleColumns: { lastUsed: true, model: true, input: true, output: true, cost: true }, budgets: [] },
+    view: { unit: 'auto', showExact: true, showDetails: true, trendMetric: 'cost', locale: 'zh-Hant', density: 'comfortable', visibleColumns: Object.fromEntries(VIEW_COLUMN_KEYS.map((key) => [key, true])), budgets: [] },
     page: { offset: 0, limit: 100 },
     drawer: { sessionKey: null, trigger: null, detail: null, status: 'idle', error: '' },
   };
@@ -47,7 +62,7 @@ export function readQueryState(controls) {
 export function readViewState(controls) {
   return {
     unit: UNITS.has(controls.unit.value) ? controls.unit.value : 'auto', showExact: controls.showExact.checked, showDetails: controls.showDetails.checked,
-    trendMetric: controls.trendMetric.value === 'tokens' ? 'tokens' : 'cost', locale: controls.locale?.value || 'zh-Hant', density: controls.density.value === 'compact' ? 'compact' : 'comfortable',
+    trendMetric: controls.trendMetric.value === 'tokens' ? 'tokens' : 'cost', locale: controls.locale?.value || 'zh-Hant', density: densityValue(controls.density.value),
     visibleColumns: { lastUsed: controls.columnLastUsed.checked, model: controls.columnModel.checked, input: controls.columnInput.checked, output: controls.columnOutput.checked, cost: controls.columnCost.checked },
   };
 }
@@ -110,14 +125,14 @@ export function setFacetOptions(select, values, selected) {
 export function readViewPreferences(storage) {
   try {
     const parsed = JSON.parse(storage.getItem(VIEW_PREFERENCES_KEY) || '{}'); const columns = parsed.visibleColumns && typeof parsed.visibleColumns === 'object' ? parsed.visibleColumns : {};
-    return { unit: UNITS.has(parsed.unit) ? parsed.unit : null, showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null, showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null, trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null, locale: ['en', 'zh-Hant'].includes(parsed.locale) ? parsed.locale : null, density: ['comfortable', 'compact'].includes(parsed.density) ? parsed.density : null, visibleColumns: Object.fromEntries(['lastUsed', 'model', 'input', 'output', 'cost'].filter((key) => typeof columns[key] === 'boolean').map((key) => [key, columns[key]])), budgets: Array.isArray(parsed.budgets) ? parsed.budgets.slice(0, 50) : [] };
+    return { unit: UNITS.has(parsed.unit) ? parsed.unit : null, showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null, showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null, trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null, locale: ['en', 'zh-Hant'].includes(parsed.locale) ? parsed.locale : null, density: Object.hasOwn(DENSITY_LIMITS, parsed.density) ? parsed.density : null, visibleColumns: Object.fromEntries(VIEW_COLUMN_KEYS.filter((key) => typeof columns[key] === 'boolean').map((key) => [key, columns[key]])), budgets: Array.isArray(parsed.budgets) ? parsed.budgets.slice(0, 50) : [] };
   } catch { return { unit: null, showExact: null, showDetails: null, trendMetric: null, locale: null, density: null, visibleColumns: {}, budgets: [] }; }
 }
 
 export function applyViewPreferencesToControls(controls, preferences) {
   if (preferences.unit) controls.unit.value = preferences.unit; if (preferences.showExact != null) controls.showExact.checked = preferences.showExact; if (preferences.showDetails != null) controls.showDetails.checked = preferences.showDetails;
   if (preferences.trendMetric) controls.trendMetric.value = preferences.trendMetric; if (preferences.locale) controls.locale.value = preferences.locale; if (preferences.density) controls.density.value = preferences.density;
-  for (const [key, control] of Object.entries({ lastUsed: controls.columnLastUsed, model: controls.columnModel, input: controls.columnInput, output: controls.columnOutput, cost: controls.columnCost })) if (preferences.visibleColumns[key] != null) control.checked = preferences.visibleColumns[key];
+  for (const key of VIEW_COLUMN_KEYS) if (preferences.visibleColumns[key] != null) controls[columnDatasetKey(key)].checked = preferences.visibleColumns[key];
 }
 
 export function saveViewPreferences(storage, view) {

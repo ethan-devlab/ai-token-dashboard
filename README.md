@@ -14,7 +14,7 @@ Open `http://localhost:3333`. The dashboard is desktop-only and keeps session da
 
 ## Configuration
 
-`.env` is ignored by Git. `UPDATE_REPOSITORY` is read only from this file; other launch values may be temporarily overridden through the process environment.
+`.env` is ignored by Git. `UPDATE_REPOSITORY` is read only from this file; other launch values may be temporarily overridden through the process environment. When the dashboard is bound to a loopback host, the **Settings** link opens `/settings.html`: it validates and atomically writes only the documented `.env` keys, preserves unrelated lines, and requires a dashboard restart before saved values take effect. The settings page is disabled in remote mode.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
@@ -40,12 +40,14 @@ Open `http://localhost:3333`. The dashboard is desktop-only and keeps session da
 | `GET /api/diagnostics` | Redacted process/index information; disabled in remote mode. |
 | `GET /api/summary` | Deprecated v1 compatibility response. |
 | `GET /api/update` | User-triggered GitHub latest stable release check. |
+| `GET /api/settings` | Loopback-only local `.env` values for the settings page. |
+| `POST /api/settings` | Loopback-only, same-origin, bounded JSON save of validated `.env` values; restart required. |
 
 Dashboard and session-list requests accept `mode`, `from`, `to`, `timezone`, `q`, `sort`, `offset`, `limit`, and repeated filters. Errors use `{ "error": { "code", "message", "requestId" } }`. List payloads never contain raw JSONL, conversation content, or full event streams.
 
 ## Privacy and pricing
 
-Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. No JSONL, usage data, CWD, or session metadata is sent to GitHub; update checking only happens after an explicit UI action.
+Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. The settings endpoint never accepts arbitrary paths, URLs, or keys, and only writes local configuration after same-origin validation. No JSONL, usage data, CWD, or session metadata is sent to GitHub; update checking only happens after an explicit UI action.
 
 Prices in `server/pricing.json` are API-equivalent USD estimates. Cached input is a subset of input; reasoning output is not charged twice. Unknown or incomplete pricing is surfaced as partial coverage, never free usage.
 

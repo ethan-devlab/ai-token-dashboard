@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,7 @@ import { compareVersions, createUpdateChecker, validRepository } from '../server
 import { parseEnv, readRuntimeConfig } from '../server/config.mjs';
 import { createPricing, matchPricingRule, PRICING } from '../server/pricing.mjs';
 import { createSessionIndex, parseSessionFile } from '../server/session-index.mjs';
+import { saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
 
 test('summary cache reuses its latest successful in-memory snapshot', async () => {
@@ -108,6 +109,29 @@ test('runtime configuration keeps update repository local and rejects an acciden
   assert.throws(() => readRuntimeConfig({ environment: { HOST: '0.0.0.0' } }), /Non-loopback HOST requires ALLOW_REMOTE=1/);
 });
 
+test('settings persistence validates before atomically replacing the local env file', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-settings-'));
+  const envPath = path.join(directory, '.env');
+  const values = {
+    HOST: '127.0.0.1', PORT: '3344', CODEX_SESSIONS_DIR: directory, MAX_FILES: '100', PARSE_CONCURRENCY: '2',
+    ALLOW_REMOTE: '0', EXPOSE_FULL_PATHS: '0', AUTO_REFRESH: '1', AUTO_REFRESH_DEBOUNCE_MS: '250', UPDATE_REPOSITORY: 'owner/repo',
+  };
+  try {
+    await writeFile(envPath, '# local settings\nCUSTOM_VALUE=preserve\nPORT=3333\n');
+    const saved = await saveSettings(envPath, values);
+    const persisted = await readFile(envPath, 'utf8');
+    assert.match(persisted, /^# local settings\nCUSTOM_VALUE=preserve\nPORT=3344/m);
+    assert.equal(saved.UPDATE_REPOSITORY, 'owner/repo');
+    assert.equal(settingsPayload(saved, readRuntimeConfig({ environment: {}, localConfig: saved })).restartRequired, true);
+
+    const beforeInvalidSave = persisted;
+    await assert.rejects(saveSettings(envPath, { ...values, HOST: '0.0.0.0' }), (error) => error?.code === 'INVALID_SETTINGS');
+    assert.equal(await readFile(envPath, 'utf8'), beforeInvalidSave);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('timezone ranges use the selected IANA calendar boundary and preserve a half-open interval', () => {
   const range = resolveRange({ mode: 'today', timezone: 'Asia/Taipei', nowMs: Date.parse('2026-07-30T16:00:00.000Z') });
   assert.equal(range.timezone, 'Asia/Taipei');
@@ -116,9 +140,33 @@ test('timezone ranges use the selected IANA calendar boundary and preserve a hal
   assert.throws(() => resolveRange({ mode: 'today', timezone: 'Not/A_Timezone' }), (error) => error.code === 'INVALID_TIMEZONE');
   const monthStart = bucketFor(Date.parse('2026-07-30T16:00:00.000Z'), 'month', 'Asia/Taipei');
   assert.equal(new Date(nextBucketFor(monthStart, 'month', 'Asia/Taipei')).toISOString(), '2026-07-31T16:00:00.000Z');
+  const hourlyStart = bucketFor(Date.parse('2026-07-30T10:54:06.000Z'), 'hour', 'Asia/Singapore');
+  assert.equal(new Date(hourlyStart).toISOString(), '2026-07-30T10:00:00.000Z');
+  assert.equal(new Date(nextBucketFor(hourlyStart, 'hour', 'Asia/Singapore')).toISOString(), '2026-07-30T11:00:00.000Z');
   const selectedMonth = resolveRange({ mode: 'month', period: '2026-02', timezone: 'America/New_York' });
   assert.equal(new Date(selectedMonth.fromMs).toISOString(), '2026-02-01T05:00:00.000Z');
   assert.equal(new Date(selectedMonth.toMs).toISOString(), '2026-03-01T05:00:00.000Z');
+
+  const now = Date.parse('2026-07-30T10:54:06.000Z');
+  const periods = Object.fromEntries(['all', 'last24h', 'today', 'week', 'month', 'year'].map((mode) => [mode, resolveRange({ mode, timezone: 'Asia/Singapore', nowMs: now })]));
+  assert.equal(periods.all.fromMs, undefined);
+  assert.equal(periods.all.toMs, undefined);
+  assert.equal(periods.last24h.toMs - periods.last24h.fromMs, 86_400_000);
+  assert.equal(new Date(periods.today.fromMs).toISOString(), '2026-07-29T16:00:00.000Z');
+  assert.equal(new Date(periods.today.toMs).toISOString(), '2026-07-30T16:00:00.000Z');
+  assert.equal(new Date(periods.week.fromMs).toISOString(), '2026-07-26T16:00:00.000Z');
+  assert.equal(new Date(periods.week.toMs).toISOString(), '2026-08-02T16:00:00.000Z');
+  assert.equal(new Date(periods.month.fromMs).toISOString(), '2026-06-30T16:00:00.000Z');
+  assert.equal(new Date(periods.month.toMs).toISOString(), '2026-07-31T16:00:00.000Z');
+  assert.equal(new Date(periods.year.fromMs).toISOString(), '2025-12-31T16:00:00.000Z');
+  assert.equal(new Date(periods.year.toMs).toISOString(), '2026-12-31T16:00:00.000Z');
+  const custom = resolveRange({ mode: 'custom', start: '2026-07-30T00:00', end: '2026-07-31T00:00', timezone: 'Asia/Singapore' });
+  assert.equal(custom.fromMs, periods.today.fromMs);
+  assert.equal(custom.toMs, periods.today.toMs);
+
+  const dstDay = resolveRange({ mode: 'today', timezone: 'America/New_York', nowMs: Date.parse('2026-03-08T16:00:00.000Z') });
+  assert.equal(new Date(dstDay.fromMs).toISOString(), '2026-03-08T05:00:00.000Z');
+  assert.equal(new Date(dstDay.toMs).toISOString(), '2026-03-09T04:00:00.000Z');
 });
 
 test('session index reconciles observations and incrementally reuses an unchanged file', async () => {

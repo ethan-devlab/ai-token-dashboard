@@ -32,6 +32,10 @@ function dateParts(date) {
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour: 0, minute: 0, second: 0 };
 }
 
+function calendarStart(parts) {
+  return { year: parts.year, month: parts.month, day: parts.day, hour: 0, minute: 0, second: 0 };
+}
+
 export function zonedMidnightMs(parts, timezone) {
   const target = civilValue(parts);
   let candidate = target;
@@ -75,7 +79,7 @@ export function resolveRange({ mode, fromMs, toMs, period, start, end, timezone,
     return { ...range, fromMs: resolvedFrom, toMs: resolvedTo };
   }
   if (mode === 'last24h') return { ...range, fromMs: nowMs - DAY_MS, toMs: nowMs };
-  const today = zonedParts(nowMs, resolvedTimezone);
+  const today = calendarStart(zonedParts(nowMs, resolvedTimezone));
   const midnight = zonedMidnightMs(today, resolvedTimezone);
   if (mode === 'today') return { ...range, fromMs: midnight, toMs: zonedMidnightMs(addDays(today, 1), resolvedTimezone) };
   if (mode === 'week') {
@@ -101,7 +105,7 @@ export function bucketFor(timestamp, unit, timezone) {
   if (unit === 'year') { parts.month = 1; parts.day = 1; }
   if (unit === 'day' || unit === 'month' || unit === 'year') { parts.hour = 0; parts.minute = 0; parts.second = 0; }
   if (unit === 'hour') { parts.minute = 0; parts.second = 0; }
-  return zonedMidnightMs(parts, timezone) + (unit === 'hour' ? parts.hour * 3_600_000 : 0);
+  return zonedMidnightMs(parts, timezone);
 }
 
 export function nextBucketFor(timestamp, unit, timezone) {

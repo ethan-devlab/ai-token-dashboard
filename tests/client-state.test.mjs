@@ -3,8 +3,10 @@ import test from 'node:test';
 
 import { redactPath } from '../public/scripts/drawer.mjs';
 import { detectLocale, setLocale, t } from '../public/scripts/i18n.mjs';
+import { createProjectionCache } from '../public/scripts/projection-cache.mjs';
+import { projectionLoadState } from '../public/scripts/projection-state.mjs';
 import { createRequestChannels } from '../public/scripts/request-channels.mjs';
-import { budgetState, createDashboardState, queryStateFromSearch, queryStateToSearch, readViewPreferences, requestParameters, saveViewPreferences } from '../public/scripts/state.mjs';
+import { applyTableViewPreferences, budgetState, createDashboardState, densityPageLimit, queryStateFromSearch, queryStateToSearch, readViewPreferences, requestParameters, saveViewPreferences } from '../public/scripts/state.mjs';
 import { nearestPointIndex } from '../public/scripts/trend.mjs';
 
 test('v2 query state preserves timezone and multi-select filters in the URL', () => {
@@ -53,6 +55,16 @@ test('view preferences retain local budgets but never put them in query state', 
   assert.equal(queryStateToSearch({ ...createDashboardState().query, filters: {} }).includes('budget'), false);
 });
 
+test('table preferences expose selected columns and make density change page capacity', () => {
+  const target = { dataset: {} };
+  const limit = applyTableViewPreferences(target, { density: 'dense', visibleColumns: { lastUsed: false, model: true, input: false, output: true, cost: false } });
+
+  assert.equal(limit, 200);
+  assert.equal(densityPageLimit('compact'), 150);
+  assert.equal(densityPageLimit('unknown'), 100);
+  assert.deepEqual(target.dataset, { tableDensity: 'dense', columnLastUsed: 'false', columnModel: 'true', columnInput: 'false', columnOutput: 'true', columnCost: 'false' });
+});
+
 test('same request channel marks an older completed response stale', async () => {
   const pending = [];
   const fetchImpl = () => new Promise((resolve) => pending.push(resolve));
@@ -67,6 +79,24 @@ test('same request channel marks an older completed response stale', async () =>
   assert.deepEqual((await second).payload, { version: 2 });
 });
 
+test('projection cache restores the last unfiltered dashboard projection without retaining every query', () => {
+  const cache = createProjectionCache(2);
+  const all = { sessions: [{ sessionKey: 'all' }] };
+  cache.set('/api/dashboard?mode=all', all);
+  cache.set('/api/dashboard?mode=all&models=model-a', { sessions: [{ sessionKey: 'filtered' }] });
+  assert.equal(cache.get('/api/dashboard?mode=all'), all);
+  cache.set('/api/dashboard?mode=all&workspaces=workspace-a', { sessions: [] });
+  assert.equal(cache.get('/api/dashboard?mode=all&models=model-a'), null);
+  cache.clear();
+  assert.equal(cache.get('/api/dashboard?mode=all'), null);
+});
+
+test('a cache miss keeps prior dashboard data visibly stale while the replacement loads', () => {
+  assert.deepEqual(projectionLoadState({ hasData: true, cached: null, refresh: false }), { status: 'loading', projectionStale: true });
+  assert.deepEqual(projectionLoadState({ hasData: true, cached: { sessions: [] }, refresh: false }), { status: 'ready', projectionStale: false });
+  assert.deepEqual(projectionLoadState({ hasData: true, cached: null, refresh: true }), { status: 'refreshing', projectionStale: false });
+});
+
 test('drawer redacts home directories before rendering', () => {
   assert.equal(redactPath('C:\\Users\\fixture\\secret-workspace'), '~/secret-workspace');
   assert.equal(redactPath('/Users/fixture/secret-workspace'), '~/secret-workspace');
@@ -76,7 +106,11 @@ test('i18n selects a saved language and resolves v2 messages', () => {
   const saved = new Map([['codex-token-dashboard:locale:v1', 'en']]);
   assert.equal(detectLocale({ getItem: (key) => saved.get(key) || null }, ['zh-TW']), 'en');
   setLocale('en'); assert.equal(t('v2.filter.clear'), 'Clear all filters');
+  assert.equal(t('v2.projection.stale'), 'Updating the selected projection. The figures below are from the previous selection.');
+  assert.equal(t('trend.detail.cost'), 'Estimated cost');
   setLocale('zh-Hant'); assert.equal(t('v2.timezone'), '時區');
+  assert.equal(t('v2.budget.scopeTokens'), '總 Token');
+  assert.equal(t('trend.detail.tokens'), '總 Token');
 });
 
 test('canvas trend selection remains pointer and keyboard safe at bounds', () => {
