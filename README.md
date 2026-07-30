@@ -1,130 +1,68 @@
 # Codex Token Dashboard
 
-A dependency-free, desktop-local Node.js dashboard that recursively parses Codex session JSONL files and shows token usage, interactive trends, model breakdowns, session details, and an OpenAI API-equivalent cost estimate.
-
-It requires Node.js 18 or newer and listens on loopback by default. The dashboard is a local observability surface: it does not use a CDN, analytics, or remote application services.
+Dependency-free, desktop-local Node.js dashboard for Codex session JSONL usage. v2 adds timezone-aware ranges, reconciliation diagnostics, in-memory incremental refresh, server-authoritative analytics, filters, comparison, budgets, exports, diagnostics, and optional auto-refresh.
 
 ## Run
 
-```bash
-npm start
-```
-
-Open:
-
-```text
-http://localhost:3333
-```
-
-Default sessions directory:
-
-- macOS/Linux: `~/.codex/sessions`
-- Windows: `C:\Users\<current-user>\.codex\sessions`
-
-## Override the directory
-
-macOS/Linux:
-
-```bash
-CODEX_SESSIONS_DIR=/custom/path/.codex/sessions npm start
-```
-
-PowerShell:
+Copy `.env.example` to `.env`, configure the local session directory if needed, then run:
 
 ```powershell
-$env:CODEX_SESSIONS_DIR='C:\Users\xx\.codex\sessions'
 npm start
 ```
 
-## Features
+Open `http://localhost:3333`. The dashboard is desktop-only and keeps session data in the local server process.
 
-- Desktop-only observability console with a restrictive same-origin CSP
-- Traditional Chinese and English UI; the selected language is kept only in browser local storage
-- Token units: Auto, exact integer, K, M, or B
-- Optional exact values, detailed Explorer columns, and compact table density
-- Rolling last 24 hours
-- Current local day
-- ISO week selector
-- Month selector
-- Year selector
-- Custom local date/time range
-- Total, input, cached input, uncached input, cache-write, output, and reasoning tokens
-- In-memory snapshot cache: changing range, search, sort, or page reuses the latest successful parse
-- Explicit `重新解析 JSONL` refresh uses an atomic replacement: a failed refresh keeps the previous snapshot
-- Server-side range aggregation, interactive Canvas usage trend, and model breakdown
-- Hover/pointer and keyboard-accessible trend points, plus a disclosure data-table alternative
-- Server-side Session Explorer pagination (100 sessions per page by default)
-- Search and sort state preserved in the URL; display preferences stored only in local storage
-- Per-session detail drawer with redacted home-directory paths
-- Per-session and aggregate API-equivalent cost estimates
-- Pricing breakdown by input, cached input, cache write, and output
-- Unknown-model and incomplete-pricing warnings
-- Recursive streaming JSONL parsing with no third-party dependencies or on-disk cache
-- Duplicate cumulative `token_count` snapshots are not double-counted
+## Configuration
 
-## API
+`.env` is ignored by Git. `UPDATE_REPOSITORY` is read only from this file; other launch values may be temporarily overridden through the process environment.
 
-The browser client uses these local, read-only JSON endpoints:
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `HOST` | `127.0.0.1` | Non-loopback values require `ALLOW_REMOTE=1`; remote mode has no authentication. |
+| `PORT` | `3333` | 1–65535. |
+| `CODEX_SESSIONS_DIR` | platform Codex sessions path | Local JSONL root. |
+| `MAX_FILES` | `10000` | Maximum discovered session files. |
+| `PARSE_CONCURRENCY` | `min(4, availableParallelism)` | 1–16 bounded parser workers. |
+| `EXPOSE_FULL_PATHS` | `0` | Only allowed with a loopback host. |
+| `AUTO_REFRESH` | `0` | Uses a debounced filesystem hint; manual refresh remains available. |
+| `AUTO_REFRESH_DEBOUNCE_MS` | `1500` | Coalescing delay for the optional watcher. |
+| `UPDATE_REPOSITORY` | unset | Optional canonical `owner/repo` for user-triggered release checks. |
+
+## API v2
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/summary` | Backward-compatible complete summary response from the current in-memory snapshot. |
-| `GET /api/dashboard` | Range aggregates, trend, model data, quality facts, and the first session page from the current snapshot. |
-| `GET /api/sessions` | A subsequent filtered session page without duplicate aggregate data or a rescan. |
-| `POST /api/refresh` | The only JSONL rescan route. Replaces the current snapshot only after a successful parse. |
-| `GET /api/update` | User-triggered GitHub Releases check. Disabled unless `UPDATE_REPOSITORY` is valid. |
+| `GET /api/dashboard` | Timezone-aware aggregates, comparison, quality, facets, trend/models, scan state, and first summary-only session page. |
+| `GET /api/sessions` | Filtered and paged session summaries. |
+| `GET /api/sessions/:sessionKey` | Lazy redacted detail with bounded accepted observations. |
+| `POST /api/refresh` | The only rescan route; requires same-origin `Origin` and atomically retains the prior snapshot on failure. |
+| `GET /api/export` | `csv-sessions`, `csv-trend`, `json-report`, or `markdown-summary`. |
+| `GET /api/diagnostics` | Redacted process/index information; disabled in remote mode. |
+| `GET /api/summary` | Deprecated v1 compatibility response. |
+| `GET /api/update` | User-triggered GitHub latest stable release check. |
 
-`/api/dashboard` and `/api/sessions` accept `mode`, `from`, `to`, `search`, `sort`, `offset`, and `limit`. `mode` is one of `all`, `last24h`, `today`, `week`, `month`, `year`, or `custom`; `limit` is capped at 200. Invalid query values return `400`.
+Dashboard and session-list requests accept `mode`, `from`, `to`, `timezone`, `q`, `sort`, `offset`, `limit`, and repeated filters. Errors use `{ "error": { "code", "message", "requestId" } }`. List payloads never contain raw JSONL, conversation content, or full event streams.
 
-The summary routes return `scan.scannedAt`, `scan.snapshotVersion`, and `scan.refreshing`. The paged endpoints return parsed session summaries and token events only. They do not return raw JSONL events or conversation content. Snapshots stay only in the server process; restart the server to discard them.
+## Privacy and pricing
 
-## Pricing caveat
+Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. No JSONL, usage data, CWD, or session metadata is sent to GitHub; update checking only happens after an explicit UI action.
 
-The pricing table lives in `server/pricing.json`. It is OpenAI API **Standard** text-token pricing in USD, checked on 2026-07-26 against the official API pricing documentation. It is only an equivalent-cost estimate.
-
-Actual billing may differ because Codex/ChatGPT subscriptions, service tier, regional processing, Batch/Flex/Priority, tools, enterprise discounts, and future pricing changes are not fully represented in session JSONL.
-
-`cached_input_tokens` is treated as a subset of `input_tokens`. The estimate therefore uses:
-
-```text
-uncached input × input rate
-+ cached input × cached-input rate
-+ cache-write tokens × cache-write rate
-+ output tokens × output rate
-```
-
-Reasoning output is normally included in output tokens, so it is not charged a second time.
-
-## Options
-
-```text
-HOST=127.0.0.1
-PORT=3333
-MAX_FILES=10000
-CODEX_SESSIONS_DIR=/path/to/.codex/sessions
-```
+Prices in `server/pricing.json` are API-equivalent USD estimates. Cached input is a subset of input; reasoning output is not charged twice. Unknown or incomplete pricing is surfaced as partial coverage, never free usage.
 
 ## Updates and releases
 
-After publishing to its canonical public GitHub repository, copy `.env.example` to `.env` and set `UPDATE_REPOSITORY=owner/repo`. `.env` is ignored by Git and is loaded directly by the server at startup, so no PowerShell environment variable is required. The dashboard never contacts GitHub until a user presses **Check for updates**. It sends no session, CWD, usage, or JSONL content: only GitHub's fixed latest-release endpoint is read.
-
-When a newer stable release is available, the dashboard supplies links and the asset SHA-256 digest. It does not download, execute, overwrite files, run `git pull`, or install anything. Close the dashboard before manually replacing local files.
-
-Maintainers create a release by pushing a `vX.Y.Z` tag. The included GitHub Actions workflow validates the source, creates a dependency-free `git archive` ZIP and `SHA256SUMS`, publishes both as release assets, and produces a provenance attestation. Users should verify the downloaded archive before extracting it:
+Push a matching `vX.Y.Z` tag to create a source ZIP, `SHA256SUMS`, and provenance attestation. Verify a downloaded archive before extracting:
 
 ```powershell
 Get-FileHash .\codex-token-dashboard-vX.Y.Z.zip -Algorithm SHA256
-Get-Content .\SHA256SUMS
 gh attestation verify .\codex-token-dashboard-vX.Y.Z.zip -R owner/repo
 ```
 
-The SHA-256 value must match `SHA256SUMS`; `gh attestation verify` requires an online GitHub CLI session.
-
 ## Validation
 
-```bash
+```powershell
 npm run check
+npm run test:server
 npm run test:client
 npm run test:contract
-npm run test:server
 ```

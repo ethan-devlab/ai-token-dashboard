@@ -20,6 +20,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Verify tag and package version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "${TAG#v}" = "$(node -p "require('./package.json').version")"
       - name: Validate source
         run: |
           npm run check
@@ -33,6 +38,7 @@ jobs:
           mkdir -p release
           git archive --format=zip --prefix="codex-token-dashboard-${TAG}/" --output="release/codex-token-dashboard-${TAG}.zip" "$GITHUB_SHA"
           sha256sum "release/codex-token-dashboard-${TAG}.zip" > release/SHA256SUMS
+          cp docs/migration-v2.md "release/MIGRATION-${TAG}.md"
       - name: Attest source archive
         uses: actions/attest@v4
         with:
@@ -41,4 +47,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" "release/codex-token-dashboard-${TAG}.zip" release/SHA256SUMS --generate-notes
+        run: gh release create "$TAG" "release/codex-token-dashboard-${TAG}.zip" release/SHA256SUMS "release/MIGRATION-${TAG}.md" --generate-notes
