@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { createSummaryCache } from '../server/summary-cache.mjs';
 import { compareVersions, createUpdateChecker, validRepository } from '../server/update-checker.mjs';
-import { parseEnv } from '../server/config.mjs';
+import { parseEnv, readRuntimeConfig } from '../server/config.mjs';
 import { PRICING } from '../server/pricing.mjs';
+import { createSessionIndex, parseSessionFile } from '../server/session-index.mjs';
+import { resolveRange } from '../server/timezone.mjs';
 
 test('summary cache reuses its latest successful in-memory snapshot', async () => {
   let calls = 0;
@@ -85,4 +90,48 @@ test('local env parser accepts only simple uppercase configuration entries', () 
   assert.deepEqual(parseEnv('# comment\nUPDATE_REPOSITORY="ethan-devlab/codex-token-dashboard"\nlowercase=ignored\nINVALID LINE'), {
     UPDATE_REPOSITORY: 'ethan-devlab/codex-token-dashboard',
   });
+});
+
+test('runtime configuration keeps update repository local and rejects an accidental remote bind', () => {
+  const localConfig = parseEnv('UPDATE_REPOSITORY=owner/repo\nHOST=127.0.0.1');
+  const config = readRuntimeConfig({ environment: { PORT: '4242', UPDATE_REPOSITORY: 'other/repo' }, localConfig });
+  assert.equal(config.updateRepository, 'owner/repo');
+  assert.equal(config.port, 4242);
+  assert.throws(() => readRuntimeConfig({ environment: { HOST: '0.0.0.0' } }), /Non-loopback HOST requires ALLOW_REMOTE=1/);
+});
+
+test('timezone ranges use the selected IANA calendar boundary and preserve a half-open interval', () => {
+  const range = resolveRange({ mode: 'today', timezone: 'Asia/Taipei', nowMs: Date.parse('2026-07-30T16:00:00.000Z') });
+  assert.equal(range.timezone, 'Asia/Taipei');
+  assert.equal(new Date(range.fromMs).toISOString(), '2026-07-30T16:00:00.000Z');
+  assert.equal(new Date(range.toMs).toISOString(), '2026-07-31T16:00:00.000Z');
+  assert.throws(() => resolveRange({ mode: 'today', timezone: 'Not/A_Timezone' }), (error) => error.code === 'INVALID_TIMEZONE');
+});
+
+test('session index reconciles observations and incrementally reuses an unchanged file', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-index-'));
+  try {
+    const file = path.join(root, 'fixture.jsonl');
+    await writeFile(file, [
+      '{"timestamp":"2026-07-30T00:00:00Z","type":"session_meta","payload":{"id":"fixture","model":"gpt-5.6-terra"}}',
+      '{"timestamp":"2026-07-30T00:00:01Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}}',
+      '{"timestamp":"2026-07-30T00:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}}',
+      '{"timestamp":"2026-07-30T00:00:03Z","type":"turn.completed","usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}',
+    ].join('\n'));
+    const parsed = await parseSessionFile(file, 'fixture.jsonl');
+    assert.equal(parsed.reconciliation.duplicate, 1);
+    assert.equal(parsed.reconciliation.covered, 1);
+    assert.equal(parsed.usage.totalTokens, 15);
+    const index = createSessionIndex({ sessionsDirectory: root, maxFiles: 10, parseConcurrency: 2, pricing: PRICING });
+    const first = await index.refresh();
+    const second = await index.refresh();
+    assert.deepEqual([first.scan.added, first.scan.changed, first.scan.reused], [1, 0, 0]);
+    assert.deepEqual([second.scan.added, second.scan.changed, second.scan.reused], [0, 0, 1]);
+    await writeFile(path.join(root, 'added.jsonl'), '{"type":"session_meta","payload":{"id":"added"}}\n');
+    const third = await index.refresh();
+    assert.equal(third.scan.added, 1);
+    assert.equal(third.scan.reused, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

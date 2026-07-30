@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 export function parseEnv(text) {
   const values = {};
@@ -18,4 +20,65 @@ export function readEnvFile(filePath) {
     if (error && error.code === 'ENOENT') return Object.freeze({});
     throw error;
   }
+}
+
+function value(environment, localConfig, key, fallback = undefined) {
+  return environment[key] ?? localConfig[key] ?? fallback;
+}
+
+function integer(value, name, minimum, maximum) {
+  if (!/^\d+$/.test(String(value))) throw new Error(`Invalid ${name}.`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`Invalid ${name}.`);
+  }
+  return parsed;
+}
+
+function flag(value, name) {
+  if (value === '0' || value === 'false' || value === false || value == null) return false;
+  if (value === '1' || value === 'true' || value === true) return true;
+  throw new Error(`Invalid ${name}.`);
+}
+
+export function isLoopbackHost(host) {
+  const normalized = String(host).trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1' || normalized === '[::1]';
+}
+
+export function readRuntimeConfig({ environment = process.env, localConfig = {} } = {}) {
+  const host = String(value(environment, localConfig, 'HOST', '127.0.0.1')).trim();
+  const port = integer(value(environment, localConfig, 'PORT', '3333'), 'PORT', 1, 65_535);
+  const parallelism = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
+  const parseConcurrency = integer(
+    value(environment, localConfig, 'PARSE_CONCURRENCY', String(Math.min(4, parallelism))),
+    'PARSE_CONCURRENCY', 1, 16
+  );
+  const allowRemote = flag(value(environment, localConfig, 'ALLOW_REMOTE', '0'), 'ALLOW_REMOTE');
+  const exposeFullPaths = flag(value(environment, localConfig, 'EXPOSE_FULL_PATHS', '0'), 'EXPOSE_FULL_PATHS');
+  const autoRefresh = flag(value(environment, localConfig, 'AUTO_REFRESH', '0'), 'AUTO_REFRESH');
+  const autoRefreshDebounceMs = integer(
+    value(environment, localConfig, 'AUTO_REFRESH_DEBOUNCE_MS', '1500'),
+    'AUTO_REFRESH_DEBOUNCE_MS', 100, 60_000
+  );
+  if (!isLoopbackHost(host) && !allowRemote) {
+    throw new Error('Non-loopback HOST requires ALLOW_REMOTE=1.');
+  }
+  if (exposeFullPaths && !isLoopbackHost(host)) {
+    throw new Error('EXPOSE_FULL_PATHS=1 requires a loopback HOST.');
+  }
+  const defaultSessionsDirectory = path.join(os.homedir(), '.codex', 'sessions');
+  return Object.freeze({
+    host,
+    port,
+    sessionsDirectory: path.resolve(value(environment, localConfig, 'CODEX_SESSIONS_DIR', defaultSessionsDirectory)),
+    maxFiles: integer(value(environment, localConfig, 'MAX_FILES', '10000'), 'MAX_FILES', 1, 100_000),
+    parseConcurrency,
+    allowRemote,
+    exposeFullPaths,
+    autoRefresh,
+    autoRefreshDebounceMs,
+    // Update checks are deliberately exempt from process-env overrides.
+    updateRepository: localConfig.UPDATE_REPOSITORY || '',
+  });
 }

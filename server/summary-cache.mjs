@@ -3,6 +3,7 @@ function scanMetadata(snapshot, refreshing) {
     scannedAt: snapshot.scannedAt,
     snapshotVersion: snapshot.version,
     refreshing,
+    ...(snapshot.summary.scan || {}),
   };
 }
 

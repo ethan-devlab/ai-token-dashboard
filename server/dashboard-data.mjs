@@ -1,285 +1,133 @@
+import path from 'node:path';
+import { bucketFor } from './timezone.mjs';
+
 const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
-const MONTH_MS = 31 * DAY_MS;
-const YEAR_MS = 366 * DAY_MS;
+const DAY_MS = 86_400_000;
+const USAGE_KEYS = Object.freeze(['inputTokens', 'cachedInputTokens', 'cacheWriteTokens', 'uncachedInputTokens', 'outputTokens', 'reasoningOutputTokens', 'totalTokens']);
 
-function zeroUsage() {
-  return {
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    cacheWriteTokens: 0,
-    uncachedInputTokens: 0,
-    outputTokens: 0,
-    reasoningOutputTokens: 0,
-    totalTokens: 0,
-  };
-}
-
-function addUsage(sum, usage) {
-  for (const key of Object.keys(sum)) sum[key] += Number(usage?.[key] || 0);
-  return sum;
-}
-
-function findRate(pricing, model) {
+function zeroUsage() { return Object.fromEntries(USAGE_KEYS.map((key) => [key, 0])); }
+function addUsage(left, right) { for (const key of USAGE_KEYS) left[key] += Number(right?.[key] || 0); return left; }
+function rateFor(pricing, model) {
   const normalized = String(model || '').trim().toLowerCase();
-  return Object.keys(pricing.rates)
-    .sort((left, right) => right.length - left.length)
-    .find((key) => normalized === key || normalized.startsWith(`${key}-`)) || null;
+  return Object.keys(pricing.rates).sort((left, right) => right.length - left.length).find((key) => normalized === key || normalized.startsWith(`${key}-`)) || null;
 }
 
-function createCost() {
-  return {
-    total: 0,
-    input: 0,
-    cached: 0,
-    cacheWrite: 0,
-    output: 0,
-    pricedTokens: 0,
-    unknownModels: new Set(),
-    unavailableComponents: new Set(),
-  };
-}
-
-function addCost(sum, cost) {
-  for (const key of ['total', 'input', 'cached', 'cacheWrite', 'output', 'pricedTokens']) {
-    sum[key] += cost[key];
-  }
-  for (const model of cost.unknownModels) sum.unknownModels.add(model);
-  for (const component of cost.unavailableComponents) sum.unavailableComponents.add(component);
-  return sum;
-}
-
-function calculateCost(pricing, events) {
-  const result = createCost();
+export function calculateCost(pricing, events) {
+  const cost = { total: 0, input: 0, cached: 0, cacheWrite: 0, output: 0, pricedTokens: 0, billableTokens: 0, unpricedTokens: 0, unknownModels: new Set(), unavailableComponents: new Set() };
   for (const event of events) {
-    const matchedModel = findRate(pricing, event.model);
-    if (!matchedModel) {
-      result.unknownModels.add(event.model || 'unknown');
-      continue;
-    }
-    const rate = pricing.rates[matchedModel];
-    for (const [name, tokens, price] of [
-      ['input', event.usage.uncachedInputTokens, rate.input],
-      ['cached', event.usage.cachedInputTokens, rate.cachedInput],
-      ['cacheWrite', event.usage.cacheWriteTokens, rate.cacheWrite],
-      ['output', event.usage.outputTokens, rate.output],
-    ]) {
+    const eventUsage = event.usage || zeroUsage();
+    const billable = eventUsage.uncachedInputTokens + eventUsage.cachedInputTokens + eventUsage.cacheWriteTokens + eventUsage.outputTokens;
+    cost.billableTokens += billable;
+    const matched = rateFor(pricing, event.model);
+    if (!matched) { cost.unpricedTokens += billable; cost.unknownModels.add(event.model || 'unknown'); continue; }
+    const rate = pricing.rates[matched];
+    for (const [name, tokens, price] of [['input', eventUsage.uncachedInputTokens, rate.input], ['cached', eventUsage.cachedInputTokens, rate.cachedInput], ['cacheWrite', eventUsage.cacheWriteTokens, rate.cacheWrite], ['output', eventUsage.outputTokens, rate.output]]) {
       if (!tokens) continue;
-      if (price == null) {
-        result.unavailableComponents.add(`${matchedModel}:${name}`);
-        continue;
-      }
+      if (price == null) { cost.unpricedTokens += tokens; cost.unavailableComponents.add(`${matched}:${name}`); continue; }
       const amount = tokens / pricing.unitTokens * price;
-      result[name] += amount;
-      result.total += amount;
-      result.pricedTokens += tokens;
+      cost[name] += amount; cost.total += amount; cost.pricedTokens += tokens;
     }
   }
-  return result;
+  return cost;
 }
-
 function serialiseCost(cost) {
-  return {
-    ...cost,
-    unknownModels: [...cost.unknownModels].sort(),
-    unavailableComponents: [...cost.unavailableComponents].sort(),
-  };
+  return { ...cost, unknownModels: [...cost.unknownModels].sort(), unavailableComponents: [...cost.unavailableComponents].sort(), pricingCoverage: { billableTokens: cost.billableTokens, pricedTokens: cost.pricedTokens, unpricedTokens: cost.unpricedTokens, ratio: cost.billableTokens ? cost.pricedTokens / cost.billableTokens : 1, unknownModels: [...cost.unknownModels].sort(), unavailableComponents: [...cost.unavailableComponents].sort(), partial: cost.unpricedTokens > 0 } };
 }
-
-function eventInRange(event, range) {
-  const timestamp = Date.parse(event.timestamp);
-  if (!Number.isFinite(timestamp)) return range.mode === 'all';
-  return (range.fromMs == null || timestamp >= range.fromMs) &&
-    (range.toMs == null || timestamp < range.toMs);
+function inRange(event, range) {
+  const value = Date.parse(event.timestamp);
+  return Number.isFinite(value) && (range.fromMs == null || value >= range.fromMs) && (range.toMs == null || value < range.toMs);
 }
-
-function filterSession(session, range) {
-  const usageEvents = session.usageEvents.filter((event) => eventInRange(event, range));
-  const lastEvent = usageEvents.reduce((latest, event) => (
-    Date.parse(event.timestamp) > Date.parse(latest?.timestamp || 0) ? event : latest
-  ), null);
-  return {
-    ...session,
-    usage: usageEvents.reduce((sum, event) => addUsage(sum, event.usage), zeroUsage()),
-    usageEvents,
-    filteredLastTimestamp: lastEvent?.timestamp || null,
-  };
+function normalise(value) { return String(value || '').toLowerCase(); }
+function valuesMatch(selected, value) { return !selected.length || selected.includes(String(value || 'unknown')); }
+function redact(value, options) {
+  if (value == null) return null;
+  if (options.exposeFullPaths) return String(value);
+  const raw = String(value).replaceAll('\\', '/');
+  if (/^\\\\|^\/\//.test(raw)) return '<redacted-network-path>';
+  const base = path.posix.basename(raw);
+  return base && base !== '.' ? base : '<redacted-path>';
 }
-
-function filterSessions(summary, range) {
-  return summary.sessions
-    .map((session) => filterSession(session, range))
-    .filter((session) => session.usageEvents.length > 0);
-}
-
-function searchMatches(session, search) {
-  if (!search) return true;
-  const haystack = [session.sessionId, session.file, session.model, session.cwd, session.originator]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  return haystack.includes(search);
-}
-
-function sortSessions(sessions, pricing, sort) {
-  const key = { cost: 'total', total: 'totalTokens', input: 'inputTokens', cache: 'cachedInputTokens', output: 'outputTokens' }[sort];
-  return [...sessions].sort((left, right) => {
-    if (sort === 'cost') return calculateCost(pricing, right.usageEvents).total - calculateCost(pricing, left.usageEvents).total;
-    if (key) return right.usage[key] - left.usage[key];
-    return (Date.parse(right.filteredLastTimestamp || right.lastTimestamp || right.modifiedAt) || 0) -
-      (Date.parse(left.filteredLastTimestamp || left.lastTimestamp || left.modifiedAt) || 0);
+function filteredSessions(summary, request, options) {
+  return summary.sessions.map((session) => {
+    const usageEvents = session.usageEvents.filter((event) => inRange(event, request.range));
+    const usage = usageEvents.reduce((sum, event) => addUsage(sum, event.usage), zeroUsage());
+    const cost = serialiseCost(calculateCost(summary.pricing, usageEvents));
+    const lastTimestamp = usageEvents.reduce((latest, event) => !latest || Date.parse(event.timestamp) > Date.parse(latest) ? event.timestamp : latest, null);
+    return { ...session, usageEvents, usage, cost, lastTimestamp, pricingStatus: cost.pricingCoverage.partial ? 'partial' : 'priced', workspace: redact(session.cwd, options) };
+  }).filter((session) => session.usageEvents.length > 0).filter((session) => {
+    const filters = request.filters;
+    const text = [session.sessionId, session.model, session.workspace, session.originator, session.cliVersion].map(normalise).join(' ');
+    return (!request.q || text.includes(normalise(request.q))) && valuesMatch(filters.models, session.model) && valuesMatch(filters.workspaces, session.workspace) && valuesMatch(filters.pricingStatus, session.pricingStatus) && valuesMatch(filters.usageSource, session.usageSource) && valuesMatch(filters.cliVersion, session.cliVersion) && valuesMatch(filters.originator, session.originator) && (!filters.quality.length || filters.quality.some((value) => value === 'invalid' && session.invalidLineCount > 0 || value === 'reconciled' && session.reconciliation.ambiguous > 0));
   });
 }
-
-function granularity(range, events) {
-  if (range.mode === 'last24h' || range.mode === 'today') return 'hour';
-  if (range.mode === 'week' || range.mode === 'month') return 'day';
-  if (range.mode === 'year') return 'month';
-  const times = events.map((event) => Date.parse(event.timestamp)).filter(Number.isFinite);
-  const from = range.fromMs ?? Math.min(...times);
-  const to = range.toMs ?? Math.max(...times);
-  const span = Math.max(0, to - from);
-  if (span <= 2 * DAY_MS) return 'hour';
-  if (span <= 13 * MONTH_MS) return 'day';
-  if (span <= 6 * YEAR_MS) return 'month';
-  return 'year';
+function sessionSummary(session, options) {
+  return { sessionKey: session.sessionKey, sessionId: session.sessionId, file: redact(session.file, options), workspace: session.workspace, model: session.model, originator: session.originator, cliVersion: session.cliVersion, firstTimestamp: session.firstTimestamp, lastTimestamp: session.lastTimestamp, usage: session.usage, cost: session.cost, pricingStatus: session.pricingStatus, usageSource: session.usageSource, invalidLineCount: session.invalidLineCount, reconciliation: session.reconciliation };
 }
-
-function bucketStart(value, unit) {
-  const date = new Date(value);
-  if (unit === 'hour') date.setMinutes(0, 0, 0);
-  if (unit === 'day') date.setHours(0, 0, 0, 0);
-  if (unit === 'month') date.setDate(1), date.setHours(0, 0, 0, 0);
-  if (unit === 'year') date.setMonth(0, 1), date.setHours(0, 0, 0, 0);
-  return date;
+function sorted(sessions, sort) {
+  const keys = { total: 'totalTokens', input: 'inputTokens', cache: 'cachedInputTokens', output: 'outputTokens' };
+  return [...sessions].sort((left, right) => {
+    const delta = sort === 'cost' ? right.cost.total - left.cost.total : keys[sort] ? right.usage[keys[sort]] - left.usage[keys[sort]] : (Date.parse(right.lastTimestamp || 0) || 0) - (Date.parse(left.lastTimestamp || 0) || 0);
+    return delta || left.sessionKey.localeCompare(right.sessionKey);
+  });
 }
-
-function nextBucket(date, unit) {
-  const next = new Date(date);
-  if (unit === 'hour') next.setHours(next.getHours() + 1);
-  if (unit === 'day') next.setDate(next.getDate() + 1);
-  if (unit === 'month') next.setMonth(next.getMonth() + 1);
-  if (unit === 'year') next.setFullYear(next.getFullYear() + 1);
-  return next;
-}
-
-function bucketLabel(value, unit) {
-  const date = new Date(value);
-  const pad = (number) => String(number).padStart(2, '0');
-  if (unit === 'hour') return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:00`;
-  if (unit === 'day') return `${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
-  if (unit === 'month') return `${date.getFullYear()}/${pad(date.getMonth() + 1)}`;
-  return String(date.getFullYear());
-}
-
-function buildTrend(events, pricing, range) {
-  const validEvents = events.filter((event) => Number.isFinite(Date.parse(event.timestamp)));
-  if (!validEvents.length) return { points: [], unit: 'day', partialCost: false };
-  const unit = granularity(range, validEvents);
-  const times = validEvents.map((event) => Date.parse(event.timestamp));
-  const from = range.fromMs ?? Math.min(...times);
-  const to = range.toMs ?? Math.max(...times);
-  const start = bucketStart(from, unit);
-  const end = range.toMs == null
-    ? nextBucket(bucketStart(Math.max(...times), unit), unit)
-    : bucketStart(to, unit);
-  const boundsEnd = end > start ? end : nextBucket(start, unit);
-  const pointMap = new Map();
-  for (let cursor = start; cursor < boundsEnd; cursor = nextBucket(cursor, unit)) {
-    pointMap.set(cursor.getTime(), { time: cursor.getTime(), label: bucketLabel(cursor, unit), tokens: 0, cost: 0 });
-  }
-
-  let partialCost = false;
-  for (const event of validEvents) {
-    const key = bucketStart(Date.parse(event.timestamp), unit).getTime();
-    const point = pointMap.get(key);
-    if (!point) continue;
+function trend(sessions, range) {
+  const events = sessions.flatMap((session) => session.usageEvents);
+  if (!events.length) return { points: [], unit: 'day', partialCost: false };
+  const span = (range.toMs ?? Math.max(...events.map((event) => Date.parse(event.timestamp)))) - (range.fromMs ?? Math.min(...events.map((event) => Date.parse(event.timestamp))));
+  const unit = range.mode === 'last24h' || range.mode === 'today' || span <= 2 * DAY_MS ? 'hour' : range.mode === 'week' || range.mode === 'month' || span <= 400 * DAY_MS ? 'day' : range.mode === 'year' || span <= 6 * 366 * DAY_MS ? 'month' : 'year';
+  const points = new Map();
+  for (const session of sessions) for (const event of session.usageEvents) {
+    const time = bucketFor(Date.parse(event.timestamp), unit, range.timezone);
+    const point = points.get(time) || { fromMs: time, toMs: time + (unit === 'hour' ? HOUR_MS : DAY_MS), label: new Intl.DateTimeFormat('en-CA', { timeZone: range.timezone, month: unit === 'year' ? undefined : '2-digit', day: unit === 'hour' || unit === 'day' ? '2-digit' : undefined, year: unit === 'month' || unit === 'year' ? 'numeric' : undefined, hour: unit === 'hour' ? '2-digit' : undefined, hourCycle: 'h23' }).format(new Date(time)), tokens: 0, cost: 0, partialCost: false };
     point.tokens += event.usage.totalTokens;
-    const eventCost = calculateCost(pricing, [event]);
-    point.cost += eventCost.total;
-    partialCost ||= eventCost.unknownModels.size > 0 || eventCost.unavailableComponents.size > 0;
+    const itemCost = calculateCost(session.__pricing, [event]);
+    point.cost += itemCost.total; point.partialCost ||= itemCost.unpricedTokens > 0;
+    points.set(time, point);
   }
-  return { points: [...pointMap.values()], unit, partialCost };
+  return { points: [...points.values()].sort((left, right) => left.fromMs - right.fromMs), unit, partialCost: [...points.values()].some((point) => point.partialCost) };
 }
-
-function buildModels(sessions, pricing) {
-  const models = new Map();
+function models(sessions) {
+  const map = new Map();
   for (const session of sessions) {
-    for (const event of session.usageEvents) {
-      const model = event.model || session.model || 'unknown';
-      const entry = models.get(model) || { model, tokens: 0, cost: 0, partialCost: false };
-      entry.tokens += event.usage.totalTokens;
-      const eventCost = calculateCost(pricing, [{ ...event, model }]);
-      entry.cost += eventCost.total;
-      entry.partialCost ||= eventCost.unknownModels.size > 0 || eventCost.unavailableComponents.size > 0;
-      models.set(model, entry);
-    }
+    const entry = map.get(session.model || 'unknown') || { model: session.model || 'unknown', tokens: 0, cost: 0, partialCost: false };
+    entry.tokens += session.usage.totalTokens; entry.cost += session.cost.total; entry.partialCost ||= session.cost.pricingCoverage.partial; map.set(entry.model, entry);
   }
-  return [...models.values()].sort((left, right) => right.tokens - left.tokens || left.model.localeCompare(right.model));
+  return [...map.values()].sort((left, right) => right.tokens - left.tokens || left.model.localeCompare(right.model));
 }
-
-function quality(summary, sessions) {
-  return {
-    invalidLines: summary.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0),
-    cumulativeResets: summary.sessions.reduce((sum, session) => sum + session.cumulativeResetCount, 0),
-    estimatedTimestamps: sessions.flatMap((session) => session.usageEvents)
-      .filter((event) => event.timestampEstimated).length,
-  };
-}
-
-function pageSessions(sessions, pricing, { search, sort, offset, limit }) {
-  const matched = sortSessions(
-    sessions.filter((session) => searchMatches(session, search.toLowerCase())),
-    pricing,
-    sort
-  );
-  const page = matched.slice(offset, offset + limit);
-  return {
-    sessions: page,
-    matchedSessionCount: matched.length,
-    offset,
-    limit,
-    hasPrevious: offset > 0,
-    hasNext: offset + page.length < matched.length,
-  };
-}
-
-function publicContext(summary, range, scan = null) {
-  return {
-    generatedAt: summary.generatedAt,
-    durationMs: summary.durationMs,
-    scannedFileCount: summary.scannedFileCount,
-    parsedSessionCount: summary.parsedSessionCount,
-    maxFiles: summary.maxFiles,
-    truncated: summary.truncated,
-    errors: summary.errors,
-    pricing: summary.pricing,
-    range,
-    scan,
-  };
-}
-
-export function buildDashboardPayload(summary, request, scan) {
-  const sessions = filterSessions(summary, request.range);
+function facets(sessions) { const values = (key) => [...new Set(sessions.map((session) => String(session[key] || 'unknown')))].sort(); return { models: values('model'), workspaces: values('workspace'), pricingStatus: values('pricingStatus'), usageSource: values('usageSource'), cliVersion: values('cliVersion'), originator: values('originator') }; }
+function context(summary, request, scan, sessions) {
   const events = sessions.flatMap((session) => session.usageEvents);
   const totals = sessions.reduce((sum, session) => addUsage(sum, session.usage), zeroUsage());
-  const cost = events.reduce((sum, event) => addCost(sum, calculateCost(summary.pricing, [event])), createCost());
-  return {
-    ...publicContext(summary, request.range, scan),
-    sessionCount: sessions.length,
-    totals,
-    cost: serialiseCost(cost),
-    trend: buildTrend(events, summary.pricing, request.range),
-    models: buildModels(sessions, summary.pricing),
-    quality: quality(summary, sessions),
-    ...pageSessions(sessions, summary.pricing, request),
-  };
+  const cost = serialiseCost(calculateCost(summary.pricing, events));
+  const reconciliation = sessions.reduce((sum, session) => { for (const [key, value] of Object.entries(session.reconciliation)) sum[key] = (sum[key] || 0) + value; return sum; }, {});
+  return { generatedAt: summary.generatedAt, range: request.range, pricing: { updatedAt: summary.pricing.updatedAt, currency: summary.pricing.currency, unitTokens: summary.pricing.unitTokens }, totals, cost, pricingCoverage: cost.pricingCoverage, quality: { scan: { invalidLines: summary.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0), failedFiles: summary.errors.length, ...scan }, range: { estimatedTimestamps: events.filter((event) => event.timestampEstimated).length, reconciliation, pricingCoverage: cost.pricingCoverage } }, scan, facets: facets(sessions) };
 }
+function comparison(summary, request, options) {
+  if (request.range.mode === 'all' || request.range.fromMs == null || request.range.toMs == null) return null;
+  const duration = request.range.toMs - request.range.fromMs;
+  const prior = { ...request, range: { ...request.range, fromMs: request.range.fromMs - duration, toMs: request.range.fromMs } };
+  const sessions = filteredSessions(summary, prior, options);
+  const totals = sessions.reduce((sum, session) => addUsage(sum, session.usage), zeroUsage());
+  return { range: prior.range, totals, percentTotalTokens: totals.totalTokens ? ((request.currentTotals.totalTokens - totals.totalTokens) / totals.totalTokens) * 100 : null };
+}
+function page(sessions, request, options) { const matched = sorted(sessions, request.sort); const items = matched.slice(request.offset, request.offset + request.limit).map((session) => sessionSummary(session, options)); return { sessions: items, matchedSessionCount: matched.length, offset: request.offset, limit: request.limit, hasPrevious: request.offset > 0, hasNext: request.offset + items.length < matched.length }; }
 
-export function buildSessionsPayload(summary, request, scan) {
-  const sessions = filterSessions(summary, request.range);
-  return {
-    ...publicContext(summary, request.range, scan),
-    ...pageSessions(sessions, summary.pricing, request),
-  };
+export function buildDashboardPayload(summary, request, scan, options = {}) {
+  const sessions = filteredSessions(summary, request, options).map((session) => ({ ...session, __pricing: summary.pricing }));
+  const base = context(summary, request, scan, sessions);
+  const currentTotals = base.totals;
+  return { ...base, sessionCount: sessions.length, trend: trend(sessions, request.range), models: models(sessions), comparison: comparison(summary, { ...request, currentTotals }, options), ...page(sessions, request, options) };
+}
+export function buildSessionsPayload(summary, request, scan, options = {}) { const sessions = filteredSessions(summary, request, options); return { ...context(summary, request, scan, sessions), ...page(sessions, request, options) }; }
+export function buildSessionDetail(summary, request, sessionKey, options = {}) {
+  const session = filteredSessions(summary, request, options).find((item) => item.sessionKey === sessionKey);
+  if (!session) return null;
+  return { ...sessionSummary(session, options), observations: session.usageEvents.slice(0, 2_000).map((event) => ({ timestamp: event.timestamp, timestampEstimated: event.timestampEstimated, model: event.model, source: event.source, sequence: event.sequence, usage: event.usage })), observationLimit: 2_000, pricingDiagnostics: session.cost.pricingCoverage };
+}
+function csv(value) { const safe = /^[=+\-@]/.test(String(value)) ? `'${value}` : String(value ?? ''); return `"${safe.replaceAll('"', '""')}"`; }
+export function buildExport(format, dashboard) {
+  if (format === 'json-report') return { contentType: 'application/json; charset=utf-8', extension: 'json', body: JSON.stringify({ range: dashboard.range, totals: dashboard.totals, cost: dashboard.cost, models: dashboard.models, quality: dashboard.quality }, null, 2) };
+  if (format === 'markdown-summary') return { contentType: 'text/markdown; charset=utf-8', extension: 'md', body: `# Codex Token Dashboard\n\nRange: ${dashboard.range.mode} (${dashboard.range.timezone})\n\nTotal tokens: ${dashboard.totals.totalTokens}\n\nKnown cost: ${dashboard.cost.total}` };
+  if (format === 'csv-trend') return { contentType: 'text/csv; charset=utf-8', extension: 'csv', body: ['fromMs,toMs,label,timezone,tokens,cost,partialCost', ...dashboard.trend.points.map((point) => [point.fromMs, point.toMs, point.label, dashboard.range.timezone, point.tokens, point.cost, point.partialCost].map(csv).join(','))].join('\r\n') };
+  return { contentType: 'text/csv; charset=utf-8', extension: 'csv', body: ['session,model,workspace,totalTokens,cost,pricingStatus,usageSource,invalidLines', ...dashboard.sessions.map((session) => [session.sessionId, session.model, session.workspace, session.usage.totalTokens, session.cost.total, session.pricingStatus, session.usageSource, session.invalidLineCount].map(csv).join(','))].join('\r\n') };
 }
