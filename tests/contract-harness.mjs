@@ -195,8 +195,14 @@ test('local dashboard contract fixture', async () => {
     assert.equal(refreshedDashboard.sessionCount, 4);
     assert.equal(refreshedDashboard.scan.snapshotVersion, 2);
 
-    const updateDisabledResponse = await fetch(`${baseUri}/api/update`);
-    assert.deepEqual(await updateDisabledResponse.json(), { enabled: false, status: 'disabled' });
+    const updateResponse = await fetch(`${baseUri}/api/update`);
+    const updateResult = await updateResponse.json();
+    assert.equal(updateResponse.status, 200);
+    if (!updateResult.enabled) {
+      assert.deepEqual(updateResult, { enabled: false, status: 'disabled' });
+    } else {
+      assert.equal(['available', 'current', 'unavailable'].includes(updateResult.status), true);
+    }
 
     const invalidRangeResponse = await fetch(`${baseUri}/api/dashboard?from=4&to=4`);
     assert.equal(invalidRangeResponse.status, 400);

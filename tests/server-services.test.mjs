@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSummaryCache } from '../server/summary-cache.mjs';
 import { compareVersions, createUpdateChecker, validRepository } from '../server/update-checker.mjs';
+import { parseEnv } from '../server/config.mjs';
 import { PRICING } from '../server/pricing.mjs';
 
 test('summary cache reuses its latest successful in-memory snapshot', async () => {
@@ -77,5 +78,11 @@ test('codex-auto-review pricing leaves unsupported cache components unavailable'
     cachedInput: null,
     cacheWrite: null,
     output: 15,
+  });
+});
+
+test('local env parser accepts only simple uppercase configuration entries', () => {
+  assert.deepEqual(parseEnv('# comment\nUPDATE_REPOSITORY="ethan-devlab/codex-token-dashboard"\nlowercase=ignored\nINVALID LINE'), {
+    UPDATE_REPOSITORY: 'ethan-devlab/codex-token-dashboard',
   });
 });

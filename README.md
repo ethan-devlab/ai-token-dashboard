@@ -102,12 +102,11 @@ HOST=127.0.0.1
 PORT=3333
 MAX_FILES=10000
 CODEX_SESSIONS_DIR=/path/to/.codex/sessions
-UPDATE_REPOSITORY=owner/repo
 ```
 
 ## Updates and releases
 
-Set `UPDATE_REPOSITORY=owner/repo` only after publishing this project to its canonical public GitHub repository. The dashboard never contacts GitHub until a user presses **Check for updates**. It sends no session, CWD, usage, or JSONL content: only GitHub's fixed latest-release endpoint is read.
+After publishing to its canonical public GitHub repository, copy `.env.example` to `.env` and set `UPDATE_REPOSITORY=owner/repo`. `.env` is ignored by Git and is loaded directly by the server at startup, so no PowerShell environment variable is required. The dashboard never contacts GitHub until a user presses **Check for updates**. It sends no session, CWD, usage, or JSONL content: only GitHub's fixed latest-release endpoint is read.
 
 When a newer stable release is available, the dashboard supplies links and the asset SHA-256 digest. It does not download, execute, overwrite files, run `git pull`, or install anything. Close the dashboard before manually replacing local files.
 

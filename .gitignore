@@ -1,0 +1,9 @@
+# Local runtime configuration
+.env
+
+# Local orchestration and code-index artifacts
+.omo/
+.codegraph/
+
+# Node diagnostics
+npm-debug.log*

@@ -8,6 +8,7 @@ import { PRICING } from './server/pricing.mjs';
 import { buildSessionSummary } from './server/session-reader.mjs';
 import { createSummaryCache } from './server/summary-cache.mjs';
 import { createUpdateChecker } from './server/update-checker.mjs';
+import { readEnvFile } from './server/config.mjs';
 import { createRequire } from 'node:module';
 
 const HOST = process.env.HOST || '127.0.0.1';
@@ -19,6 +20,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 200;
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
+const LOCAL_CONFIG = readEnvFile(fileURLToPath(new URL('./.env', import.meta.url)));
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   throw new Error(`Invalid PORT: ${process.env.PORT}`);
@@ -34,7 +36,7 @@ async function buildSummary() {
 
 const summaryCache = createSummaryCache(buildSummary);
 const updateChecker = createUpdateChecker({
-  repository: process.env.UPDATE_REPOSITORY,
+  repository: LOCAL_CONFIG.UPDATE_REPOSITORY,
   currentVersion: CURRENT_VERSION,
 });
 
