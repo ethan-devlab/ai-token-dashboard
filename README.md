@@ -40,6 +40,7 @@ Open `http://localhost:3333`. The dashboard is desktop-only and keeps session da
 | `GET /api/diagnostics` | Redacted process/index information; disabled in remote mode. |
 | `GET /api/summary` | Deprecated v1 compatibility response. |
 | `GET /api/update` | User-triggered GitHub latest stable release check. |
+| `POST /api/pricing/refresh` | Same-origin manual OpenAI Standard price refresh; not limited by the daily automatic cadence. |
 | `GET /api/settings` | Loopback-only local `.env` values for the settings page. |
 | `POST /api/settings` | Loopback-only, same-origin, bounded JSON save of validated `.env` values; restart required. |
 
@@ -47,9 +48,9 @@ Dashboard and session-list requests accept `mode`, `from`, `to`, `timezone`, `q`
 
 ## Privacy and pricing
 
-Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. The settings endpoint never accepts arbitrary paths, URLs, or keys, and only writes local configuration after same-origin validation. No JSONL, usage data, CWD, or session metadata is sent to GitHub; update checking only happens after an explicit UI action.
+Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. The settings endpoint never accepts arbitrary paths, URLs, or keys, and only writes local configuration after same-origin validation. No JSONL, usage data, CWD, or session metadata is sent to GitHub or OpenAI. GitHub release checking only happens after an explicit UI action.
 
-Prices in `server/pricing.json` are API-equivalent USD estimates. Cached input is a subset of input; reasoning output is not charged twice. Unknown or incomplete pricing is surfaced as partial coverage, never free usage.
+`server/pricing.json` is the offline fallback for API-equivalent USD estimates. While the server is running, it fetches the fixed official OpenAI pricing Markdown source at most once per UTC day and atomically retains the latest valid Standard short-context rates. The ignored `.pricing-cache.json` stores only public prices and refresh timestamps so restarts do not repeat that day's automatic request. **Update model prices** can refresh again at any time; a failed fetch keeps the previous valid prices. Cached input is a subset of input; reasoning output is not charged twice. Unknown or incomplete pricing is surfaced as partial coverage, never free usage.
 
 ## Updates and releases
 

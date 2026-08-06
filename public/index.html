@@ -24,7 +24,7 @@
             <fieldset class="view-columns"><legend data-i18n="view.columns">顯示欄位</legend><label><input id="columnLastUsed" type="checkbox" checked /> <span data-i18n="table.lastUsed">最後使用</span></label><label><input id="columnModel" type="checkbox" checked /> <span data-i18n="table.model">模型</span></label><label><input id="columnInput" type="checkbox" checked /> <span data-i18n="table.input">Input</span></label><label><input id="columnOutput" type="checkbox" checked /> <span data-i18n="table.output">Output</span></label><label><input id="columnCost" type="checkbox" checked /> <span data-i18n="table.cost">費用</span></label></fieldset>
             <p id="visibleColumnsStatus" class="view-preference-status" aria-live="polite"></p>
           </div></details>
-          <a class="header-link" href="/settings.html" data-i18n="settings.open">設定</a><button id="checkUpdates" type="button" data-i18n="updates.check">檢查更新</button><button id="refresh" type="button" data-i18n="refresh">重新解析 JSONL</button>
+          <a class="header-link" href="/settings.html" data-i18n="settings.open">設定</a><button id="checkUpdates" type="button" data-i18n="updates.check">檢查更新</button><button id="refreshPricing" type="button" data-i18n="pricing.update">更新模型價格</button><button id="refresh" type="button" data-i18n="refresh">重新解析 JSONL</button>
         </div>
       </header>
       <p id="notice" class="notice" aria-live="polite" hidden></p>
@@ -51,7 +51,7 @@
 
       <section class="operations-grid"><section class="surface compact-panel"><p class="eyebrow" data-i18n="v2.export">匯出</p><div class="control-row"><label class="control"><span data-i18n="v2.export.format">Format</span><select id="exportFormat"><option value="csv-sessions" data-i18n="v2.export.sessions">Session CSV</option><option value="csv-trend" data-i18n="v2.export.trend">Trend CSV</option><option value="json-report" data-i18n="v2.export.json">JSON report</option><option value="markdown-summary" data-i18n="v2.export.markdown">Markdown summary</option></select></label><button id="exportData" type="button" data-i18n="v2.export.download">下載</button></div></section><section class="surface compact-panel"><div class="panel-heading"><p class="eyebrow" data-i18n="v2.diagnostics">診斷</p><button id="loadDiagnostics" type="button" data-i18n="v2.diagnostics.load">Load</button></div><pre id="diagnostics" hidden></pre></section></section>
       <details id="watcherStatus" class="watcher-status surface"><summary data-i18n="v2.watcher">監看器狀態</summary><p id="watcherText">—</p></details>
-      <details class="pricing surface"><summary data-i18n="pricing.summary">查看內建模型定價</summary><div id="pricingGrid" class="pricing-grid"></div></details>
+      <details class="pricing surface"><summary data-i18n="pricing.summary">查看模型定價</summary><div class="pricing-toolbar"><p id="pricingStatus" class="muted" aria-live="polite"></p><a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer" data-i18n="pricing.source">OpenAI 定價來源</a></div><div id="pricingGrid" class="pricing-grid"></div></details>
       <button id="drawerBackdrop" class="drawer-backdrop" type="button" data-i18n-aria-label="drawer.close" aria-label="Close" hidden></button><aside id="sessionDrawer" class="session-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" tabindex="-1" hidden></aside>
       <footer data-i18n="footer">費用是 API 等值估算，不是 Codex／ChatGPT 訂閱帳單。</footer>
     </main>

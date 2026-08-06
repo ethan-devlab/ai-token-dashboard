@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { buildDashboardPayload, buildExport, buildSessionDetail, buildSessionsPayload } from './server/dashboard-data.mjs';
 import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.mjs';
 import { PRICING } from './server/pricing.mjs';
+import { createPricingRefreshService } from './server/pricing-refresh.mjs';
 import { createSessionIndex } from './server/session-index.mjs';
 import { createSummaryCache } from './server/summary-cache.mjs';
 import { saveSettings, settingsPayload } from './server/settings.mjs';
@@ -21,7 +22,9 @@ let localConfig = readEnvFile(ENV_PATH);
 const CONFIG = readRuntimeConfig({ localConfig });
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
-const index = createSessionIndex({ sessionsDirectory: CONFIG.sessionsDirectory, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, pricing: PRICING });
+const pricingService = createPricingRefreshService({ baseline: PRICING, cachePath: path.join(APP_DIR, '.pricing-cache.json') });
+await pricingService.initialize();
+const index = createSessionIndex({ sessionsDirectory: CONFIG.sessionsDirectory, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, pricing: () => pricingService.current() });
 const summaryCache = createSummaryCache(() => index.refresh());
 const updateChecker = createUpdateChecker({ repository: CONFIG.updateRepository, currentVersion: CURRENT_VERSION });
 const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
@@ -94,17 +97,27 @@ async function serveStatic(pathname, res, id) {
 }
 function options() { return { exposeFullPaths: CONFIG.exposeFullPaths }; }
 function watcherMetadata() { return { enabled: CONFIG.autoRefresh, status: watcherState, debounceMs: CONFIG.autoRefreshDebounceMs }; }
-function dashboardPayload(snapshot, context, scan = snapshot.metadata) { return { ...buildDashboardPayload(snapshot.summary, context, scan, options()), watcher: watcherMetadata() }; }
-function v1Summary(summary, scan, context) { const dashboard = buildDashboardPayload(summary, context, scan, options()); return { deprecated: true, generatedAt: summary.generatedAt, durationMs: summary.durationMs, scannedFileCount: summary.scannedFileCount, parsedSessionCount: summary.parsedSessionCount, maxFiles: summary.maxFiles, truncated: summary.truncated, totals: summary.totals, pricing: dashboard.pricing, sessions: dashboard.sessions, errors: summary.errors.map((item) => ({ file: path.basename(item.file), message: 'Session file could not be parsed.' })), scan }; }
+function currentSummary(summary) { const pricing = pricingService.current(); return summary.pricing === pricing ? summary : { ...summary, pricing }; }
+function withPricingStatus(payload) { return { ...payload, pricing: { ...payload.pricing, refresh: pricingService.status() } }; }
+function dashboardPayload(snapshot, context, scan = snapshot.metadata) { return withPricingStatus({ ...buildDashboardPayload(currentSummary(snapshot.summary), context, scan, options()), watcher: watcherMetadata() }); }
+function v1Summary(summary, scan, context) { const current = currentSummary(summary); const dashboard = buildDashboardPayload(current, context, scan, options()); return { deprecated: true, generatedAt: current.generatedAt, durationMs: current.durationMs, scannedFileCount: current.scannedFileCount, parsedSessionCount: current.parsedSessionCount, maxFiles: current.maxFiles, truncated: current.truncated, totals: current.totals, pricing: { ...dashboard.pricing, refresh: pricingService.status() }, sessions: dashboard.sessions, errors: current.errors.map((item) => ({ file: path.basename(item.file), message: 'Session file could not be parsed.' })), scan }; }
 const startedAt = Date.now();
 let watcher = null;
 let watcherTimer = null;
+let pricingTimer = null;
 let watcherState = CONFIG.autoRefresh ? 'starting' : 'disabled';
 function startWatcher() {
   if (!CONFIG.autoRefresh) return;
   try { watcher = watch(CONFIG.sessionsDirectory, { recursive: false }, () => { clearTimeout(watcherTimer); watcherTimer = setTimeout(() => { summaryCache.refresh().catch(() => undefined); }, CONFIG.autoRefreshDebounceMs); }); watcher.on('error', () => { watcherState = 'failed'; }); watcherState = 'watching'; }
   catch { watcherState = 'failed'; }
 }
+function schedulePricingRefresh() {
+  const current = new Date();
+  const nextUtcDay = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate() + 1, 0, 0, 1);
+  pricingTimer = setTimeout(() => { pricingService.refresh().catch(() => undefined).finally(schedulePricingRefresh); }, Math.max(1_000, nextUtcDay - Date.now()));
+  pricingTimer.unref?.();
+}
+function startPricingRefresh() { pricingService.refresh().catch(() => undefined).finally(schedulePricingRefresh); }
 const server = http.createServer(async (req, res) => {
   const id = requestId(); const started = Date.now();
   try {
@@ -113,11 +126,12 @@ const server = http.createServer(async (req, res) => {
     const requestUrl = new URL(req.url || '/', `http://${CONFIG.host}:${CONFIG.port}`);
     if (req.method === 'GET' && requestUrl.pathname === '/api/summary') { const cached = await summaryCache.get(); json(res, 200, v1Summary(cached.summary, cached.metadata, requestContext(requestUrl)), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/dashboard') { const cached = await summaryCache.get(); json(res, 200, dashboardPayload(cached, requestContext(requestUrl)), id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/sessions') { const cached = await summaryCache.get(); json(res, 200, buildSessionsPayload(cached.summary, requestContext(requestUrl), cached.metadata, options()), id); return; }
-    if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/sessions/')) { const sessionKey = requestUrl.pathname.slice('/api/sessions/'.length); if (!/^[A-Za-z0-9_-]{1,512}$/.test(sessionKey)) throw new ApiError(400, 'INVALID_SESSION_KEY', 'Invalid session key.'); const cached = await summaryCache.get(); const detail = buildSessionDetail(cached.summary, requestContext(requestUrl), sessionKey, options()); if (!detail) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Session not found.'); json(res, 200, { ...detail, scan: cached.metadata }, id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/sessions') { const cached = await summaryCache.get(); json(res, 200, withPricingStatus(buildSessionsPayload(currentSummary(cached.summary), requestContext(requestUrl), cached.metadata, options())), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/sessions/')) { const sessionKey = requestUrl.pathname.slice('/api/sessions/'.length); if (!/^[A-Za-z0-9_-]{1,512}$/.test(sessionKey)) throw new ApiError(400, 'INVALID_SESSION_KEY', 'Invalid session key.'); const cached = await summaryCache.get(); const detail = buildSessionDetail(currentSummary(cached.summary), requestContext(requestUrl), sessionKey, options()); if (!detail) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Session not found.'); json(res, 200, { ...detail, scan: cached.metadata }, id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/refresh') { verifyPost(req); const snapshot = await summaryCache.refresh(); json(res, 200, dashboardPayload(snapshot, requestContext(requestUrl), summaryCache.status()), id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/export') { const format = requestUrl.searchParams.get('format') || 'csv-sessions'; if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.'); const cached = await summaryCache.get(); const output = buildExport(format, buildDashboardPayload(cached.summary, { ...requestContext(requestUrl), limit: 200 }, cached.metadata, options())); const fileName = `codex-token-dashboard-${format}.${output.extension}`; res.writeHead(200, headers(output.contentType, Buffer.byteLength(output.body), API_CSP, id, `attachment; filename="${fileName}"`)); res.end(output.body); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const scan = summaryCache.status(); json(res, 200, { version: CURRENT_VERSION, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, snapshot: scan, watcher: watcherState, requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/pricing/refresh') { verifyPost(req); let result; try { result = await pricingService.refresh({ manual: true }); } catch { throw new ApiError(502, 'PRICING_REFRESH_FAILED', 'Pricing refresh failed; existing prices were retained.'); } const cached = await summaryCache.get(); json(res, 200, { ...dashboardPayload(cached, requestContext(requestUrl)), pricingUpdate: { changedModels: result.changedModels || [] } }, id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/export') { const format = requestUrl.searchParams.get('format') || 'csv-sessions'; if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.'); const cached = await summaryCache.get(); const output = buildExport(format, buildDashboardPayload(currentSummary(cached.summary), { ...requestContext(requestUrl), limit: 200 }, cached.metadata, options())); const fileName = `codex-token-dashboard-${format}.${output.extension}`; res.writeHead(200, headers(output.contentType, Buffer.byteLength(output.body), API_CSP, id, `attachment; filename="${fileName}"`)); res.end(output.body); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const scan = summaryCache.status(); json(res, 200, { version: CURRENT_VERSION, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, snapshot: scan, watcher: watcherState, pricing: pricingService.status(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); localConfig = await saveSettings(ENV_PATH, await readJsonBody(req, 16 * 1024)); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/update') { json(res, 200, await updateChecker.check(), id); return; }
@@ -125,5 +139,5 @@ const server = http.createServer(async (req, res) => {
     throw new ApiError(404, 'NOT_FOUND', 'Not found.');
   } catch (failure) { error(res, failure, id); }
 });
-server.on('close', () => { clearTimeout(watcherTimer); watcher?.close(); });
-server.listen(CONFIG.port, CONFIG.host, () => { startWatcher(); console.log(`Codex Token Dashboard: http://${CONFIG.host}:${CONFIG.port}`); console.log(`Reading sessions from: ${CONFIG.sessionsDirectory}`); });
+server.on('close', () => { clearTimeout(watcherTimer); clearTimeout(pricingTimer); watcher?.close(); });
+server.listen(CONFIG.port, CONFIG.host, () => { startWatcher(); startPricingRefresh(); console.log(`Codex Token Dashboard: http://${CONFIG.host}:${CONFIG.port}`); console.log(`Reading sessions from: ${CONFIG.sessionsDirectory}`); });

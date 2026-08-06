@@ -7,6 +7,7 @@ import { createSummaryCache } from '../server/summary-cache.mjs';
 import { compareVersions, createUpdateChecker, validRepository } from '../server/update-checker.mjs';
 import { parseEnv, readRuntimeConfig } from '../server/config.mjs';
 import { createPricing, matchPricingRule, PRICING } from '../server/pricing.mjs';
+import { createPricingRefreshService, parseStandardPricingMarkdown } from '../server/pricing-refresh.mjs';
 import { createSessionIndex, parseSessionFile } from '../server/session-index.mjs';
 import { saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
@@ -93,6 +94,79 @@ test('pricing rules are validated and choose effective aliases deterministically
     { id: 'one', aliases: ['shared'], pattern: '^one$', effectiveFrom: '2026-01-01', rates: {} },
     { id: 'two', aliases: ['shared'], pattern: '^two$', effectiveFrom: '2026-01-01', rates: {} },
   ] }), /Overlapping pricing alias/);
+});
+
+const pricingMarkdown = `# Pricing
+
+### Standard pricing data
+
+| Model | Short context input | Short context cached input | Short context cache writes | Short context output | Long context input | Long context cached input | Long context cache writes | Long context output |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gpt-5.6-sol | $5.00 | $0.50 | $6.25 | $30.00 | $10.00 | $1.00 | $12.50 | $45.00 |
+| gpt-5.6-terra | $2.00 | $0.20 | $2.50 | $12.00 | $4.00 | $0.40 | $5.00 | $18.00 |
+| gpt-5.6-luna | $0.20 | $0.02 | $0.25 | $1.20 | $0.40 | $0.04 | $0.50 | $1.80 |
+| gpt-5.5 (<272K context length) | $5.00 | $0.50 | - | $30.00 | $10.00 | $1.00 | - | $45.00 |
+| gpt-5.4 | $2.50 | $0.25 | - | $15.00 | $5.00 | $0.50 | - | $22.50 |
+| gpt-5.2 | $1.75 | $0.175 | - | $14.00 | - | - | - | - |
+| gpt-5.1 | $1.25 | $0.125 | - | $10.00 | - | - | - | - |
+| gpt-5 | $1.25 | $0.125 | - | $10.00 | - | - | - | - |
+| gpt-5-mini | $0.25 | $0.025 | - | $2.00 | - | - | - | - |
+| gpt-5-nano | $0.05 | $0.005 | - | $0.40 | - | - | - | - |
+`;
+
+test('pricing markdown parser reads the official Standard short-context rates', () => {
+  const rates = parseStandardPricingMarkdown(pricingMarkdown);
+  assert.deepEqual(rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12 });
+  assert.deepEqual(rates['gpt-5.5'], { input: 5, cachedInput: 0.5, cacheWrite: null, output: 30 });
+});
+
+test('pricing refresh runs automatically once per UTC day across restarts and manual refresh remains unrestricted', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-pricing-'));
+  const cachePath = path.join(directory, 'pricing-cache.json');
+  let currentTime = new Date('2026-08-06T10:00:00Z');
+  let fetchCalls = 0;
+  const fetchImpl = async () => { fetchCalls += 1; return new Response(pricingMarkdown, { status: 200, headers: { 'content-type': 'text/markdown' } }); };
+  try {
+    const service = createPricingRefreshService({ baseline: PRICING, cachePath, fetchImpl, now: () => currentTime });
+    await service.refresh();
+    assert.equal((await service.refresh()).attempted, false);
+    await service.refresh({ manual: true });
+    await service.refresh({ manual: true });
+    assert.equal(fetchCalls, 3);
+    assert.deepEqual(service.current().rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12 });
+    assert.deepEqual(service.current().rates['codex-auto-review'], PRICING.rates['codex-auto-review']);
+
+    currentTime = new Date('2026-08-07T10:00:00Z');
+    await service.refresh();
+    assert.equal(fetchCalls, 4);
+
+    const restarted = createPricingRefreshService({ baseline: PRICING, cachePath, fetchImpl, now: () => currentTime });
+    assert.equal((await restarted.refresh()).attempted, false);
+    assert.equal(fetchCalls, 4);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('failed pricing refresh retains the latest valid prices', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-pricing-failure-'));
+  const cachePath = path.join(directory, 'pricing-cache.json');
+  let fail = false;
+  const fetchImpl = async () => {
+    if (fail) throw new Error('offline fixture');
+    return new Response(pricingMarkdown, { status: 200, headers: { 'content-type': 'text/markdown' } });
+  };
+  try {
+    const service = createPricingRefreshService({ baseline: PRICING, cachePath, fetchImpl });
+    await service.refresh({ manual: true });
+    const retained = service.current();
+    fail = true;
+    await assert.rejects(service.refresh({ manual: true }), /Could not reach the pricing source/);
+    assert.equal(service.current(), retained);
+    assert.equal(service.status().lastError, 'network');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('local env parser accepts only simple uppercase configuration entries', () => {

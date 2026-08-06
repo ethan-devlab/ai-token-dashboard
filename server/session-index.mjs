@@ -156,6 +156,7 @@ async function parseChangedEntries(entries, concurrency) {
 
 export function createSessionIndex({ sessionsDirectory, maxFiles, parseConcurrency, pricing, now = () => new Date() }) {
   let index = new Map();
+  const currentPricing = () => typeof pricing === 'function' ? pricing() : pricing;
   return Object.freeze({
     async refresh() {
       const discoveryStarted = Date.now();
@@ -181,7 +182,7 @@ export function createSessionIndex({ sessionsDirectory, maxFiles, parseConcurren
       const totals = sessions.reduce((sum, session) => add(sum, session.usage), { ...ZERO_USAGE });
       scan.aggregateDurationMs = Date.now() - aggregateStarted;
       index = next;
-      return { generatedAt: now().toISOString(), durationMs: scan.discoveryDurationMs + scan.parseDurationMs + scan.aggregateDurationMs, sessionsDirectory, scannedFileCount: discovered.length, parsedSessionCount: sessions.length, maxFiles, truncated: discovered.length >= maxFiles, totals, pricing, sessions, errors: parsed.filter((item) => item.error).map((item) => ({ file: item.entry.relativePath, message: item.error })), scan };
+      return { generatedAt: now().toISOString(), durationMs: scan.discoveryDurationMs + scan.parseDurationMs + scan.aggregateDurationMs, sessionsDirectory, scannedFileCount: discovered.length, parsedSessionCount: sessions.length, maxFiles, truncated: discovered.length >= maxFiles, totals, pricing: currentPricing(), sessions, errors: parsed.filter((item) => item.error).map((item) => ({ file: item.entry.relativePath, message: item.error })), scan };
     },
   });
 }
