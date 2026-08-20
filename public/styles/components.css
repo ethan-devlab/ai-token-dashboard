@@ -2,6 +2,11 @@
 .app-header, .section-heading, .control-row, .system-metadata, .data-quality { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .app-header { align-items: end; margin-block-end: var(--space-6); }
 .header-actions { display: flex; align-items: center; gap: var(--space-3); }
+.provider-control { display: grid; gap: var(--space-1); color: var(--color-muted); font-size: var(--text-xs); }
+.provider-control select { min-inline-size: 7rem; font-weight: 700; }
+.provider-notice { margin: calc(var(--space-4) * -1) 0 var(--space-4); border-color: var(--color-warning); background: var(--color-warning-surface); color: var(--color-warning); padding: var(--space-3) var(--space-4); }
+.execution-filter { display: grid; grid-template-columns: auto minmax(12rem, 1fr); align-items: start; inline-size: calc(25% - var(--space-3)); border-block-start: 1px solid var(--color-border); padding-block-start: var(--space-3); }
+.execution-filter select { inline-size: 100%; min-block-size: calc(var(--space-10) + var(--space-4) + var(--space-2)); }
 .header-link { display: inline-flex; align-items: center; justify-content: center; min-block-size: 2.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-muted); color: var(--color-text); font-weight: 700; padding-inline: var(--space-3); text-decoration: none; }
 .header-link:hover { background: var(--color-surface-raised); }
 .header-link:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
@@ -109,6 +114,7 @@ body:not(.show-exact) .exact, body:not(.show-exact) .cell-exact, body:not(.show-
 .pricing-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-block-start: var(--space-3); font-size: var(--text-sm); }
 .pricing-toolbar a { color: var(--color-accent); }
 .pricing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin-block-start: var(--space-4); }
+.pricing-disclaimer { color: var(--color-muted); font-size: var(--text-xs); margin-block: var(--space-3) 0; }
 .rate { background: var(--color-surface-muted); border-radius: var(--radius-sm); color: var(--color-muted); font-family: var(--font-mono); font-size: var(--text-xs); padding: var(--space-3); }
 .rate strong { color: var(--color-text); }
 .drawer-backdrop { position: fixed; z-index: 3; inset: 0; border: 0; border-radius: 0; background: rgb(0 0 0 / 0.45); cursor: default; }

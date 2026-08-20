@@ -1,6 +1,6 @@
 import { applyDocumentTranslations, detectLocale, setLocale, t } from './i18n.mjs';
 
-const SETTINGS_KEYS = Object.freeze(['HOST', 'PORT', 'CODEX_SESSIONS_DIR', 'MAX_FILES', 'PARSE_CONCURRENCY', 'ALLOW_REMOTE', 'EXPOSE_FULL_PATHS', 'AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS', 'UPDATE_REPOSITORY']);
+const SETTINGS_KEYS = Object.freeze(['HOST', 'PORT', 'CODEX_SESSIONS_DIR', 'CLAUDE_SESSIONS_DIR', 'MAX_FILES', 'PARSE_CONCURRENCY', 'ALLOW_REMOTE', 'EXPOSE_FULL_PATHS', 'AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS', 'UPDATE_REPOSITORY']);
 const form = document.getElementById('settingsForm');
 const notice = document.getElementById('settingsNotice');
 const remoteWarning = document.getElementById('remoteWarning');

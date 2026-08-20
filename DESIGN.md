@@ -1,8 +1,8 @@
-# Codex Token Dashboard Design System
+# Local AI Token Dashboard Design System
 
 ## 1. Intent and visual thesis
 
-This is a desktop-local engineering surface for understanding a selected period of Codex usage: total tokens, the API-equivalent estimate, source quality, and individual sessions. It should feel like a restrained observability console, not a consumer SaaS product: a calm cool-gray field, subtle layers, dense but readable information, and one teal action color. The existing JSONL parser and its accounting semantics remain authoritative; the UI only makes those facts inspectable.
+This is a desktop-local engineering surface for understanding a selected period of Codex or Claude Code usage: total tokens, the API-equivalent estimate, source quality, and individual sessions. It should feel like a restrained observability console, not a consumer SaaS product: a calm cool-gray field, subtle layers, dense but readable information, and one teal action color. The selected provider owns its snapshot, pricing, filters, budgets, and refresh state. The existing JSONL parsers and their accounting semantics remain authoritative; the UI only makes those facts inspectable.
 
 ## 2. Design tokens
 

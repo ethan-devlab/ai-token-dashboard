@@ -3,6 +3,8 @@ export const LOCALE_PREFERENCE_KEY = 'codex-token-dashboard:locale:v1';
 
 const dictionaries = {
   en: {
+    'drawer.executionType': 'Execution type', 'drawer.parentSession': 'Parent session',
+    'provider.label': 'Provider', 'provider.unavailable': '{provider} is unavailable. Set its sessions directory in Settings, then restart the dashboard.', 'provider.listError': 'Could not load provider availability.', 'provider.claude.disclaimer': 'Claude costs are Anthropic API-equivalent token estimates. They are not Pro or Max subscription charges. Tool fees are excluded.', 'provider.claude.footer': 'Claude costs are API-equivalent token estimates, not Pro or Max subscription charges. Web search, code execution, and other tool fees are excluded.', 'provider.cacheWrite5m': '5-minute cache write', 'provider.cacheWrite1h': '1-hour cache write', 'pricing.source.claude': 'Anthropic pricing source', 'v2.filter.executionType': 'Execution type', 'provider.execution.main': 'Main', 'provider.execution.subagent': 'Subagent', 'settings.codexDirectory': 'Codex sessions directory', 'settings.claudeDirectory': 'Claude sessions directory',
     'v2.range.weekInput': 'Week', 'v2.range.monthInput': 'Month', 'v2.range.yearInput': 'Year', 'v2.filter.cli': 'CLI', 'v2.metadata.sessions': 'Sessions', 'v2.metadata.snapshot': 'Snapshot', 'v2.metadata.reuse': 'Reuse', 'v2.metadata.parse': 'Parse', 'v2.export.format': 'Format', 'v2.diagnostics.load': 'Load',
     'meta.description': 'Local Codex JSONL token and API-equivalent cost dashboard',
     'header.eyebrow': 'LOCAL OBSERVABILITY', 'header.subtitle': 'Token usage and API-equivalent cost from JSONL event timestamps.',
@@ -38,6 +40,8 @@ const dictionaries = {
     'price.unavailable': 'Unavailable', 'update.disabled': 'Update checks are disabled. Set UPDATE_REPOSITORY to owner/repo to enable them.', 'update.checking': 'Checking GitHub Releases…', 'update.current': 'You are using the current release ({version}).', 'update.available': 'Version {version} is available. Download it manually, verify SHA-256, then replace the local files after closing this dashboard.', 'update.unavailable.network': 'Could not reach GitHub Releases. The dashboard remains local and usable.', 'update.unavailable.not-found': 'The configured GitHub release repository was not found.', 'update.unavailable.rate-limit': 'GitHub rate limit reached. Try again later.', 'update.unavailable.invalid-release': 'GitHub returned an invalid stable release.', 'update.unavailable.invalid-version': 'Could not compare the release version safely.', 'update.download': 'Download {name}', 'update.verify': 'Verify SHA-256: {sha256}',
   },
   'zh-Hant': {
+    'drawer.executionType': '執行類型', 'drawer.parentSession': 'Parent session',
+    'provider.label': 'Provider', 'provider.unavailable': '{provider} 無法使用。請在「設定」指定 sessions 目錄，然後重新啟動儀表板。', 'provider.listError': '無法載入 provider 可用狀態。', 'provider.claude.disclaimer': 'Claude 費用為 Anthropic API 等值 token 估算，不是 Pro 或 Max 訂閱費用，且不包含工具費用。', 'provider.claude.footer': 'Claude 費用是 API 等值 token 估算，不是 Pro 或 Max 訂閱費用；不包含網路搜尋、程式執行與其他工具費用。', 'provider.cacheWrite5m': '5 分鐘快取寫入', 'provider.cacheWrite1h': '1 小時快取寫入', 'pricing.source.claude': 'Anthropic 定價來源', 'v2.filter.executionType': '執行類型', 'provider.execution.main': 'Main', 'provider.execution.subagent': 'Subagent', 'settings.codexDirectory': 'Codex sessions 目錄', 'settings.claudeDirectory': 'Claude sessions 目錄',
     'total.tokens': '總 Token', 'input.tokens': '輸入 Token', 'output.tokens': '輸出 Token', 'cached.input': '快取輸入', 'uncached.input': '未快取輸入', 'cache.write': '快取寫入', 'reasoning.output': '推理輸出', 'trend.tokens': '總 Token', 'explorer.label': '工作階段瀏覽器', 'explorer.eyebrow': '工作階段瀏覽器', 'sort.total': '總 Token', 'sort.input': '輸入 Token', 'sort.cache': '快取輸入', 'sort.output': '輸出 Token',
     'v2.range.weekInput': '週別', 'v2.range.monthInput': '月份', 'v2.range.yearInput': '年份', 'v2.filter.cli': 'CLI', 'v2.metadata.sessions': 'Sessions', 'v2.metadata.snapshot': 'Snapshot', 'v2.metadata.reuse': '重用', 'v2.metadata.parse': '解析', 'v2.export.format': '格式', 'v2.diagnostics.load': '載入',
     'meta.description': '本機 Codex JSONL token 與 API 等值費用儀表板',
@@ -97,7 +101,7 @@ export function t(key, values = {}) {
 
 export function applyDocumentTranslations(root = document) {
   root.documentElement.lang = activeLocale;
-  root.title = 'Codex Token Dashboard';
+  root.title = 'Local AI Token Dashboard';
   root.querySelector('meta[name="description"]')?.setAttribute('content', t('meta.description'));
   root.querySelectorAll('[data-i18n]').forEach((element) => { element.textContent = t(element.dataset.i18n); });
   root.querySelectorAll('[data-i18n-placeholder]').forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder); });

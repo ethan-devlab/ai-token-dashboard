@@ -23,7 +23,8 @@
         <fieldset class="surface settings-group">
           <legend data-i18n="settings.source">SESSION 來源</legend>
           <div class="settings-grid">
-            <label class="control settings-control"><span data-i18n="settings.directory">Sessions 目錄</span><input name="CODEX_SESSIONS_DIR" type="text" autocomplete="off" required aria-describedby="directoryHint" /></label>
+            <label class="control settings-control"><span data-i18n="settings.codexDirectory">Codex sessions 目錄</span><input name="CODEX_SESSIONS_DIR" type="text" autocomplete="off" required aria-describedby="directoryHint" /></label>
+            <label class="control settings-control"><span data-i18n="settings.claudeDirectory">Claude sessions 目錄</span><input name="CLAUDE_SESSIONS_DIR" type="text" autocomplete="off" required aria-describedby="directoryHint" /></label>
             <label class="control settings-control"><span data-i18n="settings.maxFiles">最大檔案數</span><input name="MAX_FILES" type="number" min="1" max="100000" required /></label>
             <label class="control settings-control"><span data-i18n="settings.parseConcurrency">解析並行數</span><input name="PARSE_CONCURRENCY" type="number" min="1" max="16" required /></label>
           </div>

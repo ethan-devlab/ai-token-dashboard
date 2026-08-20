@@ -6,7 +6,7 @@ import { detectLocale, setLocale, t } from '../public/scripts/i18n.mjs';
 import { createProjectionCache } from '../public/scripts/projection-cache.mjs';
 import { projectionLoadState } from '../public/scripts/projection-state.mjs';
 import { createRequestChannels } from '../public/scripts/request-channels.mjs';
-import { applyTableViewPreferences, budgetState, createDashboardState, densityPageLimit, queryStateFromSearch, queryStateToSearch, readViewPreferences, requestParameters, saveViewPreferences } from '../public/scripts/state.mjs';
+import { applyTableViewPreferences, budgetState, createDashboardState, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
 import { nearestPointIndex } from '../public/scripts/trend.mjs';
 
 test('v2 query state preserves timezone and multi-select filters in the URL', () => {
@@ -53,6 +53,23 @@ test('view preferences retain local budgets but never put them in query state', 
   assert.equal(saveViewPreferences(storage, view), true);
   assert.deepEqual(readViewPreferences(storage).budgets, view.budgets);
   assert.equal(queryStateToSearch({ ...createDashboardState().query, filters: {} }).includes('budget'), false);
+});
+
+test('provider selection prefers a valid URL and persists only supported providers', () => {
+  const values = new Map([['codex-token-dashboard:provider:v1', 'claude']]); const storage = { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
+  assert.equal(providerFromSearch('?provider=codex', readProviderPreference(storage)), 'codex');
+  assert.equal(providerFromSearch('', readProviderPreference(storage)), 'claude');
+  assert.equal(saveProviderPreference(storage, 'unknown'), false);
+  assert.equal(saveProviderPreference(storage, 'codex'), true);
+});
+
+test('legacy budgets migrate once to Codex while Claude budgets stay isolated', () => {
+  const legacy = [{ id: 'legacy', scope: 'cost', limit: 5 }]; const values = new Map([['codex-token-dashboard:view-preferences:v2', JSON.stringify({ budgets: legacy })]]); const storage = { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
+  const migrated = readViewPreferences(storage);
+  assert.deepEqual(migrated.budgetsByProvider, { codex: legacy, claude: [] });
+  saveViewPreferences(storage, { ...migrated, budgetsByProvider: { codex: legacy, claude: [{ id: 'claude', scope: 'total-tokens', limit: 100 }] } });
+  assert.equal(JSON.parse(values.get('codex-token-dashboard:view-preferences:v2')).budgets, undefined);
+  assert.equal(readViewPreferences(storage).budgetsByProvider.claude.length, 1);
 });
 
 test('table preferences expose selected columns and make density change page capacity', () => {

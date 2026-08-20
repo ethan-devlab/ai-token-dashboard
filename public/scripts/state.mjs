@@ -1,9 +1,11 @@
 export const VIEW_PREFERENCES_KEY = 'codex-token-dashboard:view-preferences:v2';
+export const PROVIDER_PREFERENCE_KEY = 'codex-token-dashboard:provider:v1';
 
 const RANGE_MODES = new Set(['all', 'last24h', 'today', 'week', 'month', 'year', 'custom']);
 const SORT_MODES = new Set(['recent', 'cost', 'total', 'input', 'cache', 'output']);
 const UNITS = new Set(['auto', 'exact', 'K', 'M', 'B']);
-const FILTER_KEYS = Object.freeze(['models', 'workspaces', 'pricingStatus', 'usageSource', 'cliVersion', 'originator', 'quality']);
+const FILTER_KEYS = Object.freeze(['models', 'workspaces', 'pricingStatus', 'usageSource', 'cliVersion', 'originator', 'quality', 'executionType']);
+const PROVIDERS = new Set(['codex', 'claude']);
 const DENSITY_LIMITS = Object.freeze({ comfortable: 100, compact: 150, dense: 200 });
 const VIEW_COLUMN_KEYS = Object.freeze(['lastUsed', 'model', 'input', 'output', 'cost']);
 
@@ -36,9 +38,10 @@ export function applyTableViewPreferences(target, view) {
 
 export function createDashboardState() {
   return {
+    provider: 'codex',
     source: { data: null, status: 'loading', error: '', projectionStale: false },
     query: { rangeMode: 'month', weekValue: '', monthValue: '', yearValue: '', customStart: '', customEnd: '', search: '', sort: 'recent', timezone: 'UTC', filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, []])) },
-    view: { unit: 'auto', showExact: true, showDetails: true, trendMetric: 'cost', locale: 'zh-Hant', density: 'comfortable', visibleColumns: Object.fromEntries(VIEW_COLUMN_KEYS.map((key) => [key, true])), budgets: [] },
+    view: { unit: 'auto', showExact: true, showDetails: true, trendMetric: 'cost', locale: 'zh-Hant', density: 'comfortable', visibleColumns: Object.fromEntries(VIEW_COLUMN_KEYS.map((key) => [key, true])), budgets: [], budgetsByProvider: { codex: [], claude: [] } },
     page: { offset: 0, limit: 100 },
     drawer: { sessionKey: null, trigger: null, detail: null, status: 'idle', error: '' },
   };
@@ -82,8 +85,23 @@ export function queryStateFromSearch(defaults, search) {
   };
 }
 
-export function queryStateToSearch(query) {
+export function providerFromSearch(search, saved = 'codex') {
+  const value = new URLSearchParams(search).get('provider');
+  return PROVIDERS.has(value) ? value : PROVIDERS.has(saved) ? saved : 'codex';
+}
+
+export function readProviderPreference(storage) {
+  try { const value = storage.getItem(PROVIDER_PREFERENCE_KEY); return PROVIDERS.has(value) ? value : 'codex'; } catch { return 'codex'; }
+}
+
+export function saveProviderPreference(storage, provider) {
+  if (!PROVIDERS.has(provider)) return false;
+  try { storage.setItem(PROVIDER_PREFERENCE_KEY, provider); return true; } catch { return false; }
+}
+
+export function queryStateToSearch(query, provider = 'codex') {
   const params = new URLSearchParams();
+  if (provider !== 'codex') params.set('provider', provider);
   const values = [['range', query.rangeMode], ['week', query.weekValue], ['month', query.monthValue], ['year', query.yearValue], ['start', query.customStart], ['end', query.customEnd], ['q', query.search], ['sort', query.sort], ['timezone', query.timezone]];
   for (const [name, value] of values) if (value && !(name === 'sort' && value === 'recent')) params.set(name, value);
   for (const key of FILTER_KEYS) for (const value of stringList(query.filters?.[key])) params.append(key, value);
@@ -104,8 +122,8 @@ export function applyQueryStateToControls(controls, query) {
   }
 }
 
-export function requestParameters(query, page = {}) {
-  const params = new URLSearchParams({ mode: query.rangeMode, timezone: query.timezone, q: query.search, sort: query.sort, offset: String(page.offset || 0), limit: String(page.limit || 100) });
+export function requestParameters(query, page = {}, provider = 'codex') {
+  const params = new URLSearchParams({ provider, mode: query.rangeMode, timezone: query.timezone, q: query.search, sort: query.sort, offset: String(page.offset || 0), limit: String(page.limit || 100) });
   const period = query.rangeMode === 'week' ? query.weekValue : query.rangeMode === 'month' ? query.monthValue : query.rangeMode === 'year' ? query.yearValue : '';
   if (period) params.set('period', period);
   if (query.rangeMode === 'custom') for (const [name, value] of [['start', query.customStart], ['end', query.customEnd]]) if (value) params.set(name, value);
@@ -125,8 +143,10 @@ export function setFacetOptions(select, values, selected) {
 export function readViewPreferences(storage) {
   try {
     const parsed = JSON.parse(storage.getItem(VIEW_PREFERENCES_KEY) || '{}'); const columns = parsed.visibleColumns && typeof parsed.visibleColumns === 'object' ? parsed.visibleColumns : {};
-    return { unit: UNITS.has(parsed.unit) ? parsed.unit : null, showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null, showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null, trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null, locale: ['en', 'zh-Hant'].includes(parsed.locale) ? parsed.locale : null, density: Object.hasOwn(DENSITY_LIMITS, parsed.density) ? parsed.density : null, visibleColumns: Object.fromEntries(VIEW_COLUMN_KEYS.filter((key) => typeof columns[key] === 'boolean').map((key) => [key, columns[key]])), budgets: Array.isArray(parsed.budgets) ? parsed.budgets.slice(0, 50) : [] };
-  } catch { return { unit: null, showExact: null, showDetails: null, trendMetric: null, locale: null, density: null, visibleColumns: {}, budgets: [] }; }
+    const legacy = Array.isArray(parsed.budgets) ? parsed.budgets.slice(0, 50) : []; const source = parsed.budgetsByProvider && typeof parsed.budgetsByProvider === 'object' ? parsed.budgetsByProvider : {};
+    const budgetsByProvider = { codex: Array.isArray(source.codex) ? source.codex.slice(0, 50) : legacy, claude: Array.isArray(source.claude) ? source.claude.slice(0, 50) : [] };
+    return { unit: UNITS.has(parsed.unit) ? parsed.unit : null, showExact: typeof parsed.showExact === 'boolean' ? parsed.showExact : null, showDetails: typeof parsed.showDetails === 'boolean' ? parsed.showDetails : null, trendMetric: ['cost', 'tokens'].includes(parsed.trendMetric) ? parsed.trendMetric : null, locale: ['en', 'zh-Hant'].includes(parsed.locale) ? parsed.locale : null, density: Object.hasOwn(DENSITY_LIMITS, parsed.density) ? parsed.density : null, visibleColumns: Object.fromEntries(VIEW_COLUMN_KEYS.filter((key) => typeof columns[key] === 'boolean').map((key) => [key, columns[key]])), budgets: budgetsByProvider.codex, budgetsByProvider };
+  } catch { return { unit: null, showExact: null, showDetails: null, trendMetric: null, locale: null, density: null, visibleColumns: {}, budgets: [], budgetsByProvider: { codex: [], claude: [] } }; }
 }
 
 export function applyViewPreferencesToControls(controls, preferences) {
@@ -136,7 +156,7 @@ export function applyViewPreferencesToControls(controls, preferences) {
 }
 
 export function saveViewPreferences(storage, view) {
-  try { storage.setItem(VIEW_PREFERENCES_KEY, JSON.stringify({ unit: view.unit, showExact: view.showExact, showDetails: view.showDetails, trendMetric: view.trendMetric, locale: view.locale, density: view.density, visibleColumns: view.visibleColumns, budgets: view.budgets })); return true; } catch { return false; }
+  try { storage.setItem(VIEW_PREFERENCES_KEY, JSON.stringify({ unit: view.unit, showExact: view.showExact, showDetails: view.showDetails, trendMetric: view.trendMetric, locale: view.locale, density: view.density, visibleColumns: view.visibleColumns, budgetsByProvider: view.budgetsByProvider || { codex: view.budgets || [], claude: [] } })); return true; } catch { return false; }
 }
 
 export function budgetState(budget, aggregate) {
