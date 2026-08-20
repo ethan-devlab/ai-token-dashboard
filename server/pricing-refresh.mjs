@@ -69,15 +69,14 @@ function pricingRules(baseline, rates, effectiveFrom) {
   });
 }
 
-function refreshedPricing(baseline, fetchedRates, checkedAt) {
+function refreshedPricing(baseline, fetchedRates, checkedAt, sourceUrl) {
   const rates = { ...baseline.rates, ...fetchedRates };
   const updatedAt = utcDate(new Date(checkedAt));
   return createPricing({
+    ...baseline,
     updatedAt,
     checkedAt,
-    currency: baseline.currency,
-    unitTokens: baseline.unitTokens,
-    source: PRICING_PAGE_URL,
+    source: sourceUrl,
     rules: pricingRules(baseline, rates, updatedAt),
   });
 }
@@ -89,6 +88,14 @@ function serialisablePricing(pricing) {
     currency: pricing.currency,
     unitTokens: pricing.unitTokens,
     source: pricing.source,
+    provider: pricing.provider || null,
+    costDisclaimer: pricing.costDisclaimer || null,
+    modifiers: pricing.modifiers ? {
+      usGeoMultiplier: pricing.modifiers.usGeoMultiplier,
+      usGeoPattern: pricing.modifiers.usGeoPattern?.source || null,
+      fastMultiplier: pricing.modifiers.fastMultiplier,
+      fastPattern: pricing.modifiers.fastPattern?.source || null,
+    } : null,
     rules: pricing.rules.map((rule) => ({ id: rule.id, aliases: [...rule.aliases], pattern: rule.pattern, effectiveFrom: rule.effectiveFrom, rates: { ...rule.rates } })),
   };
 }
@@ -99,7 +106,7 @@ function errorCode(error) {
   return 'network';
 }
 
-export function createPricingRefreshService({ baseline, cachePath, fetchImpl = fetch, now = () => new Date(), timeoutMs = 10_000 }) {
+export function createPricingRefreshService({ baseline, cachePath, fetchImpl = fetch, now = () => new Date(), timeoutMs = 10_000, documentUrl = PRICING_DOCUMENT_URL, sourceUrl = PRICING_PAGE_URL, parseDocument = parseStandardPricingMarkdown, userAgent = 'codex-token-dashboard/2.0' }) {
   let pricing = baseline;
   let initialized = false;
   let initializePromise = null;
@@ -138,7 +145,7 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
         const stored = JSON.parse(await readFile(cachePath, 'utf8'));
         if (stored?.version !== 1 || !stored.pricing) throw new Error('Unsupported pricing cache.');
         const cached = createPricing(stored.pricing);
-        if (cached.source !== PRICING_PAGE_URL) throw new Error('Unexpected pricing source.');
+        if (cached.source !== sourceUrl) throw new Error('Unexpected pricing source.');
         pricing = cached;
         lastAutomaticAttemptDate = typeof stored.lastAutomaticAttemptDate === 'string' ? stored.lastAutomaticAttemptDate : null;
         lastCheckedAt = typeof stored.lastCheckedAt === 'string' ? stored.lastCheckedAt : cached.checkedAt || null;
@@ -154,7 +161,7 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
 
   function status() {
     return {
-      source: PRICING_PAGE_URL,
+      source: sourceUrl,
       cadence: 'daily',
       updating: Boolean(refreshPromise),
       lastAutomaticAttemptDate,
@@ -180,8 +187,8 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetchImpl(PRICING_DOCUMENT_URL, {
-          headers: { Accept: 'text/markdown', 'User-Agent': 'codex-token-dashboard/2.0' },
+        const response = await fetchImpl(documentUrl, {
+          headers: { Accept: 'text/markdown', 'User-Agent': userAgent },
           signal: controller.signal,
         });
         if (!response.ok) throw new PricingRefreshError('http', `Pricing source returned HTTP ${response.status}.`);
@@ -190,8 +197,8 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
         if (contentLength > MAX_DOCUMENT_BYTES) throw new PricingRefreshError('invalid-source', 'The pricing document is too large.');
         const markdown = await response.text();
         if (Buffer.byteLength(markdown) > MAX_DOCUMENT_BYTES) throw new PricingRefreshError('invalid-source', 'The pricing document is too large.');
-        const fetchedRates = parseStandardPricingMarkdown(markdown);
-        const next = refreshedPricing(pricing, fetchedRates, checkedAt);
+        const fetchedRates = parseDocument(markdown);
+        const next = refreshedPricing(pricing, fetchedRates, checkedAt, sourceUrl);
         const changedModels = Object.keys(fetchedRates).filter((id) => JSON.stringify(pricing.rates[id]) !== JSON.stringify(next.rates[id])).sort();
         pricing = next;
         lastSuccessfulAt = checkedAt;

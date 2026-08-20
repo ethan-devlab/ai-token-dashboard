@@ -3,25 +3,26 @@ import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 import { Worker } from 'node:worker_threads';
+import { addUsage, sessionKey, USAGE_KEYS, zeroUsage } from './usage.mjs';
 
-const ZERO_USAGE = Object.freeze({ inputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0, uncachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0 });
+const ZERO_USAGE = Object.freeze(zeroUsage());
 
 function number(value) { return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0; }
 function usage(raw = {}) {
   const inputTokens = number(raw.input_tokens ?? raw.inputTokens);
   const cachedInputTokens = number(raw.cached_input_tokens ?? raw.cache_read_input_tokens ?? raw.cachedInputTokens);
   const outputTokens = number(raw.output_tokens ?? raw.outputTokens);
-  return { inputTokens, cachedInputTokens, cacheWriteTokens: number(raw.cache_write_tokens ?? raw.cacheWriteTokens), uncachedInputTokens: Math.max(0, inputTokens - cachedInputTokens), outputTokens, reasoningOutputTokens: number(raw.reasoning_output_tokens ?? raw.reasoningOutputTokens), totalTokens: number(raw.total_tokens ?? raw.totalTokens) || inputTokens + outputTokens };
+  return { inputTokens, cachedInputTokens, cacheWriteTokens: number(raw.cache_write_tokens ?? raw.cacheWriteTokens), cacheWrite5mTokens: 0, cacheWrite1hTokens: 0, uncachedInputTokens: Math.max(0, inputTokens - cachedInputTokens), outputTokens, reasoningOutputTokens: number(raw.reasoning_output_tokens ?? raw.reasoningOutputTokens), totalTokens: number(raw.total_tokens ?? raw.totalTokens) || inputTokens + outputTokens };
 }
-function add(left, right) { const result = {}; for (const key of Object.keys(ZERO_USAGE)) result[key] = left[key] + right[key]; return result; }
+function add(left, right) { return addUsage({ ...left }, right); }
 function delta(current, previous) {
   const inputTokens = Math.max(0, current.inputTokens - previous.inputTokens);
   const cachedInputTokens = Math.max(0, current.cachedInputTokens - previous.cachedInputTokens);
   const outputTokens = Math.max(0, current.outputTokens - previous.outputTokens);
   const reported = current.totalTokens - previous.totalTokens;
-  return { inputTokens, cachedInputTokens, cacheWriteTokens: Math.max(0, current.cacheWriteTokens - previous.cacheWriteTokens), uncachedInputTokens: Math.max(0, inputTokens - cachedInputTokens), outputTokens, reasoningOutputTokens: Math.max(0, current.reasoningOutputTokens - previous.reasoningOutputTokens), totalTokens: reported > 0 ? reported : inputTokens + outputTokens, reportedTotalInvalid: reported < 0 };
+  return { inputTokens, cachedInputTokens, cacheWriteTokens: Math.max(0, current.cacheWriteTokens - previous.cacheWriteTokens), cacheWrite5mTokens: 0, cacheWrite1hTokens: 0, uncachedInputTokens: Math.max(0, inputTokens - cachedInputTokens), outputTokens, reasoningOutputTokens: Math.max(0, current.reasoningOutputTokens - previous.reasoningOutputTokens), totalTokens: reported > 0 ? reported : inputTokens + outputTokens, reportedTotalInvalid: reported < 0 };
 }
-function zero(value) { return Object.keys(ZERO_USAGE).every((key) => value[key] === 0); }
+function zero(value) { return USAGE_KEYS.every((key) => value[key] === 0); }
 function timestamp(event) {
   const value = event?.timestamp ?? event?.created_at ?? event?.createdAt ?? event?.payload?.timestamp;
   const parsed = value ? Date.parse(value) : NaN;
@@ -104,7 +105,7 @@ export async function parseSessionFile(filePath, relativePath) {
   }
   accepted.sort((left, right) => left.sequence - right.sequence);
   const total = accepted.reduce((sum, item) => add(sum, item.usage), { ...ZERO_USAGE });
-  return { file: relativePath, sessionKey: Buffer.from(relativePath).toString('base64url'), sessionId: metadata.id || path.basename(filePath, path.extname(filePath)), ...metadata, model: metadata.model || currentModel, firstTimestamp, lastTimestamp, modifiedAt: fileStat.mtime.toISOString(), sizeBytes: fileStat.size, lineCount, invalidLineCount, tokenCountEventCount: diagnostics.cumulativeSeen, duplicateTokenCountEventCount: diagnostics.duplicate, cumulativeResetCount: diagnostics.fullReset + diagnostics.partialReset, turnUsageEventCount: diagnostics.turnSeen, usageSource: diagnostics.cumulativeSeen ? 'reconciled' : diagnostics.turnSeen ? 'turn' : 'not_found', usage: total, usageEvents: accepted, reconciliation: diagnostics };
+  return { provider: 'codex', executionType: 'main', parentSessionKey: null, agentId: null, file: relativePath, sessionKey: sessionKey('codex', relativePath), sessionId: metadata.id || path.basename(filePath, path.extname(filePath)), ...metadata, model: metadata.model || currentModel, firstTimestamp, lastTimestamp, modifiedAt: fileStat.mtime.toISOString(), sizeBytes: fileStat.size, lineCount, invalidLineCount, tokenCountEventCount: diagnostics.cumulativeSeen, duplicateTokenCountEventCount: diagnostics.duplicate, cumulativeResetCount: diagnostics.fullReset + diagnostics.partialReset, turnUsageEventCount: diagnostics.turnSeen, usageSource: diagnostics.cumulativeSeen ? 'reconciled' : diagnostics.turnSeen ? 'turn' : 'not_found', usage: total, usageEvents: accepted, reconciliation: diagnostics };
 }
 
 async function discover(root, maxFiles) {
@@ -128,9 +129,9 @@ async function discover(root, maxFiles) {
   return files;
 }
 
-function parseBatchInWorker(entries) {
+function parseBatchInWorker(entries, provider) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./session-parser-worker.mjs', import.meta.url), { workerData: { entries } });
+    const worker = new Worker(new URL('./session-parser-worker.mjs', import.meta.url), { workerData: { entries, provider } });
     let settled = false;
     const fail = (error) => {
       if (settled) return;
@@ -147,14 +148,14 @@ function parseBatchInWorker(entries) {
   });
 }
 
-async function parseChangedEntries(entries, concurrency) {
+async function parseChangedEntries(entries, concurrency, provider) {
   if (!entries.length) return [];
   const batches = Array.from({ length: Math.min(concurrency, entries.length) }, () => []);
   entries.forEach((entry, index) => batches[index % batches.length].push({ entry, index }));
-  return (await Promise.all(batches.map(parseBatchInWorker))).flat().sort((left, right) => left.index - right.index);
+  return (await Promise.all(batches.map((batch) => parseBatchInWorker(batch, provider)))).flat().sort((left, right) => left.index - right.index);
 }
 
-export function createSessionIndex({ sessionsDirectory, maxFiles, parseConcurrency, pricing, now = () => new Date() }) {
+export function createSessionIndex({ provider = 'codex', sessionsDirectory, maxFiles, parseConcurrency, pricing, now = () => new Date() }) {
   let index = new Map();
   const currentPricing = () => typeof pricing === 'function' ? pricing() : pricing;
   return Object.freeze({
@@ -172,7 +173,7 @@ export function createSessionIndex({ sessionsDirectory, maxFiles, parseConcurren
       scan.deleted = [...index.keys()].filter((key) => !next.has(key) && !changed.some((entry) => entry.relativePath === key)).length;
       const parsingStarted = Date.now();
       let parsed;
-      try { parsed = await parseChangedEntries(changed, parseConcurrency); }
+      try { parsed = await parseChangedEntries(changed, parseConcurrency, provider); }
       catch (error) { throw new Error(`Session parser worker failed: ${error instanceof Error ? error.message : String(error)}`); }
       scan.parseDurationMs = Date.now() - parsingStarted;
       scan.failed = parsed.filter((item) => item.error).length;
@@ -182,7 +183,7 @@ export function createSessionIndex({ sessionsDirectory, maxFiles, parseConcurren
       const totals = sessions.reduce((sum, session) => add(sum, session.usage), { ...ZERO_USAGE });
       scan.aggregateDurationMs = Date.now() - aggregateStarted;
       index = next;
-      return { generatedAt: now().toISOString(), durationMs: scan.discoveryDurationMs + scan.parseDurationMs + scan.aggregateDurationMs, sessionsDirectory, scannedFileCount: discovered.length, parsedSessionCount: sessions.length, maxFiles, truncated: discovered.length >= maxFiles, totals, pricing: currentPricing(), sessions, errors: parsed.filter((item) => item.error).map((item) => ({ file: item.entry.relativePath, message: item.error })), scan };
+      return { provider, generatedAt: now().toISOString(), durationMs: scan.discoveryDurationMs + scan.parseDurationMs + scan.aggregateDurationMs, sessionsDirectory, scannedFileCount: discovered.length, parsedSessionCount: sessions.length, maxFiles, truncated: discovered.length >= maxFiles, totals, pricing: currentPricing(), sessions, errors: parsed.filter((item) => item.error).map((item) => ({ file: item.entry.relativePath, message: item.error })), scan };
     },
   });
 }

@@ -2,8 +2,9 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const source = require('./pricing.json');
+const claudeSource = require('./claude-pricing.json');
 
-const RATE_FIELDS = Object.freeze(['input', 'cachedInput', 'cacheWrite', 'output']);
+const RATE_FIELDS = Object.freeze(['input', 'cachedInput', 'cacheWrite', 'cacheWrite5m', 'cacheWrite1h', 'output']);
 
 function dateValue(value) {
   const parsed = Date.parse(value);
@@ -43,7 +44,27 @@ export function createPricing(pricing) {
     return Object.freeze({ id: raw.id, aliases: Object.freeze(raw.aliases.map((alias) => String(alias).toLowerCase())), pattern: raw.pattern, matcher, effectiveFrom: raw.effectiveFrom, effectiveFromMs: dateValue(raw.effectiveFrom), rates: Object.freeze(rates) });
   });
   if (!rules.length) throw new Error('Pricing must contain at least one rule.');
-  return Object.freeze({ ...pricing, rules: Object.freeze(rules), rates: freezeRates(Object.fromEntries(rules.map((rule) => [rule.id, rule.rates]))) });
+  const modifiers = pricing.modifiers && typeof pricing.modifiers === 'object'
+    ? Object.freeze({
+      usGeoMultiplier: finiteMultiplier(pricing.modifiers.usGeoMultiplier),
+      usGeoPattern: optionalPattern(pricing.modifiers.usGeoPattern),
+      fastMultiplier: finiteMultiplier(pricing.modifiers.fastMultiplier),
+      fastPattern: optionalPattern(pricing.modifiers.fastPattern),
+    })
+    : null;
+  return Object.freeze({ ...pricing, modifiers, rules: Object.freeze(rules), rates: freezeRates(Object.fromEntries(rules.map((rule) => [rule.id, rule.rates]))) });
+}
+
+function finiteMultiplier(value) {
+  if (value == null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) throw new Error('Invalid pricing multiplier.');
+  return value;
+}
+
+function optionalPattern(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string' || !value.startsWith('^')) throw new Error('Invalid pricing modifier pattern.');
+  try { return new RegExp(value, 'i'); } catch { throw new Error('Invalid pricing modifier pattern.'); }
 }
 
 function freezeRates(rates) {
@@ -61,3 +82,4 @@ export function matchPricingRule(pricing, model, timestamp) {
 }
 
 export const PRICING = createPricing(source);
+export const CLAUDE_PRICING = createPricing(claudeSource);

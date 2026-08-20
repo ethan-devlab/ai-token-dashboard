@@ -9,6 +9,10 @@ import { parseEnv, readRuntimeConfig } from '../server/config.mjs';
 import { createPricing, matchPricingRule, PRICING } from '../server/pricing.mjs';
 import { createPricingRefreshService, parseStandardPricingMarkdown } from '../server/pricing-refresh.mjs';
 import { createSessionIndex, parseSessionFile } from '../server/session-index.mjs';
+import { parseClaudeSessionFile } from '../server/claude-session.mjs';
+import { CLAUDE_PRICING } from '../server/pricing.mjs';
+import { parseClaudePricingMarkdown } from '../server/claude-pricing-refresh.mjs';
+import { calculateCost } from '../server/dashboard-data.mjs';
 import { saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
 
@@ -84,6 +88,8 @@ test('codex-auto-review pricing leaves unsupported cache components unavailable'
     input: 2.5,
     cachedInput: null,
     cacheWrite: null,
+    cacheWrite5m: null,
+    cacheWrite1h: null,
     output: 15,
   });
 });
@@ -133,7 +139,7 @@ test('pricing refresh runs automatically once per UTC day across restarts and ma
     await service.refresh({ manual: true });
     await service.refresh({ manual: true });
     assert.equal(fetchCalls, 3);
-    assert.deepEqual(service.current().rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12 });
+    assert.deepEqual(service.current().rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, cacheWrite5m: null, cacheWrite1h: null, output: 12 });
     assert.deepEqual(service.current().rates['codex-auto-review'], PRICING.rates['codex-auto-review']);
 
     currentTime = new Date('2026-08-07T10:00:00Z');
@@ -269,4 +275,56 @@ test('session index reconciles observations and incrementally reuses an unchange
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('Claude session parser deduplicates responses and separates cache durations without exposing content', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'local-ai-dashboard-claude-parser-'));
+  try {
+    const relativePath = 'workspace/session-id/subagents/agent-example.jsonl';
+    const file = path.join(root, 'agent-example.jsonl');
+    const shared = { type: 'assistant', sessionId: 'session-id', cwd: 'C:/private/workspace', version: '2.1.0', entrypoint: 'cli', timestamp: '2026-08-18T10:00:00Z' };
+    await writeFile(file, [
+      JSON.stringify({ ...shared, message: { id: 'message-1', model: 'claude-opus-5', content: 'must-not-leak', usage: { input_tokens: 10, output_tokens: 2, cache_read_input_tokens: 20, cache_creation_input_tokens: 70, cache_creation: { ephemeral_5m_input_tokens: 30, ephemeral_1h_input_tokens: 40 }, output_tokens_details: { thinking_tokens: 1 }, inference_geo: 'global', speed: 'standard', service_tier: 'standard' } } }),
+      JSON.stringify({ ...shared, timestamp: '2026-08-18T10:00:01Z', message: { id: 'message-1', model: 'claude-opus-5', content: 'final-secret', usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 20, cache_creation: { ephemeral_5m_input_tokens: 30, ephemeral_1h_input_tokens: 40 }, output_tokens_details: { thinking_tokens: 2 }, inference_geo: 'global', speed: 'standard', service_tier: 'standard', server_tool_use: { web_search_requests: 3 } } } }),
+    ].join('\n'));
+
+    const session = await parseClaudeSessionFile(file, relativePath);
+
+    assert.equal(session.reconciliation.duplicate, 1);
+    assert.equal(session.usageEvents.length, 1);
+    assert.deepEqual(session.usage, { inputTokens: 100, cachedInputTokens: 20, cacheWriteTokens: 70, cacheWrite5mTokens: 30, cacheWrite1hTokens: 40, uncachedInputTokens: 10, outputTokens: 5, reasoningOutputTokens: 2, totalTokens: 105 });
+    assert.equal(session.executionType, 'subagent');
+    assert.equal(session.agentId, 'agent-example');
+    assert.ok(session.parentSessionKey);
+    assert.equal(session.usageEvents[0].serverToolUse.web_search_requests, 3);
+    assert.doesNotMatch(JSON.stringify(session), /must-not-leak|final-secret/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const claudePricingMarkdown = `# Pricing
+
+| Model | Base Input Tokens | 5m Cache Writes | 1h Cache Writes | Cache Hits & Refreshes | Output Tokens |
+| --- | --- | --- | --- | --- | --- |
+| Claude Opus 5 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
+| Claude Opus 4.8 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
+| Claude Opus 4.7 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
+| Claude Opus 4.6 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |
+| Claude Sonnet 5 | $2 / MTok | $2.50 / MTok | $4 / MTok | $0.20 / MTok | $10 / MTok |
+| Claude Sonnet 4.6 | $3 / MTok | $3.75 / MTok | $6 / MTok | $0.30 / MTok | $15 / MTok |
+| Claude Sonnet 4.5 | $3 / MTok | $3.75 / MTok | $6 / MTok | $0.30 / MTok | $15 / MTok |
+| Claude Haiku 4.5 | $1 / MTok | $1.25 / MTok | $2 / MTok | $0.10 / MTok | $5 / MTok |
+`;
+
+test('Claude pricing parser and cost calculator preserve cache duration and explicit modifiers', () => {
+  const rates = parseClaudePricingMarkdown(claudePricingMarkdown);
+  assert.deepEqual(rates['claude-sonnet-5'], { input: 2, cachedInput: 0.2, cacheWrite: null, cacheWrite5m: 2.5, cacheWrite1h: 4, output: 10 });
+  const baseUsage = { inputTokens: 1_000_000, uncachedInputTokens: 1_000_000, cachedInputTokens: 0, cacheWriteTokens: 0, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 1_000_000 };
+  const explicit = calculateCost(CLAUDE_PRICING, [{ model: 'claude-opus-5', timestamp: '2026-08-18T00:00:00Z', usage: baseUsage, pricingModifiers: { inferenceGeo: 'us', speed: 'fast', serviceTier: 'standard' } }]);
+  assert.equal(explicit.total, 11);
+  assert.equal(explicit.unknownModifiers.size, 0);
+  const unknown = calculateCost(CLAUDE_PRICING, [{ model: 'claude-opus-5', timestamp: '2026-08-18T00:00:00Z', usage: baseUsage, pricingModifiers: { inferenceGeo: 'not_available', speed: 'standard', serviceTier: 'standard' } }]);
+  assert.equal(unknown.total, 5);
+  assert.deepEqual([...unknown.unknownModifiers], ['claude-opus-5:inferenceGeo=not_available']);
 });
