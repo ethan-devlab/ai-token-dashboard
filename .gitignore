@@ -1,6 +1,7 @@
 # Local runtime configuration
 .env
 .pricing-cache.json
+.claude-pricing-cache.json
 
 # Local orchestration and code-index artifacts
 .omo/

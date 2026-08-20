@@ -7,6 +7,7 @@ export const SETTINGS_KEYS = Object.freeze([
   'HOST',
   'PORT',
   'CODEX_SESSIONS_DIR',
+  'CLAUDE_SESSIONS_DIR',
   'MAX_FILES',
   'PARSE_CONCURRENCY',
   'ALLOW_REMOTE',
@@ -45,6 +46,7 @@ export function settingsPayload(localConfig, runtimeConfig) {
       HOST: settingValue(localConfig, runtimeConfig, 'HOST', (config) => config.host),
       PORT: settingValue(localConfig, runtimeConfig, 'PORT', (config) => String(config.port)),
       CODEX_SESSIONS_DIR: settingValue(localConfig, runtimeConfig, 'CODEX_SESSIONS_DIR', (config) => config.sessionsDirectory),
+      CLAUDE_SESSIONS_DIR: settingValue(localConfig, runtimeConfig, 'CLAUDE_SESSIONS_DIR', (config) => config.claudeSessionsDirectory),
       MAX_FILES: settingValue(localConfig, runtimeConfig, 'MAX_FILES', (config) => String(config.maxFiles)),
       PARSE_CONCURRENCY: settingValue(localConfig, runtimeConfig, 'PARSE_CONCURRENCY', (config) => String(config.parseConcurrency)),
       ALLOW_REMOTE: settingValue(localConfig, runtimeConfig, 'ALLOW_REMOTE', (config) => config.allowRemote ? '1' : '0'),
@@ -63,7 +65,7 @@ export function normalizeSettings(input) {
   if (keys.length !== SETTINGS_KEYS.length || keys.some((key) => !SETTINGS_KEYS.includes(key))) throw invalid('Unexpected settings payload.');
 
   const values = Object.fromEntries(SETTINGS_KEYS.map((key) => [key, requiredString(input, key)]));
-  if (!values.HOST || !values.CODEX_SESSIONS_DIR) throw invalid('HOST and CODEX_SESSIONS_DIR are required.');
+  if (!values.HOST || !values.CODEX_SESSIONS_DIR || !values.CLAUDE_SESSIONS_DIR) throw invalid('HOST and provider session directories are required.');
   values.ALLOW_REMOTE = flagValue(values.ALLOW_REMOTE, 'ALLOW_REMOTE');
   values.EXPOSE_FULL_PATHS = flagValue(values.EXPOSE_FULL_PATHS, 'EXPOSE_FULL_PATHS');
   values.AUTO_REFRESH = flagValue(values.AUTO_REFRESH, 'AUTO_REFRESH');

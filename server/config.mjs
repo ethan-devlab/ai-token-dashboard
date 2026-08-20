@@ -67,11 +67,16 @@ export function readRuntimeConfig({ environment = process.env, localConfig = {} 
   if (exposeFullPaths && !isLoopbackHost(host)) {
     throw new Error('EXPOSE_FULL_PATHS=1 requires a loopback HOST.');
   }
-  const defaultSessionsDirectory = path.join(os.homedir(), '.codex', 'sessions');
+  const defaultCodexSessionsDirectory = path.join(os.homedir(), '.codex', 'sessions');
+  const defaultClaudeSessionsDirectory = path.join(os.homedir(), '.claude', 'projects');
+  const codexSessionsDirectory = path.resolve(value(environment, localConfig, 'CODEX_SESSIONS_DIR', defaultCodexSessionsDirectory));
+  const claudeSessionsDirectory = path.resolve(value(environment, localConfig, 'CLAUDE_SESSIONS_DIR', defaultClaudeSessionsDirectory));
   return Object.freeze({
     host,
     port,
-    sessionsDirectory: path.resolve(value(environment, localConfig, 'CODEX_SESSIONS_DIR', defaultSessionsDirectory)),
+    sessionsDirectory: codexSessionsDirectory,
+    codexSessionsDirectory,
+    claudeSessionsDirectory,
     maxFiles: integer(value(environment, localConfig, 'MAX_FILES', '10000'), 'MAX_FILES', 1, 100_000),
     parseConcurrency,
     allowRemote,

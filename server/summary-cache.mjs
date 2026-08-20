@@ -45,6 +45,7 @@ export function createSummaryCache(loader, now = () => new Date()) {
   return Object.freeze({
     get,
     refresh,
+    initialized: () => Boolean(snapshot),
     status: () => snapshot ? scanMetadata(snapshot, Boolean(refreshPromise)) : {
       scannedAt: null,
       snapshotVersion: 0,

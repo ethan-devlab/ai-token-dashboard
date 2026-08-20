@@ -193,7 +193,7 @@ test('settings persistence validates before atomically replacing the local env f
   const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-settings-'));
   const envPath = path.join(directory, '.env');
   const values = {
-    HOST: '127.0.0.1', PORT: '3344', CODEX_SESSIONS_DIR: directory, MAX_FILES: '100', PARSE_CONCURRENCY: '2',
+    HOST: '127.0.0.1', PORT: '3344', CODEX_SESSIONS_DIR: directory, CLAUDE_SESSIONS_DIR: directory, MAX_FILES: '100', PARSE_CONCURRENCY: '2',
     ALLOW_REMOTE: '0', EXPOSE_FULL_PATHS: '0', AUTO_REFRESH: '1', AUTO_REFRESH_DEBOUNCE_MS: '250', UPDATE_REPOSITORY: 'owner/repo',
   };
   try {

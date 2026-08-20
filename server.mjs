@@ -1,16 +1,15 @@
 import http from 'node:http';
-import { watch } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath, URL } from 'node:url';
 import { createRequire } from 'node:module';
 import { buildDashboardPayload, buildExport, buildSessionDetail, buildSessionsPayload } from './server/dashboard-data.mjs';
+import { createClaudePricingRefreshService } from './server/claude-pricing-refresh.mjs';
 import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.mjs';
-import { PRICING } from './server/pricing.mjs';
+import { CLAUDE_PRICING, PRICING } from './server/pricing.mjs';
 import { createPricingRefreshService } from './server/pricing-refresh.mjs';
-import { createSessionIndex } from './server/session-index.mjs';
-import { createSummaryCache } from './server/summary-cache.mjs';
+import { createProviderRegistry } from './server/provider-registry.mjs';
 import { saveSettings, settingsPayload } from './server/settings.mjs';
 import { resolveRange } from './server/timezone.mjs';
 import { createUpdateChecker } from './server/update-checker.mjs';
@@ -22,10 +21,12 @@ let localConfig = readEnvFile(ENV_PATH);
 const CONFIG = readRuntimeConfig({ localConfig });
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
-const pricingService = createPricingRefreshService({ baseline: PRICING, cachePath: path.join(APP_DIR, '.pricing-cache.json') });
-await pricingService.initialize();
-const index = createSessionIndex({ sessionsDirectory: CONFIG.sessionsDirectory, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, pricing: () => pricingService.current() });
-const summaryCache = createSummaryCache(() => index.refresh());
+const pricingServices = Object.freeze({
+  codex: createPricingRefreshService({ baseline: PRICING, cachePath: path.join(APP_DIR, '.pricing-cache.json') }),
+  claude: createClaudePricingRefreshService({ baseline: CLAUDE_PRICING, cachePath: path.join(APP_DIR, '.claude-pricing-cache.json') }),
+});
+await Promise.all(Object.values(pricingServices).map((service) => service.initialize()));
+const providerRegistry = createProviderRegistry({ config: CONFIG, pricingServices });
 const updateChecker = createUpdateChecker({ repository: CONFIG.updateRepository, currentVersion: CURRENT_VERSION });
 const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const API_CSP = "default-src 'none'; frame-ancestors 'none'";
@@ -55,7 +56,7 @@ function requestContext(requestUrl) {
   let range;
   try { range = resolveRange({ mode, fromMs, toMs, period, start, end, timezone: requestUrl.searchParams.get('timezone') || undefined }); }
   catch (error) { if (error?.code === 'INVALID_TIMEZONE' || error?.code === 'INVALID_RANGE') throw new ApiError(400, error.code, error.message); throw error; }
-  return { range, q, sort, offset: parseInteger(requestUrl.searchParams.get('offset'), 'offset', 0, 1_000_000), limit: parseInteger(requestUrl.searchParams.get('limit'), 'limit', 100, 200), filters: { models: parseList(requestUrl.searchParams, 'models'), workspaces: parseList(requestUrl.searchParams, 'workspaces'), pricingStatus: parseList(requestUrl.searchParams, 'pricingStatus'), usageSource: parseList(requestUrl.searchParams, 'usageSource'), cliVersion: parseList(requestUrl.searchParams, 'cliVersion'), originator: parseList(requestUrl.searchParams, 'originator'), quality: parseList(requestUrl.searchParams, 'quality') } };
+  return { range, q, sort, offset: parseInteger(requestUrl.searchParams.get('offset'), 'offset', 0, 1_000_000), limit: parseInteger(requestUrl.searchParams.get('limit'), 'limit', 100, 200), filters: { models: parseList(requestUrl.searchParams, 'models'), workspaces: parseList(requestUrl.searchParams, 'workspaces'), pricingStatus: parseList(requestUrl.searchParams, 'pricingStatus'), usageSource: parseList(requestUrl.searchParams, 'usageSource'), cliVersion: parseList(requestUrl.searchParams, 'cliVersion'), originator: parseList(requestUrl.searchParams, 'originator'), executionType: parseList(requestUrl.searchParams, 'executionType'), quality: parseList(requestUrl.searchParams, 'quality') } };
 }
 function headers(contentType, length, csp, id, attachment = null) { return { 'Content-Type': contentType, 'Content-Length': length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': csp, 'X-Request-Id': id, ...(attachment ? { 'Content-Disposition': attachment } : {}) }; }
 function json(res, status, value, id) { const body = JSON.stringify(value); res.writeHead(status, headers('application/json; charset=utf-8', Buffer.byteLength(body), API_CSP, id)); res.end(body); }
@@ -96,42 +97,52 @@ async function serveStatic(pathname, res, id) {
   res.writeHead(200, headers(contentType, body.length, contentType.startsWith('text/html') ? PAGE_CSP : API_CSP, id)); res.end(body); return true;
 }
 function options() { return { exposeFullPaths: CONFIG.exposeFullPaths }; }
-function watcherMetadata() { return { enabled: CONFIG.autoRefresh, status: watcherState, debounceMs: CONFIG.autoRefreshDebounceMs }; }
-function currentSummary(summary) { const pricing = pricingService.current(); return summary.pricing === pricing ? summary : { ...summary, pricing }; }
-function withPricingStatus(payload) { return { ...payload, pricing: { ...payload.pricing, refresh: pricingService.status() } }; }
-function dashboardPayload(snapshot, context, scan = snapshot.metadata) { return withPricingStatus({ ...buildDashboardPayload(currentSummary(snapshot.summary), context, scan, options()), watcher: watcherMetadata() }); }
-function v1Summary(summary, scan, context) { const current = currentSummary(summary); const dashboard = buildDashboardPayload(current, context, scan, options()); return { deprecated: true, generatedAt: current.generatedAt, durationMs: current.durationMs, scannedFileCount: current.scannedFileCount, parsedSessionCount: current.parsedSessionCount, maxFiles: current.maxFiles, truncated: current.truncated, totals: current.totals, pricing: { ...dashboard.pricing, refresh: pricingService.status() }, sessions: dashboard.sessions, errors: current.errors.map((item) => ({ file: path.basename(item.file), message: 'Session file could not be parsed.' })), scan }; }
-const startedAt = Date.now();
-let watcher = null;
-let watcherTimer = null;
-let pricingTimer = null;
-let watcherState = CONFIG.autoRefresh ? 'starting' : 'disabled';
-function startWatcher() {
-  if (!CONFIG.autoRefresh) return;
-  try { watcher = watch(CONFIG.sessionsDirectory, { recursive: false }, () => { clearTimeout(watcherTimer); watcherTimer = setTimeout(() => { summaryCache.refresh().catch(() => undefined); }, CONFIG.autoRefreshDebounceMs); }); watcher.on('error', () => { watcherState = 'failed'; }); watcherState = 'watching'; }
-  catch { watcherState = 'failed'; }
+function providerId(requestUrl) {
+  const id = requestUrl.searchParams.get('provider') || 'codex';
+  if (!['codex', 'claude'].includes(id)) throw new ApiError(400, 'INVALID_PROVIDER', 'Invalid provider.');
+  return id;
 }
-function schedulePricingRefresh() {
+async function requireProvider(requestUrl) {
+  const provider = providerRegistry.get(providerId(requestUrl));
+  const availability = await provider.availability();
+  if (!availability.available) throw new ApiError(409, 'PROVIDER_UNAVAILABLE', `${provider.label} sessions directory is unavailable.`);
+  startPricingRefresh(provider);
+  return provider;
+}
+function currentSummary(provider, summary) { const pricing = provider.pricingService.current(); return summary.pricing === pricing ? summary : { ...summary, pricing }; }
+function withPricingStatus(provider, payload) { return { ...payload, provider: provider.id, pricing: { ...payload.pricing, refresh: provider.pricingService.status() } }; }
+function dashboardPayload(provider, snapshot, context, scan = snapshot.metadata) { return withPricingStatus(provider, { ...buildDashboardPayload(currentSummary(provider, snapshot.summary), context, { provider: provider.id, ...scan }, options()), watcher: provider.watcher() }); }
+function v1Summary(provider, summary, scan, context) { const current = currentSummary(provider, summary); const dashboard = buildDashboardPayload(current, context, { provider: provider.id, ...scan }, options()); return { provider: provider.id, deprecated: true, generatedAt: current.generatedAt, durationMs: current.durationMs, scannedFileCount: current.scannedFileCount, parsedSessionCount: current.parsedSessionCount, maxFiles: current.maxFiles, truncated: current.truncated, totals: current.totals, pricing: { ...dashboard.pricing, refresh: provider.pricingService.status() }, sessions: dashboard.sessions, errors: current.errors.map((item) => ({ file: path.basename(item.file), message: 'Session file could not be parsed.' })), scan: { provider: provider.id, ...scan } }; }
+const startedAt = Date.now();
+const pricingTimers = new Map();
+const pricingStarted = new Set();
+function schedulePricingRefresh(provider) {
   const current = new Date();
   const nextUtcDay = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate() + 1, 0, 0, 1);
-  pricingTimer = setTimeout(() => { pricingService.refresh().catch(() => undefined).finally(schedulePricingRefresh); }, Math.max(1_000, nextUtcDay - Date.now()));
-  pricingTimer.unref?.();
+  const timer = setTimeout(() => { provider.pricingService.refresh().catch(() => undefined).finally(() => schedulePricingRefresh(provider)); }, Math.max(1_000, nextUtcDay - Date.now()));
+  timer.unref?.();
+  pricingTimers.set(provider.id, timer);
 }
-function startPricingRefresh() { pricingService.refresh().catch(() => undefined).finally(schedulePricingRefresh); }
+function startPricingRefresh(provider) {
+  if (pricingStarted.has(provider.id)) return;
+  pricingStarted.add(provider.id);
+  provider.pricingService.refresh().catch(() => undefined).finally(() => schedulePricingRefresh(provider));
+}
 const server = http.createServer(async (req, res) => {
   const id = requestId(); const started = Date.now();
   try {
     if (!allowedHost(req.headers.host)) throw new ApiError(400, 'INVALID_HOST', 'Invalid Host header.');
     if (!['GET', 'POST'].includes(req.method || '')) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
     const requestUrl = new URL(req.url || '/', `http://${CONFIG.host}:${CONFIG.port}`);
-    if (req.method === 'GET' && requestUrl.pathname === '/api/summary') { const cached = await summaryCache.get(); json(res, 200, v1Summary(cached.summary, cached.metadata, requestContext(requestUrl)), id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/dashboard') { const cached = await summaryCache.get(); json(res, 200, dashboardPayload(cached, requestContext(requestUrl)), id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/sessions') { const cached = await summaryCache.get(); json(res, 200, withPricingStatus(buildSessionsPayload(currentSummary(cached.summary), requestContext(requestUrl), cached.metadata, options())), id); return; }
-    if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/sessions/')) { const sessionKey = requestUrl.pathname.slice('/api/sessions/'.length); if (!/^[A-Za-z0-9_-]{1,512}$/.test(sessionKey)) throw new ApiError(400, 'INVALID_SESSION_KEY', 'Invalid session key.'); const cached = await summaryCache.get(); const detail = buildSessionDetail(currentSummary(cached.summary), requestContext(requestUrl), sessionKey, options()); if (!detail) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Session not found.'); json(res, 200, { ...detail, scan: cached.metadata }, id); return; }
-    if (req.method === 'POST' && requestUrl.pathname === '/api/refresh') { verifyPost(req); const snapshot = await summaryCache.refresh(); json(res, 200, dashboardPayload(snapshot, requestContext(requestUrl), summaryCache.status()), id); return; }
-    if (req.method === 'POST' && requestUrl.pathname === '/api/pricing/refresh') { verifyPost(req); let result; try { result = await pricingService.refresh({ manual: true }); } catch { throw new ApiError(502, 'PRICING_REFRESH_FAILED', 'Pricing refresh failed; existing prices were retained.'); } const cached = await summaryCache.get(); json(res, 200, { ...dashboardPayload(cached, requestContext(requestUrl)), pricingUpdate: { changedModels: result.changedModels || [] } }, id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/export') { const format = requestUrl.searchParams.get('format') || 'csv-sessions'; if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.'); const cached = await summaryCache.get(); const output = buildExport(format, buildDashboardPayload(currentSummary(cached.summary), { ...requestContext(requestUrl), limit: 200 }, cached.metadata, options())); const fileName = `codex-token-dashboard-${format}.${output.extension}`; res.writeHead(200, headers(output.contentType, Buffer.byteLength(output.body), API_CSP, id, `attachment; filename="${fileName}"`)); res.end(output.body); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const scan = summaryCache.status(); json(res, 200, { version: CURRENT_VERSION, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, snapshot: scan, watcher: watcherState, pricing: pricingService.status(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/providers') { json(res, 200, await providerRegistry.list(), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/summary') { const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); json(res, 200, v1Summary(provider, cached.summary, cached.metadata, requestContext(requestUrl)), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/dashboard') { const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); json(res, 200, dashboardPayload(provider, cached, requestContext(requestUrl)), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/sessions') { const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); json(res, 200, withPricingStatus(provider, buildSessionsPayload(currentSummary(provider, cached.summary), requestContext(requestUrl), { provider: provider.id, ...cached.metadata }, options())), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/sessions/')) { const sessionKey = requestUrl.pathname.slice('/api/sessions/'.length); if (!/^[A-Za-z0-9_-]{1,512}$/.test(sessionKey)) throw new ApiError(400, 'INVALID_SESSION_KEY', 'Invalid session key.'); const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); const detail = buildSessionDetail(currentSummary(provider, cached.summary), requestContext(requestUrl), sessionKey, options()); if (!detail) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Session not found.'); json(res, 200, { ...detail, provider: provider.id, scan: { provider: provider.id, ...cached.metadata } }, id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/refresh') { verifyPost(req); const provider = await requireProvider(requestUrl); const snapshot = await provider.cache.refresh(); json(res, 200, dashboardPayload(provider, snapshot, requestContext(requestUrl), provider.cache.status()), id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/pricing/refresh') { verifyPost(req); const provider = await requireProvider(requestUrl); let result; try { result = await provider.pricingService.refresh({ manual: true }); } catch { throw new ApiError(502, 'PRICING_REFRESH_FAILED', 'Pricing refresh failed; existing prices were retained.'); } const cached = await provider.cache.get(); json(res, 200, { ...dashboardPayload(provider, cached, requestContext(requestUrl)), pricingUpdate: { changedModels: result.changedModels || [] } }, id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/export') { const format = requestUrl.searchParams.get('format') || 'csv-sessions'; if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.'); const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); const output = buildExport(format, buildDashboardPayload(currentSummary(provider, cached.summary), { ...requestContext(requestUrl), limit: 200 }, { provider: provider.id, ...cached.metadata }, options())); const fileName = `local-ai-token-dashboard-${provider.id}-${format}.${output.extension}`; res.writeHead(200, headers(output.contentType, Buffer.byteLength(output.body), API_CSP, id, `attachment; filename="${fileName}"`)); res.end(output.body); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const selectedProvider = providerId(requestUrl); json(res, 200, { version: CURRENT_VERSION, provider: selectedProvider, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, providers: await providerRegistry.diagnostics(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); localConfig = await saveSettings(ENV_PATH, await readJsonBody(req, 16 * 1024)); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/update') { json(res, 200, await updateChecker.check(), id); return; }
@@ -139,5 +150,9 @@ const server = http.createServer(async (req, res) => {
     throw new ApiError(404, 'NOT_FOUND', 'Not found.');
   } catch (failure) { error(res, failure, id); }
 });
-server.on('close', () => { clearTimeout(watcherTimer); clearTimeout(pricingTimer); watcher?.close(); });
-server.listen(CONFIG.port, CONFIG.host, () => { startWatcher(); startPricingRefresh(); console.log(`Codex Token Dashboard: http://${CONFIG.host}:${CONFIG.port}`); console.log(`Reading sessions from: ${CONFIG.sessionsDirectory}`); });
+server.on('close', () => { for (const timer of pricingTimers.values()) clearTimeout(timer); providerRegistry.close(); });
+server.listen(CONFIG.port, CONFIG.host, () => {
+  providerRegistry.startWatchers().catch(() => undefined);
+  startPricingRefresh(providerRegistry.get('codex'));
+  console.log(`Local AI Token Dashboard: http://${CONFIG.host}:${CONFIG.port}`);
+});
