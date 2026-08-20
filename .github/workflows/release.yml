@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 18
       - name: Verify tag and package version
         env:
           TAG: ${{ github.ref_name }}
@@ -38,7 +38,7 @@ jobs:
           mkdir -p release
           git archive --format=zip --prefix="codex-token-dashboard-${TAG}/" --output="release/codex-token-dashboard-${TAG}.zip" "$GITHUB_SHA"
           sha256sum "release/codex-token-dashboard-${TAG}.zip" > release/SHA256SUMS
-          cp docs/migration-v2.md "release/MIGRATION-${TAG}.md"
+          cp docs/migration-v2.1.md "release/MIGRATION-${TAG}.md"
       - name: Attest source archive
         uses: actions/attest@v4
         with:

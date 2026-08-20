@@ -1,9 +1,9 @@
 {
   "name": "codex-token-dashboard",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
-  "description": "Local Codex JSONL token and API-equivalent cost dashboard",
+  "description": "Local Codex and Claude Code token and API-equivalent cost dashboard",
   "scripts": {
     "start": "node server.mjs",
     "check": "node --check server.mjs",
