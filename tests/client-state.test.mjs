@@ -8,6 +8,16 @@ import { projectionLoadState } from '../public/scripts/projection-state.mjs';
 import { createRequestChannels } from '../public/scripts/request-channels.mjs';
 import { applyTableViewPreferences, budgetState, createDashboardState, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
 import { nearestPointIndex } from '../public/scripts/trend.mjs';
+import { countdownParts, formatCountdown, windowLabelKey } from '../public/scripts/account-usage.mjs';
+
+test('account usage countdown and provider window labels remain deterministic', () => {
+  const now = Date.parse('2026-08-24T00:00:00Z');
+  assert.deepEqual(countdownParts('2026-08-25T02:03:04Z', now), { expired: false, days: 1, hours: 2, minutes: 3, seconds: 4 });
+  assert.equal(formatCountdown('2026-08-24T02:03:04Z', (_key, values) => values ? `${values.days}d ${values.time}` : 'unknown', now), '02:03:04');
+  assert.equal(formatCountdown(null, () => 'unknown', now), 'unknown');
+  assert.equal(windowLabelKey({ kind: 'five-hour' }), 'accountUsage.window.fiveHour');
+  assert.equal(windowLabelKey({ id: 'primary', windowSeconds: 604_800 }), 'accountUsage.window.weekly');
+});
 
 test('v2 query state preserves timezone and multi-select filters in the URL', () => {
   const defaults = createDashboardState().query;

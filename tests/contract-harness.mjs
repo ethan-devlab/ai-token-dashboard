@@ -15,12 +15,12 @@ async function port() {
   const address = probe.address(); assert.ok(address && typeof address === 'object'); probe.close(); await once(probe, 'close'); return address.port;
 }
 function start({ serverPort, sessionsDirectory, claudeSessionsDirectory = sessionsDirectory, host = '127.0.0.1', allowRemote = undefined }) {
-  const child = spawn(process.execPath, ['server.mjs'], { cwd: projectRoot, env: { ...process.env, HOST: host, PORT: String(serverPort), CODEX_SESSIONS_DIR: sessionsDirectory, CLAUDE_SESSIONS_DIR: claudeSessionsDirectory, ...(allowRemote == null ? {} : { ALLOW_REMOTE: allowRemote }) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['server.mjs'], { cwd: projectRoot, env: { ...process.env, HOST: host, PORT: String(serverPort), CODEX_HOME: path.join(path.dirname(sessionsDirectory), 'isolated-codex-home'), CLAUDE_CONFIG_DIR: path.join(path.dirname(claudeSessionsDirectory), 'isolated-claude-home'), CODEX_SESSIONS_DIR: sessionsDirectory, CLAUDE_SESSIONS_DIR: claudeSessionsDirectory, ...(allowRemote == null ? {} : { ALLOW_REMOTE: allowRemote }) }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8'); child.stdout.on('data', (chunk) => { output += chunk; }); child.stderr.on('data', (chunk) => { output += chunk; });
   return { child, output: () => output };
 }
 async function stop(server) { if (server.child.exitCode !== null || server.child.signalCode !== null) return; const exited = once(server.child, 'exit'); server.child.kill(); await Promise.race([exited, new Promise((_, reject) => setTimeout(() => reject(new Error(`Server cleanup timed out: ${server.output()}`)), 5_000))]); }
-async function ready(uri) { let last; for (let attempt = 0; attempt < 30; attempt += 1) { try { const response = await fetch(uri); if (response.ok) return response; last = new Error(`Unexpected ${response.status}`); } catch (error) { last = error; } await new Promise((resolve) => setTimeout(resolve, 100)); } throw last; }
+async function ready(uri, options = undefined) { let last; for (let attempt = 0; attempt < 30; attempt += 1) { try { const response = await fetch(uri, options); if (response.ok) return response; last = new Error(`Unexpected ${response.status}`); } catch (error) { last = error; } await new Promise((resolve) => setTimeout(resolve, 100)); } throw last; }
 function assertEnvelope(body, code) { assert.equal(body.error.code, code); assert.match(body.error.requestId, /^[0-9a-f-]{36}$/); }
 
 test('v2 dashboard HTTP contract is redacted, server-authoritative, and same-origin protected', async () => {
@@ -46,6 +46,11 @@ test('v2 dashboard HTTP contract is redacted, server-authoritative, and same-ori
     await ready(`${base}/api/dashboard?mode=all`);
     const providers = await (await fetch(`${base}/api/providers`)).json();
     assert.deepEqual(providers.providers.map(({ id, available }) => ({ id, available })), [{ id: 'codex', available: true }, { id: 'claude', available: true }]);
+    const accountUsage = await (await fetch(`${base}/api/account-usage?provider=codex`)).json();
+    assert.deepEqual(accountUsage, { provider: 'codex', status: 'unavailable', reason: 'not-signed-in', fetchedAt: accountUsage.fetchedAt, windows: [] });
+    assert.equal(JSON.stringify(accountUsage).includes('isolated-codex-home'), false);
+    const blockedAccountUsageRefresh = await fetch(`${base}/api/account-usage/refresh?provider=codex`, { method: 'POST' }); assert.equal(blockedAccountUsageRefresh.status, 403); assertEnvelope(await blockedAccountUsageRefresh.json(), 'INVALID_ORIGIN');
+    const refreshedAccountUsage = await fetch(`${base}/api/account-usage/refresh?provider=codex`, { method: 'POST', headers: { Origin: base } }); assert.equal(refreshedAccountUsage.status, 200); assert.equal((await refreshedAccountUsage.json()).status, 'unavailable');
     const dashboardResponse = await fetch(`${base}/api/dashboard?mode=all&timezone=Asia/Taipei`);
     assert.equal(dashboardResponse.status, 200); assert.equal(dashboardResponse.headers.get('x-content-type-options'), 'nosniff'); assert.equal(dashboardResponse.headers.get('cache-control'), 'no-store');
     const data = await dashboardResponse.json();
@@ -89,4 +94,15 @@ test('server rejects a remote bind without the explicit local configuration opt-
     assert.notEqual(server.child.exitCode, 0);
     assert.match(server.output(), /Non-loopback HOST requires ALLOW_REMOTE=1/);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('account usage endpoint stays disabled when remote bind is explicitly enabled', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-remote-usage-'));
+  let dashboard;
+  try {
+    const serverPort = await port(); dashboard = start({ serverPort, sessionsDirectory: root, host: '0.0.0.0', allowRemote: '1' });
+    await ready(`http://0.0.0.0:${serverPort}/`);
+    const response = await fetch(`http://0.0.0.0:${serverPort}/api/account-usage`);
+    assert.equal(response.status, 403); assertEnvelope(await response.json(), 'ACCOUNT_USAGE_DISABLED');
+  } finally { if (dashboard) await stop(dashboard); await rm(root, { recursive: true, force: true }); }
 });

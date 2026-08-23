@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath, URL } from 'node:url';
 import { createRequire } from 'node:module';
 import { buildDashboardPayload, buildExport, buildSessionDetail, buildSessionsPayload } from './server/dashboard-data.mjs';
+import { createAccountUsageService } from './server/account-usage.mjs';
 import { createClaudePricingRefreshService } from './server/claude-pricing-refresh.mjs';
 import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.mjs';
 import { CLAUDE_PRICING, PRICING } from './server/pricing.mjs';
@@ -28,6 +29,7 @@ const pricingServices = Object.freeze({
 await Promise.all(Object.values(pricingServices).map((service) => service.initialize()));
 const providerRegistry = createProviderRegistry({ config: CONFIG, pricingServices });
 const updateChecker = createUpdateChecker({ repository: CONFIG.updateRepository, currentVersion: CURRENT_VERSION });
+const accountUsageService = createAccountUsageService();
 const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const API_CSP = "default-src 'none'; frame-ancestors 'none'";
 const STATIC_TYPES = Object.freeze({ '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' });
@@ -135,6 +137,8 @@ const server = http.createServer(async (req, res) => {
     if (!['GET', 'POST'].includes(req.method || '')) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
     const requestUrl = new URL(req.url || '/', `http://${CONFIG.host}:${CONFIG.port}`);
     if (req.method === 'GET' && requestUrl.pathname === '/api/providers') { json(res, 200, await providerRegistry.list(), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/account-usage') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'ACCOUNT_USAGE_DISABLED', 'Account usage is disabled in remote mode.'); json(res, 200, await accountUsageService.get(providerId(requestUrl)), id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/account-usage/refresh') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'ACCOUNT_USAGE_DISABLED', 'Account usage is disabled in remote mode.'); verifyPost(req); json(res, 200, await accountUsageService.get(providerId(requestUrl), { refresh: true }), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/summary') { const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); json(res, 200, v1Summary(provider, cached.summary, cached.metadata, requestContext(requestUrl)), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/dashboard') { const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); json(res, 200, dashboardPayload(provider, cached, requestContext(requestUrl)), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/sessions') { const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); json(res, 200, withPricingStatus(provider, buildSessionsPayload(currentSummary(provider, cached.summary), requestContext(requestUrl), { provider: provider.id, ...cached.metadata }, options())), id); return; }
