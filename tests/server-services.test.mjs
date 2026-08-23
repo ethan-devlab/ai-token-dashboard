@@ -15,6 +15,97 @@ import { parseClaudePricingMarkdown } from '../server/claude-pricing-refresh.mjs
 import { calculateCost } from '../server/dashboard-data.mjs';
 import { saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
+import { createAccountUsageService, normalizeClaudeUsage, normalizeCodexUsage } from '../server/account-usage.mjs';
+
+test('account usage normalizes provider windows without exposing credential or account fields', () => {
+  const codex = normalizeCodexUsage({
+    plan_type: 'plus',
+    email: 'private@example.test',
+    rate_limit: {
+      primary_window: { used_percent: 20, limit_window_seconds: 18_000, reset_at: 1_800_000_000 },
+      secondary_window: { used_percent: 60, limit_window_seconds: 604_800, reset_at: 1_800_604_800 },
+    },
+  }, '2026-08-24T00:00:00.000Z');
+  assert.equal(codex.windows[0].kind, 'five-hour');
+  assert.equal(codex.windows[0].remainingPercent, 80);
+  assert.equal(codex.windows[1].kind, 'secondary');
+  assert.equal(JSON.stringify(codex).includes('private@example.test'), false);
+
+  const claude = normalizeClaudeUsage({
+    five_hour: { utilization: 12.5, resets_at: '2026-08-24T05:00:00Z' },
+    seven_day: { utilization: 44, resets_at: '2026-08-30T00:00:00Z' },
+  }, '2026-08-24T00:00:00.000Z', 'pro');
+  assert.deepEqual(claude.windows.map((item) => [item.kind, item.remainingPercent]), [['five-hour', 87.5], ['seven-day', 56]]);
+});
+
+test('account usage reads Codex login credentials server-side and deduplicates cached requests', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'account-usage-codex-'));
+  try {
+    const authPath = path.join(directory, 'auth.json');
+    await writeFile(authPath, JSON.stringify({ tokens: { access_token: 'codex-secret', account_id: 'account-secret' } }));
+    let calls = 0;
+    const service = createAccountUsageService({
+      codexAuthPath: authPath,
+      now: () => Date.parse('2026-08-24T00:00:00Z'),
+      fetchImpl: async (url, options) => {
+        calls += 1;
+        assert.equal(url, 'https://chatgpt.com/backend-api/wham/usage');
+        assert.equal(options.headers.authorization, 'Bearer codex-secret');
+        assert.equal(options.headers['chatgpt-account-id'], 'account-secret');
+        return new Response(JSON.stringify({ plan_type: 'plus', rate_limit: { primary_window: { used_percent: 25, limit_window_seconds: 604_800, reset_at: 1_800_000_000 } } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      },
+    });
+    const [first, second] = await Promise.all([service.get('codex'), service.get('codex')]);
+    assert.equal(calls, 1);
+    assert.equal(first.remainingPercent, undefined);
+    assert.equal(first.windows[0].remainingPercent, 75);
+    assert.deepEqual(first, second);
+    assert.equal(JSON.stringify(first).includes('secret'), false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('account usage refreshes an expired Claude OAuth token and atomically persists the rotation', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'account-usage-claude-'));
+  try {
+    const credentialsPath = path.join(directory, '.credentials.json');
+    await writeFile(credentialsPath, JSON.stringify({ claudeAiOauth: { accessToken: 'expired', refreshToken: 'refresh-secret', expiresAt: 1, scopes: ['user:profile'], subscriptionType: 'max' }, preserved: true }));
+    const urls = [];
+    const service = createAccountUsageService({
+      claudeCredentialsPath: credentialsPath,
+      now: () => Date.parse('2026-08-24T00:00:00Z'),
+      fetchImpl: async (url, options) => {
+        urls.push(url);
+        if (url.endsWith('/v1/oauth/token')) {
+          const body = JSON.parse(options.body);
+          assert.equal(body.refresh_token, 'refresh-secret');
+          return new Response(JSON.stringify({ access_token: 'rotated-secret', refresh_token: 'next-refresh-secret', expires_in: 3600, scope: 'user:profile' }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        assert.equal(options.headers.authorization, 'Bearer rotated-secret');
+        return new Response(JSON.stringify({ five_hour: { utilization: 40, resets_at: '2026-08-24T05:00:00Z' } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      },
+    });
+    const result = await service.get('claude');
+    assert.deepEqual(urls, ['https://platform.claude.com/v1/oauth/token', 'https://api.anthropic.com/api/oauth/usage']);
+    assert.equal(result.windows[0].remainingPercent, 60);
+    assert.equal(result.planType, 'max');
+    const saved = JSON.parse(await readFile(credentialsPath, 'utf8'));
+    assert.equal(saved.claudeAiOauth.accessToken, 'rotated-secret');
+    assert.equal(saved.claudeAiOauth.refreshToken, 'next-refresh-secret');
+    assert.equal(saved.preserved, true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('account usage reports unavailable states without throwing or returning credential data', async () => {
+  const service = createAccountUsageService({ codexAuthPath: path.join(os.tmpdir(), `missing-${Date.now()}.json`) });
+  const result = await service.get('codex');
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.reason, 'not-signed-in');
+  assert.deepEqual(result.windows, []);
+});
 
 test('summary cache reuses its latest successful in-memory snapshot', async () => {
   let calls = 0;
