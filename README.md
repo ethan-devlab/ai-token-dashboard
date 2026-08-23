@@ -34,6 +34,8 @@ Open `http://localhost:3333`. The dashboard is desktop-only and keeps session da
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/providers` | Provider availability without exposing local paths. |
+| `GET /api/account-usage` | Loopback-only, cached login-plan quota windows for the selected provider. |
+| `POST /api/account-usage/refresh` | Loopback-only, same-origin manual quota refresh for the selected provider. |
 | `GET /api/dashboard` | Timezone-aware aggregates, comparison, quality, facets, trend/models, scan state, and first summary-only session page. |
 | `GET /api/sessions` | Filtered and paged session summaries. |
 | `GET /api/sessions/:sessionKey` | Lazy redacted detail with bounded accepted observations. |
@@ -52,7 +54,9 @@ Each provider scans lazily on first use. Range, search, filter, pagination, expo
 
 ## Privacy and pricing
 
-Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. The settings endpoint never accepts arbitrary paths, URLs, or keys, and only writes local configuration after same-origin validation. No JSONL, usage data, CWD, or session metadata is sent to GitHub or OpenAI. GitHub release checking only happens after an explicit UI action.
+Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. The settings endpoint never accepts arbitrary paths, URLs, or keys, and only writes local configuration after same-origin validation. No JSONL, local usage data, CWD, prompt, response, or session metadata is sent to GitHub, OpenAI, or Anthropic. GitHub release checking only happens after an explicit UI action.
+
+The **Login plan usage** panel is available only on a loopback bind. The local server reads the existing Codex or Claude CLI credential file and sends only the provider-required authorization and account context to that provider's fixed official usage endpoint. Tokens, account identifiers, email addresses, and credential paths never enter browser responses, diagnostics, or logs. Results are cached for 60 seconds; **Check again** bypasses that cache. Claude OAuth credentials are refreshed and atomically rotated when required. This is a best-effort service response: unsupported or unavailable provider responses do not affect local JSONL analytics.
 
 Codex and Claude keep independent public-price caches and refresh state. On first use, each provider checks its official pricing Markdown at most once per UTC day; **Update model prices** can refresh the selected provider at any time. A failed or invalid fetch keeps the previous valid prices. The ignored `.pricing-cache.json` and `.claude-pricing-cache.json` contain only public prices and refresh timestamps.
 
@@ -60,7 +64,7 @@ Claude costs are Anthropic API-equivalent token estimates, not Claude Pro or Max
 
 ## Updates and releases
 
-Push a matching `vX.Y.Z` tag to create a source ZIP, `SHA256SUMS`, v2.1 migration notes, and provenance attestation. Verify a downloaded archive before extracting:
+Push a matching `vX.Y.Z` tag to create a source ZIP, `SHA256SUMS`, v2.1 migration notes, and provenance attestation. The release job uses Node.js `24.13.1`, matching the local release runtime used for this project. Verify a downloaded archive before extracting:
 
 ```powershell
 Get-FileHash .\codex-token-dashboard-vX.Y.Z.zip -Algorithm SHA256
