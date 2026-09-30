@@ -3,6 +3,7 @@ export const LOCALE_PREFERENCE_KEY = 'codex-token-dashboard:locale:v1';
 
 const dictionaries = {
   en: {
+    'filters.title': 'Advanced filters',
     'drawer.executionType': 'Execution type', 'drawer.parentSession': 'Parent session',
     'accountUsage.eyebrow': 'LOGIN PLAN USAGE', 'accountUsage.title': 'Remaining usage and reset times', 'accountUsage.refresh': 'Check again', 'accountUsage.loading': 'Reading login-plan usage…', 'accountUsage.available': '{provider} login-plan usage · {plan} · checked {date}', 'accountUsage.fiveHourUnavailable': 'The service did not report a 5-hour window for this account.', 'accountUsage.privacy': 'Credentials are read only by the local server and never sent to the browser. This is a best-effort official-service response, not an estimate from local JSONL.', 'accountUsage.remaining': '{value}% remaining', 'accountUsage.used': '{value}% used', 'accountUsage.resets': 'Resets {date}', 'accountUsage.reset.unknown': 'Reset time not reported', 'accountUsage.reset.now': 'Reset due now', 'accountUsage.countdown.days': '{days}d {time}', 'accountUsage.window.fiveHour': '5-hour usage', 'accountUsage.window.sevenDay': '7-day usage', 'accountUsage.window.sevenDaySonnet': '7-day Sonnet', 'accountUsage.window.sevenDayOpus': '7-day Opus', 'accountUsage.window.weekly': 'Weekly usage', 'accountUsage.window.primary': 'Primary limit', 'accountUsage.window.secondary': 'Secondary limit', 'accountUsage.unavailable.not-signed-in': 'Sign in with the local {provider} CLI to view plan usage.', 'accountUsage.unavailable.auth-expired': 'The {provider} login expired. Sign in again, then check usage.', 'accountUsage.unavailable.network': 'The official usage service could not be reached. Local JSONL analytics remain available.', 'accountUsage.unavailable.rate-limit': 'The official usage service rate limit was reached. Try again later.', 'accountUsage.unavailable.unsupported-response': 'The official service did not return a supported usage format.', 'accountUsage.unavailable.invalid-credentials': 'The local login credential file is invalid. Sign in again with the CLI.', 'accountUsage.unavailable.credential-write-failed': 'Claude refreshed the login, but the rotated credential could not be saved safely.', 'accountUsage.unavailable.service-unavailable': 'Login-plan usage is temporarily unavailable.',
     'provider.label': 'Provider', 'provider.unavailable': '{provider} is unavailable. Set its sessions directory in Settings, then restart the dashboard.', 'provider.listError': 'Could not load provider availability.', 'provider.claude.disclaimer': 'Claude costs are Anthropic API-equivalent token estimates. They are not Pro or Max subscription charges. Tool fees are excluded.', 'provider.claude.footer': 'Claude costs are API-equivalent token estimates, not Pro or Max subscription charges. Web search, code execution, and other tool fees are excluded.', 'provider.cacheWrite5m': '5-minute cache write', 'provider.cacheWrite1h': '1-hour cache write', 'pricing.source.claude': 'Anthropic pricing source', 'v2.filter.executionType': 'Execution type', 'provider.execution.main': 'Main', 'provider.execution.subagent': 'Subagent', 'settings.codexDirectory': 'Codex sessions directory', 'settings.claudeDirectory': 'Claude sessions directory',
@@ -41,6 +42,7 @@ const dictionaries = {
     'price.unavailable': 'Unavailable', 'update.disabled': 'Update checks are disabled. Set UPDATE_REPOSITORY to owner/repo to enable them.', 'update.checking': 'Checking GitHub Releases…', 'update.current': 'You are using the current release ({version}).', 'update.available': 'Version {version} is available. Download it manually, verify SHA-256, then replace the local files after closing this dashboard.', 'update.unavailable.network': 'Could not reach GitHub Releases. The dashboard remains local and usable.', 'update.unavailable.not-found': 'The configured GitHub release repository was not found.', 'update.unavailable.rate-limit': 'GitHub rate limit reached. Try again later.', 'update.unavailable.invalid-release': 'GitHub returned an invalid stable release.', 'update.unavailable.invalid-version': 'Could not compare the release version safely.', 'update.download': 'Download {name}', 'update.verify': 'Verify SHA-256: {sha256}',
   },
   'zh-Hant': {
+    'filters.title': '進階篩選',
     'drawer.executionType': '執行類型', 'drawer.parentSession': 'Parent session',
     'accountUsage.eyebrow': '登入方案用量', 'accountUsage.title': '剩餘用量與重置時間', 'accountUsage.refresh': '重新檢查', 'accountUsage.loading': '正在讀取登入方案用量…', 'accountUsage.available': '{provider} 登入方案用量 · {plan} · 檢查時間 {date}', 'accountUsage.fiveHourUnavailable': '此帳號的官方服務未回報 5 小時視窗。', 'accountUsage.privacy': '憑證只由本機 server 讀取，不會傳送到瀏覽器。此資訊來自官方服務的 best-effort 回應，不是本機 JSONL 推算值。', 'accountUsage.remaining': '剩餘 {value}%', 'accountUsage.used': '已使用 {value}%', 'accountUsage.resets': '重置時間 {date}', 'accountUsage.reset.unknown': '官方服務未回報重置時間', 'accountUsage.reset.now': '即將重置', 'accountUsage.countdown.days': '{days} 天 {time}', 'accountUsage.window.fiveHour': '5 小時用量', 'accountUsage.window.sevenDay': '7 天用量', 'accountUsage.window.sevenDaySonnet': '7 天 Sonnet', 'accountUsage.window.sevenDayOpus': '7 天 Opus', 'accountUsage.window.weekly': '每週用量', 'accountUsage.window.primary': '主要限制', 'accountUsage.window.secondary': '次要限制', 'accountUsage.unavailable.not-signed-in': '請先使用本機 {provider} CLI 登入，才能查看方案用量。', 'accountUsage.unavailable.auth-expired': '{provider} 登入已過期；請重新登入後再檢查。', 'accountUsage.unavailable.network': '無法連線至官方用量服務；本機 JSONL 分析仍可正常使用。', 'accountUsage.unavailable.rate-limit': '已達官方用量服務 rate limit，請稍後再試。', 'accountUsage.unavailable.unsupported-response': '官方服務沒有回傳支援的用量格式。', 'accountUsage.unavailable.invalid-credentials': '本機登入憑證檔案無效；請使用 CLI 重新登入。', 'accountUsage.unavailable.credential-write-failed': 'Claude 已更新登入，但無法安全保存輪替後的憑證。', 'accountUsage.unavailable.service-unavailable': '登入方案用量暫時無法使用。',
     'provider.label': 'Provider', 'provider.unavailable': '{provider} 無法使用。請在「設定」指定 sessions 目錄，然後重新啟動儀表板。', 'provider.listError': '無法載入 provider 可用狀態。', 'provider.claude.disclaimer': 'Claude 費用為 Anthropic API 等值 token 估算，不是 Pro 或 Max 訂閱費用，且不包含工具費用。', 'provider.claude.footer': 'Claude 費用是 API 等值 token 估算，不是 Pro 或 Max 訂閱費用；不包含網路搜尋、程式執行與其他工具費用。', 'provider.cacheWrite5m': '5 分鐘快取寫入', 'provider.cacheWrite1h': '1 小時快取寫入', 'pricing.source.claude': 'Anthropic 定價來源', 'v2.filter.executionType': '執行類型', 'provider.execution.main': 'Main', 'provider.execution.subagent': 'Subagent', 'settings.codexDirectory': 'Codex sessions 目錄', 'settings.claudeDirectory': 'Claude sessions 目錄',
@@ -97,8 +99,35 @@ export function getLocale() {
   return activeLocale;
 }
 
+const controlDictionaries = {
+  en: {
+    'filters.hint': 'Edit selections, then apply them to the dashboard.',
+    'filters.apply': 'Apply filters', 'filters.discard': 'Discard changes',
+    'filters.pending': 'Unapplied changes', 'filters.synced': 'Selections match applied filters',
+    'filters.search.models': 'Search models', 'filters.search.workspaces': 'Search workspaces',
+    'filters.empty': 'No values in the current data', 'filters.noMatches': 'No matching values',
+    'filters.remove': 'Remove {group}: {value}', 'filters.active': 'Applied filters',
+    'filters.clearApplied': 'Clear applied filters',
+    'view.exactScope': 'Exact KPI and session totals', 'view.detailScope': 'Session workspace and cache details',
+    'action.checking': 'Checking…', 'action.refreshing': 'Refreshing…', 'action.exporting': 'Preparing download…',
+    'action.loading': 'Loading…', 'settings.saving': 'Saving…',
+  },
+  'zh-Hant': {
+    'filters.hint': '調整選取後，按「套用篩選」更新儀表板。',
+    'filters.apply': '套用篩選', 'filters.discard': '捨棄變更',
+    'filters.pending': '有尚未套用的變更', 'filters.synced': '選取內容與已套用條件一致',
+    'filters.search.models': '搜尋模型', 'filters.search.workspaces': '搜尋工作區',
+    'filters.empty': '目前資料沒有可選值', 'filters.noMatches': '沒有符合的值',
+    'filters.remove': '移除{group}：{value}', 'filters.active': '已套用條件',
+    'filters.clearApplied': '清除已套用條件',
+    'view.exactScope': 'KPI 與 Session 精確數值', 'view.detailScope': 'Session 工作區與快取細目',
+    'action.checking': '檢查中…', 'action.refreshing': '重新整理中…', 'action.exporting': '準備下載中…',
+    'action.loading': '讀取中…', 'settings.saving': '儲存中…',
+  },
+};
+
 export function t(key, values = {}) {
-  return interpolate(v2Dictionaries[activeLocale]?.[key] ?? dictionaries[activeLocale]?.[key] ?? v2Dictionaries.en[key] ?? dictionaries.en[key] ?? key, values);
+  return interpolate(controlDictionaries[activeLocale]?.[key] ?? v2Dictionaries[activeLocale]?.[key] ?? dictionaries[activeLocale]?.[key] ?? v2Dictionaries.en[key] ?? dictionaries.en[key] ?? key, values);
 }
 
 export function applyDocumentTranslations(root = document) {

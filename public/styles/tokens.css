@@ -37,4 +37,8 @@
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
   --shadow-surface: 0 1rem 2.5rem rgb(0 0 0 / 0.2);
+  --control-height: 2.5rem;
+  --control-height-compact: 2rem;
+  --focus-width: 3px;
+  --focus-offset: 3px;
 }

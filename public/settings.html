@@ -8,13 +8,14 @@
     <link rel="stylesheet" href="/styles/tokens.css" />
     <link rel="stylesheet" href="/styles/base.css" />
     <link rel="stylesheet" href="/styles/components.css" />
+    <link rel="stylesheet" href="/styles/settings.css" />
     <script type="module" src="/scripts/settings.mjs"></script>
   </head>
   <body>
     <main class="app-shell settings-shell">
       <header class="app-header">
         <div><p class="eyebrow" data-i18n="settings.eyebrow">本機設定</p><h1 data-i18n="settings.title">儀表板設定</h1><p class="subtitle" data-i18n="settings.subtitle">編輯本機 .env 設定。變更會在重新啟動後套用。</p></div>
-        <div class="header-actions"><a class="header-link" href="/" data-i18n="settings.back">返回儀表板</a></div>
+        <div class="header-actions"><a class="button button--secondary" href="/" data-i18n="settings.back">返回儀表板</a></div>
       </header>
 
       <p id="settingsNotice" class="notice" role="status" aria-live="polite" data-i18n="settings.loading">正在讀取本機設定…</p>
@@ -57,7 +58,7 @@
           <div class="settings-grid"><label class="control settings-control"><span data-i18n="settings.updateRepository">GitHub 更新儲存庫</span><input name="UPDATE_REPOSITORY" type="text" autocomplete="off" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*" /></label></div>
         </fieldset>
 
-        <div class="settings-actions"><p class="muted" data-i18n="settings.restart">這些值僅儲存於本機，必須在重新啟動儀表板後才會套用。</p><button id="settingsSave" type="submit" data-i18n="settings.save">儲存至 .env</button></div>
+        <div class="settings-actions"><p class="muted" data-i18n="settings.restart">這些值僅儲存於本機，必須在重新啟動儀表板後才會套用。</p><button class="button--primary" id="settingsSave" type="submit" data-i18n="settings.save">儲存至 .env</button></div>
       </form>
     </main>
   </body>

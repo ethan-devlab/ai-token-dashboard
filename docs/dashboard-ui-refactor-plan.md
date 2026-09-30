@@ -2,7 +2,7 @@
 
 Status: implementation in progress. The user confirmed the decision summary on 2026-09-30. The production chart engine remains open until the native/uPlot prototype comparison.
 
-Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`. Phase 1 correctness and accessibility repairs are implemented and verified; see the evidence appended to `docs/dashboard-deep-audit.md`. Phase 2 is next. Phase 3 still contains the native/uPlot comparison and production-engine decision.
+Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`. Phase 1 correctness and accessibility repairs are implemented and verified; see the evidence appended to `docs/dashboard-deep-audit.md`. Phase 2 shared CSS and controls are implemented and verified; see the Phase 2 evidence in the audit. Phase 3 is next. Phase 3 still contains the native/uPlot comparison and production-engine decision.
 
 ## Outcome and confirmed scope
 

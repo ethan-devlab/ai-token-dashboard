@@ -4,13 +4,17 @@ export const PROVIDER_PREFERENCE_KEY = 'codex-token-dashboard:provider:v1';
 const RANGE_MODES = new Set(['all', 'last24h', 'today', 'week', 'month', 'year', 'custom']);
 const SORT_MODES = new Set(['recent', 'cost', 'total', 'input', 'cache', 'output']);
 const UNITS = new Set(['auto', 'exact', 'K', 'M', 'B']);
-const FILTER_KEYS = Object.freeze(['models', 'workspaces', 'pricingStatus', 'usageSource', 'cliVersion', 'originator', 'quality', 'executionType']);
+export const FILTER_KEYS = Object.freeze(['models', 'workspaces', 'pricingStatus', 'usageSource', 'cliVersion', 'originator', 'quality', 'executionType']);
 const PROVIDERS = new Set(['codex', 'claude']);
 const DENSITY_LIMITS = Object.freeze({ comfortable: 100, compact: 150, dense: 200 });
 const VIEW_COLUMN_KEYS = Object.freeze(['lastUsed', 'model', 'input', 'output', 'cost']);
 
 function stringList(values) {
   return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value).trim()).filter(Boolean))].slice(0, 100);
+}
+
+export function normalizeFilters(filters = {}) {
+  return Object.fromEntries(FILTER_KEYS.map((key) => [key, stringList(filters[key])]));
 }
 
 function safeTimezone(value, fallback = 'UTC') {
@@ -57,7 +61,7 @@ export function customRangeError(query) {
   return start >= end ? 'range.endBeforeStart' : '';
 }
 
-export function readQueryState(controls) {
+export function readQueryState(controls, filters = {}) {
   return {
     rangeMode: controls.rangeMode.value,
     weekValue: controls.weekInput.value,
@@ -68,7 +72,7 @@ export function readQueryState(controls) {
     search: controls.search.value.trim().slice(0, 256),
     sort: SORT_MODES.has(controls.sort.value) ? controls.sort.value : 'recent',
     timezone: safeTimezone(controls.timezone.value, controls.timezone.dataset.fallback || 'UTC'),
-    filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, stringList([...controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].selectedOptions].map((option) => option.value))])),
+    filters: normalizeFilters(filters),
   };
 }
 
@@ -121,15 +125,6 @@ export function queryStateToSearch(query, provider = 'codex') {
 export function applyQueryStateToControls(controls, query) {
   controls.rangeMode.value = query.rangeMode; controls.weekInput.value = query.weekValue; controls.monthInput.value = query.monthValue; controls.yearInput.value = query.yearValue;
   controls.customStart.value = query.customStart; controls.customEnd.value = query.customEnd; controls.search.value = query.search; controls.sort.value = query.sort; controls.timezone.value = query.timezone;
-  for (const key of FILTER_KEYS) {
-    const selected = new Set(query.filters?.[key] || []);
-    for (const value of selected) {
-      if (![...controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].options].some((option) => option.value === value)) {
-        controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].append(new Option(value, value, true, true));
-      }
-    }
-    for (const option of controls[`filter${key[0].toUpperCase()}${key.slice(1)}`].options) option.selected = selected.has(option.value);
-  }
 }
 
 export function requestParameters(query, page = {}, provider = 'codex') {
@@ -139,15 +134,6 @@ export function requestParameters(query, page = {}, provider = 'codex') {
   if (query.rangeMode === 'custom') for (const [name, value] of [['start', query.customStart], ['end', query.customEnd]]) if (value) params.set(name, value);
   for (const key of FILTER_KEYS) for (const value of stringList(query.filters?.[key])) params.append(key, value);
   return params;
-}
-
-export function setFacetOptions(select, values, selected) {
-  const active = new Set(selected || []);
-  const items = Array.isArray(values) ? values : [];
-  const normalised = items.map((item) => typeof item === 'string' ? { value: item, label: item } : { value: String(item.value ?? item.key ?? ''), label: String(item.label ?? item.value ?? item.key ?? ''), count: item.count }).filter((item) => item.value);
-  select.replaceChildren(...normalised.map((item) => {
-    const option = document.createElement('option'); option.value = item.value; option.textContent = item.count == null ? item.label : `${item.label} (${item.count})`; option.selected = active.has(item.value); return option;
-  }));
 }
 
 export function readViewPreferences(storage) {

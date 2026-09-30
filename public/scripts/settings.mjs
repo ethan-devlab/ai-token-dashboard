@@ -1,4 +1,5 @@
 import { applyDocumentTranslations, detectLocale, setLocale, t } from './i18n.mjs';
+import { setButtonBusy } from './button-state.mjs';
 
 const SETTINGS_KEYS = Object.freeze(['HOST', 'PORT', 'CODEX_SESSIONS_DIR', 'CLAUDE_SESSIONS_DIR', 'MAX_FILES', 'PARSE_CONCURRENCY', 'ALLOW_REMOTE', 'EXPOSE_FULL_PATHS', 'AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS', 'UPDATE_REPOSITORY']);
 const form = document.getElementById('settingsForm');
@@ -13,6 +14,7 @@ function setNotice(message, state = 'info') {
 
 function setDisabled(disabled) {
   for (const element of form.querySelectorAll('input, button')) element.disabled = disabled;
+  form.setAttribute('aria-busy', String(disabled));
 }
 
 function responseError(payload, fallback) {
@@ -44,6 +46,7 @@ function payload() {
 }
 
 async function loadSettings() {
+  setButtonBusy(document.getElementById('settingsSave'), true);
   setDisabled(true);
   setNotice(t('settings.loading'));
   try {
@@ -61,6 +64,7 @@ async function loadSettings() {
     }
     setNotice(error instanceof Error ? error.message : t('settings.loadError'), 'error');
   } finally {
+    setButtonBusy(document.getElementById('settingsSave'), false, 'settings.saving');
     setDisabled(false);
   }
 }
@@ -69,7 +73,9 @@ inputFor('ALLOW_REMOTE').addEventListener('change', () => { remoteWarning.hidden
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!form.reportValidity()) return;
+  setButtonBusy(document.getElementById('settingsSave'), true, 'settings.saving');
   setDisabled(true);
+  setNotice(t('settings.saving'));
   try {
     const response = await fetch('/api/settings', {
       method: 'POST',
@@ -83,6 +89,7 @@ form.addEventListener('submit', async (event) => {
   } catch (error) {
     setNotice(error instanceof Error ? error.message : t('settings.saveError'), 'error');
   } finally {
+    setButtonBusy(document.getElementById('settingsSave'), false, 'settings.saving');
     setDisabled(false);
   }
 });

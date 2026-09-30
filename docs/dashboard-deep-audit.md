@@ -181,3 +181,27 @@ Screenshots:
 - `phase1-trend-1440.jpg`: repaired table width, unequal time spacing, and independent model height, captured before the final small text-color adjustment.
 
 All screenshots are under `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/`. Remaining P2/P3 findings and the approved broader features stay in their planned phases; this repair pass is not completion of the full desktop refactor.
+
+## Phase 2 implementation and verification — 2026-09-30
+
+Implemented shared action/control tokens and CSS ownership boundaries. The dashboard loads dashboard and data-view styles; settings loads only settings styles plus the shared files. Buttons use primary, secondary (default), quiet, and remove variants, 40px ordinary or 32px compact targets, enabled hover/pressed rules, a shared focus outline, distinct disabled/busy cursors, and operation labels that reserve stable width. No dependency, API, persisted query key, parser, pricing arithmetic, or security setting changed.
+
+Replaced native multi-select facets with labeled native checkbox groups. Models and workspaces have local option search. Draft edits do not query the server until Apply. Discard restores applied values. Chips remain visible when the disclosure is closed; removal and Clear update the applied URL immediately and retain unrelated pending additions. URL values absent from current facets remain visible and removable. Provider changes restore their own applied filters and reset draft/options. The API returns facets for filtered results, so the client retains previously observed options within the current provider/period/search scope; this prevents a selected model from blocking additional model selection. Retained options have no invented counts.
+
+Session rows now have one named 32px detail action, no row tab stop, and no row click/Space handler. Text selection remains available. Exact/detail preferences have explicit scope and real session cell content. Exact/detail/column changes update their local surface without replacing the chart. Escape closes View and returns focus to its summary.
+
+Validation:
+
+- Syntax checks: 7 changed modules passed. Static route checks: all 5 new assets returned HTTP 200, the correct content type, and exact file content. `git diff --check` passed.
+- `npm run test:client`: 22 passed. Added checks for explicit draft application, removal/Clear reconciliation, provider reset, absent facet values and URL/request parity, and named session actions with exact/detail content.
+- Direct IAB desktop checks at 960, 1200, 1440, and 1600px: no page overflow on dashboard or settings. English View bounds were 152–456px at 960/1200, 778.01–1082.01px at 1440, and 938.01–1242.01px at 1600. Settings Save remained 40px; native checkboxes remained 16px.
+- Real Codex data: checking a model draft retained 7 current rows and an unchanged URL; Apply reduced the result to 1 row. Applying one model retained the other observed choices. Removing the applied model preserved a second pending model and did not apply it. A restored absent model retained a checked option and remove chip. Clear/chip removal updated URL immediately. Switching to Claude cleared Codex conditions; switching back restored them.
+- Exact/detail toggles hid KPI/session exact values and workspace content. Exact toggle preserved the selected chart point and open trend-table disclosure. Dense session mode kept detail actions at 32px and left trend table cell padding at 12px 16px.
+- Clicking a row did not open the drawer. Its named button opened the modal; Escape returned focus to that button. View Escape returned focus to Summary with a 3px outline.
+- Keyboard JSONL refresh initially dropped focus to the page when the button became disabled. The shared helper now returns focus on completion only if it owned the original focus and focus is still on the page; a real refresh verified return to the refresh button.
+- Real JSONL refresh exposed a disabled busy button with a wait cursor and operation label; idle and busy widths were both 132.67px in Traditional Chinese. A disabled Apply button retained its default accent background and not-allowed cursor when clicked. Browser error logs were empty.
+- Settings GET rendered all four groups in Traditional Chinese and English. No settings POST or `.env` write was performed. Save busy behavior uses the same helper but was not verified through a real save.
+
+Artifacts: `phase2-filter-draft-1440.png` and `phase2-settings-1200.png` under `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/`. Temporary locale, density, and display preferences were restored after QA.
+
+Limits: no Windows runtime, screen-reader session, settings save, unavailable-settings fixture, remote CI, or broad backend suite was run. Backend contracts did not change. Unit, locale, metric, density, and query updates still rebuild chart content; full chart lifecycle preservation and the native/uPlot comparison belong to Phase 3. Dashboard reordering, quota strip, and settings dirty-navigation behavior belong to Phase 4.
