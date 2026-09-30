@@ -1,4 +1,5 @@
 * { box-sizing: border-box; }
+[hidden]:not([hidden="until-found"]) { display: none !important; }
 html { background: var(--color-canvas); }
 body { margin: 0; min-inline-size: 960px; background: var(--color-canvas); color: var(--color-text); font-family: var(--font-sans); font-size: var(--text-base); line-height: var(--line-normal); }
 button, input, select { font: inherit; }

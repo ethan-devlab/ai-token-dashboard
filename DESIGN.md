@@ -11,7 +11,7 @@ All presentation values come from `public/styles/tokens.css`; no remote font, CD
 | Token family | Values and purpose |
 | --- | --- |
 | Canvas and surfaces | `--color-canvas: #0B0E12`; `--color-surface: #11161C`; `--color-surface-raised: #171D25`; `--color-surface-muted: #0F141A` distinguish page, ordinary panel, raised KPI/table header, and quiet supporting areas. |
-| Text and borders | `--color-text: #F1F4F7`; `--color-muted: #A5AFBC`; `--color-subtle: #717D8D`; `--color-border: #29313C`. |
+| Text and borders | `--color-text: #F1F4F7`; `--color-muted: #A5AFBC`; `--color-subtle: #8D99A9`; `--color-border: #29313C`. Supporting text stays above 4.5:1 on ordinary, raised, and accent surfaces. |
 | Semantic status | `--color-accent: #63D3B2` for the primary action and selected estimate; `--color-info: #78AEFF`; `--color-success: #76D6A4`; `--color-warning: #F0C66C`; `--color-danger: #FF8294`, each with a quiet surface where a warning/error panel needs one. Text labels always accompany status color. |
 | Typography | `--font-sans` is the system UI stack; `--font-mono` is for paths, diagnostics, and exact values. `--text-xs` 12px, `--text-sm` 14px, `--text-base` 16px, `--text-lg` 20px, `--text-xl` 28px, `--text-2xl` 40px. Numbers use tabular figures. |
 | Spacing | Four-pixel scale: `--space-1` 4px, `--space-2` 8px, `--space-3` 12px, `--space-4` 16px, `--space-5` 20px, `--space-6` 24px, `--space-8` 32px, `--space-10` 40px. |
@@ -53,6 +53,8 @@ Controls have explicit labels; the summary, insight, and explorer expose `aria-b
 ## 8. Scope, verification, and accepted debt
 
 The desktop UI review and its measured validation results are recorded in `docs/ui-ux-review.md`. The four KPI cards use four columns at wide desktop widths and two columns below 1200px to keep long currency values readable.
+
+The approved full refactor is recorded in `docs/dashboard-ui-refactor-plan.md`. Phase 1 repairs are recorded in `docs/dashboard-deep-audit.md`: hidden state takes priority over component display rules; session density affects only its table; insight panels align at their starts; view options open from the trigger's start edge. The current native line chart uses actual timestamps and leaves missing intervals disconnected. Chart, summary, model, row, and drawer cost labels share lower-bound formatting. Session row and drawer usage dates use the displayed projection's timezone; operational check/reset dates retain browser-local formatting. The modal drawer keeps its heading and Close control stable, makes background regions inert, contains focus, and restores it on close. Custom range errors are associated with both date fields. Later chart modes, checkbox facets, quota composition, and settings dirty-state behavior remain in their planned phases.
 
 Focused verification covers syntax, the server’s static/root/CSP boundary, route traversal rejection, parser fixture semantics, server-side aggregation, pagination, URL state, local view preferences, the bounded projection cache, watcher status propagation, pricing disclosure data, and loopback-only atomic settings persistence. Direct visual verification checks the shipped desktop page and its loading, populated, warning, error, range, explorer, drawer, pagination, disclosure, and settings states. No mobile/tablet work, remote dependencies, analytics, glass effects, neon gradients, fake data, or silent data-semantic changes are accepted.
 

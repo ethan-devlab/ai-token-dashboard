@@ -2,6 +2,8 @@
 
 Review date: 2026-09-30. Status: planning evidence, not implementation approval.
 
+The findings and source line references below describe the audit baseline. Phase 1 repair evidence is appended at the end; the remaining findings are scheduled in the approved refactor plan.
+
 ## Scope and method
 
 The user confirmed the entire desktop interface: dashboard, session drawer, and shared settings controls. They also requested a comparison of native charts and chart libraries. Keep the existing dark appearance, Traditional Chinese and English, local data boundaries, and desktop-only support.
@@ -145,3 +147,37 @@ The screenshots are local review evidence, not design mockups:
 The current Codex month projection has six sessions, eight trend points, and three model rows. Normal populated Claude data is unavailable locally. No large-data performance benchmark, screen-reader session, Windows-native select check, browser zoom check, forced-colors check, remote-bind run, or network-failure injection was performed. CSS hover rules were inspected; not every control's native pointer behavior was exercised. Existing tests were read but not rerun during this planning-only pass.
 
 See `docs/dashboard-ui-refactor-plan.md` for migration order, component contracts, chart options, and focused acceptance checks.
+
+## Phase 1 repair evidence — 2026-09-30
+
+Baseline: `2979899`. Changes are limited to the client, CSS, focused client checks, and design documentation. Server APIs, pricing arithmetic, provider boundaries, and settings persistence are unchanged. The supported QA surface is desktop only.
+
+| Finding | Repair and observed evidence |
+| --- | --- |
+| F01 | Base CSS preserves semantic hidden state. Local settings warning and remote warning compute to `none`; the valid settings form remains `grid`. Unneeded pagination computes to `none`. Remote server mode was not launched. |
+| F02 | The shell and Close button remain stable. After a real detail response, focus is still on Close. Tab and Shift+Tab remain inside; Escape and backdrop click restore the detail button. Opening sets 15 background regions inert and locks document scrolling; closing removes the temporary state. Loading has a status region and errors have an alert region. A slow response and a rejected detail response were not injected in the live page. |
+| F03 | Start-aligned options fix both 960px clipping and a newly reproduced English 1200px case. Verified English bounds: 960px and 1200px, x=152..456; 1440px, x=778.01..1082.01; 1600px, x=938.01..1242.01. Document widths match each viewport. Traditional Chinese was also checked at 960px, 1200px, and 1440px. |
+| F04 | Native geometry and pointer selection use `fromMs`. Absent intervals do not receive interpolated line segments or zero values. Focused checks cover unequal one-day/seven-day gaps, an empty list, a single point, and 24/25-hour DST day spacing. Home/End/Arrow selection worked on the live chart. |
+| F05 | Shared cost formatting preserves unknown, zero, and partial lower bounds. The live New York 09-22 point shows `≥ $4.721326` in both tooltip and table. Peak text uses that point's partial flag; related views use the same formatter. |
+| F06 | `--color-subtle` is now `#8D99A9`: 6.29:1 on the ordinary surface, 5.86:1 on raised, and 4.60:1 on the accent surface. All exceed the normal-text target. |
+| F07 | Density table selectors are scoped to the explorer; insights align at their starts. In Compact at 1440px, the trend table is 774px inside an 816px panel, ending at x=827 before the model starts at x=864. Model height stays 279px while the expanded trend panel is 834px. |
+| F14 | URL-selected `America/New_York` renders the same usage timestamp in a row and its drawer: September 30 at 02:49, versus Taipei at 14:49. Focused row/drawer checks also cover a date-boundary change in both languages. Operational quota/check times retain browser-local display. |
+| F10, partial | Missing, reversed, and equal custom ranges are validated without a new request. The visible message is associated with both fields, each marked invalid. Retained data is labeled and export remains disabled. Correcting the range clears the error. Full stale-query composition and retry controls remain in Phase 4. |
+| F15 | Exact Input and Output now use their own measure names. Both languages were checked. |
+
+Validation:
+
+- `npm run test:client`: 19 checks passed, including four new focused regressions.
+- Syntax checks for changed client modules and `git diff --check` passed.
+- Direct desktop checks used real local data: seven Codex sessions, nine trend points, and four model rows. No fake data was added to the product.
+- Final browser logs contain no warnings or errors. Temporary locale, density, and metric changes were restored.
+- Native automation changed the timezone text without committing the existing `change` handler. The live timezone result was verified through URL restoration; input commit behavior is a remaining tooling/platform verification gap.
+- Backend suites were not run because no server implementation or API contract changed. Windows native controls, screen-reader behavior, populated Claude, remote binding, and large-data performance remain unverified. Windows follow-up commands are `npm run test:client` and `npm start` with a supported desktop browser.
+
+Screenshots:
+
+- `phase1-view-menu-960.jpg`: final English menu within the 960px viewport.
+- `phase1-drawer-1440.jpg`: final modal drawer with stable Close focus.
+- `phase1-trend-1440.jpg`: repaired table width, unequal time spacing, and independent model height, captured before the final small text-color adjustment.
+
+All screenshots are under `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/`. Remaining P2/P3 findings and the approved broader features stay in their planned phases; this repair pass is not completion of the full desktop refactor.

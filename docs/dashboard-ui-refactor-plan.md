@@ -1,6 +1,8 @@
 # Desktop dashboard UI refactor plan
 
-Status: decision interview complete; the user confirmed the summary on 2026-09-30. The implementation plan is ready. The production chart engine remains open until the native/uPlot prototype comparison. No application code has been changed for this planning work.
+Status: implementation in progress. The user confirmed the decision summary on 2026-09-30. The production chart engine remains open until the native/uPlot prototype comparison.
+
+Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`. Phase 1 correctness and accessibility repairs are implemented and verified; see the evidence appended to `docs/dashboard-deep-audit.md`. Phase 2 is next. Phase 3 still contains the native/uPlot comparison and production-engine decision.
 
 ## Outcome and confirmed scope
 

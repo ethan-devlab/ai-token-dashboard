@@ -4,8 +4,13 @@ export const integerFormat = Object.freeze({
   format: (value) => new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 0 }).format(value),
 });
 export const dateFormat = Object.freeze({
-  format: (value) => new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(value),
+  format: (value, timezone) => new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short', ...(timezone ? { timeZone: timezone } : {}) }).format(value),
 });
+
+export function formatCost(value, partial = false) {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  return `${partial ? '≥ ' : ''}${moneyFormat.format(Number(value))}`;
+}
 export const moneyFormat = Object.freeze({
   format: (value) => new Intl.NumberFormat(getLocale(), {
     style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6,
@@ -55,10 +60,10 @@ export function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-export function formatDate(value) {
+export function formatDate(value, timezone) {
   if (!value) return '—';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : dateFormat.format(date);
+  return Number.isNaN(date.getTime()) ? '—' : dateFormat.format(date, timezone);
 }
 
 export function localDateTimeValue(date) {

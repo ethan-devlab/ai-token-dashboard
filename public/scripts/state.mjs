@@ -47,6 +47,16 @@ export function createDashboardState() {
   };
 }
 
+export function customRangeError(query) {
+  if (query.rangeMode !== 'custom') return '';
+  const localTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/;
+  if (![query.customStart, query.customEnd].every((value) => localTime.test(value || ''))) return 'range.invalidDate';
+  // Compare civil values only. The server resolves the selected timezone and DST.
+  const start = Date.parse(`${query.customStart}Z`); const end = Date.parse(`${query.customEnd}Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 'range.invalidDate';
+  return start >= end ? 'range.endBeforeStart' : '';
+}
+
 export function readQueryState(controls) {
   return {
     rangeMode: controls.rangeMode.value,

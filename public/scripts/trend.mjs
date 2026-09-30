@@ -1,31 +1,39 @@
-import { escapeHtml, integerFormat, moneyFormat } from './format.mjs';
+import { escapeHtml, formatCost, integerFormat } from './format.mjs';
 import { t } from './i18n.mjs';
 
 const PADDING = Object.freeze({ top: 16, right: 16, bottom: 30, left: 16 });
-function valueLabel(value, metric) { return metric === 'cost' ? moneyFormat.format(value) : `${integerFormat.format(value)} ${t('total.tokens')}`; }
-function costLabel(point) { return `${point.partialCost ? '≥ ' : ''}${moneyFormat.format(Number(point.cost || 0))}`; }
+function valueLabel(point, metric) { return metric === 'cost' ? formatCost(point.cost, point.partialCost) : `${integerFormat.format(point.value)} ${t('total.tokens')}`; }
+function costLabel(point) { return formatCost(point.cost, point.partialCost); }
+
+export function pointPositions(points, width, padding = PADDING) {
+  if (!points.length) return [];
+  const from = points[0].fromMs; const to = points.at(-1).fromMs;
+  const plotWidth = Math.max(0, width - padding.left - padding.right);
+  return points.map((point) => to === from ? padding.left + plotWidth / 2 : padding.left + plotWidth * (point.fromMs - from) / (to - from));
+}
 
 export function nearestPointIndex(points, x, width, padding = PADDING) {
-  if (!points.length) return -1; if (points.length === 1) return 0;
-  return Math.max(0, Math.min(points.length - 1, Math.round((x - padding.left) / Math.max(1, width - padding.left - padding.right) * (points.length - 1))));
+  const positions = pointPositions(points, width, padding);
+  return positions.reduce((nearest, position, index) => nearest < 0 || Math.abs(position - x) <= Math.abs(positions[nearest] - x) ? index : nearest, -1);
 }
 
 function draw(canvas, points, selectedIndex) {
   const rect = canvas.getBoundingClientRect(); const width = Math.max(1, Math.floor(rect.width)); const height = Math.max(184, Math.floor(rect.height)); const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.floor(width * ratio); canvas.height = Math.floor(height * ratio); const context = canvas.getContext('2d'); context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
-  const style = getComputedStyle(canvas); const accent = style.getPropertyValue('--color-accent').trim(); const border = style.getPropertyValue('--color-border').trim(); const surface = style.getPropertyValue('--color-surface-raised').trim(); const subtle = style.getPropertyValue('--color-subtle').trim(); const plotWidth = width - PADDING.left - PADDING.right; const plotHeight = height - PADDING.top - PADDING.bottom; const max = Math.max(1, ...points.map((point) => point.value));
-  const coordinates = points.map((point, index) => ({ ...point, x: points.length === 1 ? width / 2 : PADDING.left + plotWidth * index / (points.length - 1), y: PADDING.top + plotHeight - point.value / max * plotHeight }));
-  context.strokeStyle = border; context.lineWidth = 1; context.beginPath(); context.moveTo(PADDING.left, height - PADDING.bottom); context.lineTo(width - PADDING.right, height - PADDING.bottom); context.stroke(); context.strokeStyle = accent; context.lineWidth = 3; context.lineCap = 'round'; context.lineJoin = 'round'; context.beginPath(); coordinates.forEach((point, index) => index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)); context.stroke();
-  context.font = '12px var(--font-mono)'; context.fillStyle = subtle; context.fillText(coordinates[0].label, PADDING.left, height - 8); context.textAlign = 'right'; context.fillText(coordinates.at(-1).label, width - PADDING.right, height - 8); context.textAlign = 'start'; coordinates.forEach((point, index) => { context.beginPath(); context.arc(point.x, point.y, index === selectedIndex ? 5 : 3, 0, Math.PI * 2); context.fillStyle = index === selectedIndex ? accent : surface; context.fill(); context.strokeStyle = accent; context.lineWidth = 2; context.stroke(); });
+  const style = getComputedStyle(canvas); const accent = style.getPropertyValue('--color-accent').trim(); const border = style.getPropertyValue('--color-border').trim(); const surface = style.getPropertyValue('--color-surface-raised').trim(); const subtle = style.getPropertyValue('--color-subtle').trim(); const plotHeight = height - PADDING.top - PADDING.bottom; const max = Math.max(1, ...points.map((point) => point.value));
+  const positions = pointPositions(points, width);
+  const coordinates = points.map((point, index) => ({ ...point, x: positions[index], y: PADDING.top + plotHeight - point.value / max * plotHeight }));
+  context.strokeStyle = border; context.lineWidth = 1; context.beginPath(); context.moveTo(PADDING.left, height - PADDING.bottom); context.lineTo(width - PADDING.right, height - PADDING.bottom); context.stroke(); context.strokeStyle = accent; context.lineWidth = 3; context.lineCap = 'round'; context.lineJoin = 'round'; context.beginPath(); coordinates.forEach((point, index) => index && coordinates[index - 1].toMs >= point.fromMs ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)); context.stroke();
+  context.font = `12px ${style.getPropertyValue('--font-mono').trim()}`; context.fillStyle = subtle; context.fillText(coordinates[0].label, PADDING.left, height - 8); context.textAlign = 'right'; context.fillText(coordinates.at(-1).label, width - PADDING.right, height - 8); context.textAlign = 'start'; coordinates.forEach((point, index) => { context.beginPath(); context.arc(point.x, point.y, index === selectedIndex ? 5 : 3, 0, Math.PI * 2); context.fillStyle = index === selectedIndex ? accent : surface; context.fill(); context.strokeStyle = accent; context.lineWidth = 2; context.stroke(); });
   return { coordinates, width };
 }
 
-function dataTable(points, metric) { return `<details class="trend-table"><summary>${escapeHtml(t('trend.table'))}</summary><table><thead><tr><th>${escapeHtml(t('trend.time'))}</th><th>${escapeHtml(t('trend.value'))}</th></tr></thead><tbody>${points.map((point) => `<tr><td>${escapeHtml(point.label)}</td><td>${escapeHtml(valueLabel(point.value, metric))}</td></tr>`).join('')}</tbody></table></details>`; }
+function dataTable(points, metric) { return `<details class="trend-table"><summary>${escapeHtml(t('trend.table'))}</summary><table><thead><tr><th>${escapeHtml(t('trend.time'))}</th><th>${escapeHtml(t('trend.value'))}</th></tr></thead><tbody>${points.map((point) => `<tr><td>${escapeHtml(point.label)}</td><td>${escapeHtml(valueLabel(point, metric))}</td></tr>`).join('')}</tbody></table></details>`; }
 
 export function renderUsageTrend(host, trend, metric) {
   host._trendCleanup?.(); const points = (trend.points || []).map((point) => ({ ...point, value: Number(point[metric] || 0) }));
   if (!points.length) { host.innerHTML = `<p class="insight-empty">${escapeHtml(t('trend.empty'))}</p>`; host._trendCleanup = undefined; return; }
-  const peak = points.reduce((highest, point) => point.value > highest.value ? point : highest, points[0]); const metricLabel = t(metric === 'cost' ? 'trend.cost' : 'trend.tokens'); const summary = t('trend.summary', { unit: t(`trend.${trend.unit || 'day'}`), count: integerFormat.format(points.length), label: peak.label, value: valueLabel(peak.value, metric), partial: metric === 'cost' && trend.partialCost ? t('trend.partial') : '' });
+  const peak = points.reduce((highest, point) => point.value > highest.value ? point : highest, points[0]); const metricLabel = t(metric === 'cost' ? 'trend.cost' : 'trend.tokens'); const summary = t('trend.summary', { unit: t(`trend.${trend.unit || 'day'}`), count: integerFormat.format(points.length), label: peak.label, value: valueLabel(peak, metric), partial: metric === 'cost' && trend.partialCost ? t('trend.partial') : '' });
   host.innerHTML = `<p id="trendSummary" class="trend-summary">${escapeHtml(summary)}</p><div class="trend-visual"><canvas class="trend-chart" tabindex="0" role="img" aria-describedby="trendSummary trendSelection" aria-label="${escapeHtml(t('trend.aria', { metric: metricLabel }))}"></canvas><div id="trendSelection" class="trend-tooltip" role="status" aria-live="polite" aria-atomic="true"><strong class="trend-tooltip-label" data-trend-label></strong><dl class="trend-tooltip-details"><div><dt>${escapeHtml(t('trend.detail.tokens'))}</dt><dd data-trend-tokens></dd></div><div><dt>${escapeHtml(t('trend.detail.cost'))}</dt><dd data-trend-cost></dd></div></dl></div></div>${dataTable(points, metric)}`;
   const canvas = host.querySelector('canvas'); const tooltip = host.querySelector('.trend-tooltip'); let selectedIndex = points.length - 1;
   const update = () => { const drawing = draw(canvas, points, selectedIndex); const point = points[selectedIndex]; const coordinate = drawing.coordinates[selectedIndex]; tooltip.querySelector('[data-trend-label]').textContent = point.label; tooltip.querySelector('[data-trend-tokens]').textContent = `${integerFormat.format(point.tokens || 0)} ${t('total.tokens')}`; tooltip.querySelector('[data-trend-cost]').textContent = costLabel(point); tooltip.style.setProperty('--tooltip-x', `${coordinate.x}px`); tooltip.style.setProperty('--tooltip-y', `${coordinate.y}px`); tooltip.dataset.placement = coordinate.y < 76 ? 'below' : 'above'; tooltip.dataset.alignment = coordinate.x < 120 ? 'start' : coordinate.x > drawing.width - 120 ? 'end' : 'center'; };

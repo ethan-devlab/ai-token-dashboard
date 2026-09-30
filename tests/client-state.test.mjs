@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { redactPath } from '../public/scripts/drawer.mjs';
+import { redactPath, renderSessionDrawer } from '../public/scripts/drawer.mjs';
+import { renderExplorerRows } from '../public/scripts/explorer.mjs';
+import { formatCost, formatDate } from '../public/scripts/format.mjs';
 import { detectLocale, setLocale, t } from '../public/scripts/i18n.mjs';
 import { createProjectionCache } from '../public/scripts/projection-cache.mjs';
 import { projectionLoadState } from '../public/scripts/projection-state.mjs';
 import { createRequestChannels } from '../public/scripts/request-channels.mjs';
-import { applyTableViewPreferences, budgetState, createDashboardState, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
-import { nearestPointIndex } from '../public/scripts/trend.mjs';
+import { applyTableViewPreferences, budgetState, createDashboardState, customRangeError, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
+import { nearestPointIndex, pointPositions } from '../public/scripts/trend.mjs';
 import { countdownParts, formatCountdown, windowLabelKey } from '../public/scripts/account-usage.mjs';
 
 test('account usage countdown and provider window labels remain deterministic', () => {
@@ -141,8 +143,55 @@ test('i18n selects a saved language and resolves v2 messages', () => {
 });
 
 test('canvas trend selection remains pointer and keyboard safe at bounds', () => {
-  const points = [{}, {}, {}, {}];
+  const points = [0, 1, 2, 3].map((fromMs) => ({ fromMs }));
   assert.equal(nearestPointIndex(points, 16, 216), 0);
   assert.equal(nearestPointIndex(points, 116, 216), 2);
   assert.equal(nearestPointIndex(points, 999, 216), 3);
+});
+
+test('sparse trend geometry and pointer selection use actual elapsed time', () => {
+  const points = [0, 1, 8].map((day) => ({ fromMs: day * 86_400_000 }));
+  assert.deepEqual(pointPositions(points, 216), [16, 39, 200]);
+  assert.equal(nearestPointIndex(points, 120, 216), 2);
+  assert.equal(nearestPointIndex([], 120, 216), -1);
+  assert.deepEqual(pointPositions([{ fromMs: 50 }], 216), [108]);
+  const dst = ['2026-10-31T04:00:00Z', '2026-11-01T04:00:00Z', '2026-11-02T05:00:00Z'].map((time) => ({ fromMs: Date.parse(time) }));
+  assert.deepEqual(pointPositions(dst, 1012), [16, 496, 996]);
+});
+
+test('session row and drawer dates follow the projection timezone in both languages', () => {
+  const lastUsed = '2026-09-22T19:38:00Z';
+  const detail = { sessionId: 'timezone-check', lastUsed, cost: { total: 0, partial: false } };
+  setLocale('en');
+  assert.equal(formatDate(lastUsed, 'America/New_York'), 'Sep 22, 2026, 3:38 PM');
+  assert.equal(formatDate(lastUsed, 'Asia/Taipei'), 'Sep 23, 2026, 3:38 AM');
+  const options = { timezone: 'America/New_York', unit: 'exact', status: 'ready' };
+  assert.match(renderExplorerRows([detail], options), /Sep 22, 2026, 3:38 PM/);
+  assert.match(renderSessionDrawer({ detail, ...options }), /Sep 22, 2026, 3:38 PM/);
+  setLocale('zh-Hant');
+  const date = formatDate(lastUsed, 'America/New_York');
+  assert.ok(date.includes('22'));
+  assert.ok(renderExplorerRows([detail], options).includes(date));
+  assert.ok(renderSessionDrawer({ detail, ...options }).includes(date));
+  assert.equal(formatDate('invalid', 'UTC'), '—');
+});
+
+test('cost labels distinguish unknown, zero and a partial lower bound', () => {
+  setLocale('en');
+  assert.equal(formatCost(null, true), '—');
+  assert.equal(formatCost(0), '$0.00');
+  assert.equal(formatCost(2.903042, true), '≥ $2.903042');
+  const detail = { sessionId: 'partial-check', cost: { total: 2.903042, partial: true } };
+  assert.match(renderExplorerRows([detail], { unit: 'exact', timezone: 'UTC' }), /≥ \$2\.903042/);
+  assert.match(renderSessionDrawer({ detail, status: 'ready', timezone: 'UTC' }), /≥ \$2\.903042/);
+  setLocale('zh-Hant');
+});
+
+test('custom range validation names missing, reversed and equal civil times', () => {
+  const query = { rangeMode: 'custom', customStart: '2026-09-23T00:00', customEnd: '2026-09-24T00:00' };
+  assert.equal(customRangeError(query), '');
+  assert.equal(customRangeError({ ...query, customEnd: '' }), 'range.invalidDate');
+  assert.equal(customRangeError({ ...query, customEnd: '2026-09-22T00:00' }), 'range.endBeforeStart');
+  assert.equal(customRangeError({ ...query, customEnd: '2026-09-23T00:00:00' }), 'range.endBeforeStart');
+  assert.equal(customRangeError({ ...query, rangeMode: 'month', customEnd: '' }), '');
 });

@@ -1,8 +1,8 @@
-import { escapeHtml, integerFormat, moneyFormat } from './format.mjs';
+import { escapeHtml, formatCost, integerFormat } from './format.mjs';
 import { t } from './i18n.mjs';
 
 function metricValue(item, metric) { return Number(metric === 'tokens' ? item.tokens : item.cost || 0); }
-function metricLabel(item, metric) { return metric === 'tokens' ? `${integerFormat.format(item.tokens)} ${t('total.tokens')}` : item.cost == null ? '—' : `${item.partialCost || item.coverage?.partial ? '≥ ' : ''}${moneyFormat.format(item.cost)}`; }
+function metricLabel(item, metric) { return metric === 'tokens' ? `${integerFormat.format(item.tokens)} ${t('total.tokens')}` : formatCost(item.cost, item.partialCost || item.coverage?.partial); }
 
 export function renderModelBreakdown(host, models = [], metric) {
   if (!models.length) { host.innerHTML = `<p class="insight-empty">${escapeHtml(t('model.empty'))}</p>`; return; }
