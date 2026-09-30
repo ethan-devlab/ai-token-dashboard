@@ -4,7 +4,9 @@
 .header-actions { display: flex; align-items: center; gap: var(--space-3); }
 .notice { margin: calc(var(--space-4) * -1) 0 var(--space-4); color: var(--color-success); font-size: var(--text-sm); }
 .eyebrow { color: var(--color-accent); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em; }
+.eyebrow + h1, .eyebrow + h2 { margin-block-start: var(--space-1); }
 .subtitle, .muted { color: var(--color-muted); }
+.subtitle { margin-block-start: var(--space-1); }
 .surface { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-surface); }
 .section-heading { align-items: end; }
 .control-row { justify-content: flex-start; flex-wrap: wrap; }
@@ -17,6 +19,9 @@
 .drawer-backdrop { position: fixed; z-index: 3; inset: 0; border: 0; border-radius: 0; background: rgb(0 0 0 / 0.45); cursor: default; }
 .session-drawer { position: fixed; z-index: 4; inset-block: 0; inset-inline-end: 0; inline-size: min(32rem, calc(100vw - 5rem)); overflow: auto; border-inline-start: 1px solid var(--color-border); background: var(--color-surface); box-shadow: var(--shadow-surface); padding: var(--space-6); }
 .drawer-heading { display: flex; align-items: start; justify-content: space-between; gap: var(--space-4); margin-block-end: var(--space-6); }
+.drawer-heading > div { flex: 1; min-inline-size: 0; }
+.drawer-heading h2 { overflow-wrap: anywhere; }
+.drawer-heading button { flex: 0 0 auto; white-space: nowrap; }
 .notice a { color: var(--color-accent); }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .notice[data-state="error"] { color: var(--color-danger); }

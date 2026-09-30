@@ -310,3 +310,19 @@ Final screenshots:
 - `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase5-unavailable-provider.png`
 
 QA preferences were restored to the prior single/bar Token view; the temporary budget was removed. No real settings save, pricing refresh, quota refresh, JSONL rescan, push, or release was part of this phase.
+
+## Post-review spacing refinement — 2026-09-30
+
+Phase 5 was committed as `95fb6d6`. After the complete result walkthrough, the user requested a single-line drawer Close button, separation between settings dirty status and SESSION SOURCE, and a dashboard spacing review.
+
+Changes are confined to the four existing CSS ownership files and these design records. The drawer heading now gives the title a shrinkable column with arbitrary-word wrapping; Close cannot shrink or wrap. Settings dirty status has a 16px bottom margin. The quota panel no longer adds block margins to the summary grid's 16px gap. Empty projection text and empty active-chip groups do not create extra grid/flex gaps. Period headings can wrap. Eyebrow/title, summary, compact-panel, budget-result, and drawer-diagnostic spacing use existing 4/8/12px tokens. No data, persistence, API, or interaction contract changed.
+
+Root verification:
+
+- Actual dashboard widths 960/1200/1440/1600px had no document overflow. KPI-to-quota and quota-to-breakdown gaps were both 16px, down from 32px. Comparison-to-operations stayed 16px. The closed query panel retained 20px padding plus its 1px border below the applied-filter row; the empty projection paragraph computed to `display: none`.
+- Settings at those four actual widths had no document overflow and a 16px dirty-status/first-legend gap, up from 0px. English at 960px retained the same gap and showed `No unsaved changes.` without overlap.
+- The real long Session ID and Traditional Chinese Close fit in the drawer at 1440px: a 54px by 40px single-line button with a 16px title/action gap. English Close at 960px remained 40px high with the same gap. Escape closed the drawer and returned focus to the named detail button.
+- Direct screenshots checked the dashboard overview, chart/model panel, expanded checkbox facets, comparison/budget/export/diagnostic section, settings header/status/groups, and drawer. Final locale and view preferences were restored. No real settings were saved.
+- `git diff --check` passed. Application tests were not rerun for this CSS-only change; the Phase 5 run of 33 passing client checks remains the latest application-test result. Platform, assistive-technology, and download/unload limits recorded above still apply.
+
+Screenshots under `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/`: `phase6-settings-gap-1440.png`, `phase6-drawer-close-1440.png`, `phase6-dashboard-spacing-1440.png`, `phase6-dashboard-en-960.png`, `phase6-filters-960.png`, `phase6-chart-spacing-1440.png`, and `phase6-operations-spacing-1440.png`.
