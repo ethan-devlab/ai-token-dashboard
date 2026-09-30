@@ -94,3 +94,7 @@ Further dependent decisions: model filtering by matching observations versus com
 Service checks ran in two non-overlapping groups: 11 core checks and eight pricing/update/config checks, 19 passed in total. Client checks: 33 passed. This did not rerun the existing contract harness because it starts the source checkout's server with its pricing-cache paths and automatic external refresh. The isolated HTTP probe exercised actual routes without those side effects. No mobile/tablet work, production browser mutations, configuration save, quota refresh, JSONL rescan, push, release, or deployment was performed.
 
 The next decisions and phase gates are in [dashboard-functional-refactor-plan.md](dashboard-functional-refactor-plan.md). This audit is complete as a bounded first pass, not an exhaustive certification. All findings are open at this checkpoint.
+
+## Phase 4 implementation disposition
+
+FA07/FA16/FA17 have focused implementation evidence in [phase4-projection-validation.md](phase4-projection-validation.md). All 251 matched Sessions export once at offset 200. Guarded page/detail/export reject changed snapshot or pricing basis; desktop conflicts reload the full projection and stop download until a new user action. The original audit evidence above remains the historical baseline. Q19/Q20 are confirmed. Q21 received no dialog response; empty CSV preserves the existing header-only format as a compatibility assumption. Native browser download completion remains unverified. Phase 5 quota/settings work remains open.

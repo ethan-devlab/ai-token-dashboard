@@ -8,14 +8,14 @@ import { createRequestChannels } from './request-channels.mjs';
 import { createSessionDrawerController } from './drawer-controller.mjs';
 import { renderExplorerRows } from './explorer.mjs';
 import { renderModelBreakdown } from './model-breakdown.mjs';
-import { createProjectionCache } from './projection-cache.mjs';
+import { createProjectionCache, mergeSessionPage, projectionParameters } from './projection-cache.mjs';
 import { projectionLoadState, emptyExplorerKey } from './projection-state.mjs';
 import { createUsageTrendController } from './trend.mjs';
 import { formatCountdown, windowLabelKey, remainingPercent, renderQuotaStrip } from './account-usage.mjs';
 
 const state = createDashboardState(); const $ = (id) => document.getElementById(id); const channels = createRequestChannels(); const projectionCache = createProjectionCache();
 const controls = Object.freeze({ provider: $('provider'), rangeMode: $('rangeMode'), weekInput: $('weekInput'), monthInput: $('monthInput'), yearInput: $('yearInput'), customStart: $('customStart'), customEnd: $('customEnd'), search: $('search'), sort: $('sort'), timezone: $('timezone'), locale: $('locale'), unit: $('unit'), showExact: $('showExact'), showDetails: $('showDetails'), density: $('density'), trendMetric: $('trendMetric'), trendMode: $('trendMode'), trendMark: $('trendMark'), columnLastUsed: $('columnLastUsed'), columnModel: $('columnModel'), columnInput: $('columnInput'), columnOutput: $('columnOutput'), columnCost: $('columnCost') });
-const priorChartQueries = []; let projectionGeneration = 0;
+const priorChartQueries = []; let projectionGeneration = 0; let exportGeneration = 0;
 let lastLoadOptions = {};
 let defaultQuery; let searchTimer = 0; let countdownTimer = 0; let accountUsage = { provider: 'codex', status: 'loading', windows: [] }; const providerQueries = new Map(); const providerAvailability = new Map();
 
@@ -40,7 +40,7 @@ function renderAccountUsage() {
     const used = document.createElement('span'); used.className = 'muted'; used.textContent = t('accountUsage.used', { value: window.usedPercent == null ? '—' : Math.round(Number(window.usedPercent) * 10) / 10 }); card.append(heading, meter, used, reset); host.append(card);
   }
 }
-function apiError(error) { if (error?.code === 'SESSION_REFRESH_FAILED') return error.retainedSnapshot === false ? t('quality.refreshUnavailable') : t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${error.reason || 'refresh-failed'}`), count: error.failedFiles || 0 }); if (error?.code === 'INVALID_RANGE') return t('range.serverInvalid'); if (error?.code === 'INVALID_TIMEZONE') return t('range.invalidTimezone'); return error instanceof Error ? error.message : t('load.error'); }
+function apiError(error) { if (error?.code === 'EXPORT_TOO_LARGE') return t('export.tooLarge'); if (error?.code === 'SESSION_REFRESH_FAILED') return error.retainedSnapshot === false ? t('quality.refreshUnavailable') : t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${error.reason || 'refresh-failed'}`), count: error.failedFiles || 0 }); if (error?.code === 'INVALID_RANGE') return t('range.serverInvalid'); if (error?.code === 'INVALID_TIMEZONE') return t('range.invalidTimezone'); return error instanceof Error ? error.message : t('load.error'); }
 function aggregate(data) { return data.aggregate?.usage || data.totals || {}; }
 function cost(data) { return data.aggregate?.cost || data.cost || {}; }
 function page(data) { return data.page || data; }
@@ -190,6 +190,7 @@ function render() {
   document.body.dataset.hasProjection = String(Boolean(data));
   document.body.dataset.projectionStale = String(Boolean(state.source.projectionStale));
   for (const id of ['summary', 'usageInsight', 'sessionExplorer']) $(id).setAttribute('aria-busy', String(busy));
+  $('exportScope').textContent = data ? t('export.scope', { count: integerFormat.format(data.matchedSessionCount ?? data.sessionCount ?? 0), timezone: data.range.timezone }) + (data.matchedSessionCount === 0 ? ` ${t('export.empty')}` : '') : t('v2.projection.wait');
   $('exportData').disabled = state.source.status !== 'ready' || !data || Boolean(state.source.projectionStale) || $('exportData').getAttribute('aria-busy') === 'true';
   $('refreshPricing').disabled = state.source.status !== 'ready' || Boolean(state.source.projectionStale) || $('refreshPricing').getAttribute('aria-busy') === 'true';
   $('footer').textContent = t(state.provider === 'claude' ? 'provider.claude.footer' : 'footer');
@@ -208,7 +209,9 @@ function render() {
 async function load({ sessionsOnly = false, refresh = false } = {}) {
   lastLoadOptions = { sessionsOnly, refresh };
   const generation = ++projectionGeneration;
-  for (const name of ['dashboard', 'sessions', 'refresh']) channels.abort(name);
+  for (const name of ['dashboard', 'sessions', 'refresh', 'export', 'detail', 'pricing']) channels.abort(name);
+  exportGeneration += 1; setButtonBusy($('refresh'), false, 'action.refreshing'); setButtonBusy($('exportData'), false, 'action.exporting'); setButtonBusy($('refreshPricing'), false, 'action.refreshing');
+  drawerController.close();
   syncState();
   const requestedQuery = structuredClone(state.query);
   const queryScope = queryStateToSearch({ ...state.query, sort: 'recent' }, state.provider);
@@ -218,23 +221,25 @@ async function load({ sessionsOnly = false, refresh = false } = {}) {
     render(); return false;
   }
   const channel = refresh ? 'refresh' : sessionsOnly ? 'sessions' : 'dashboard';
-  const endpoint = requestUrl(refresh ? '/api/refresh' : sessionsOnly ? '/api/sessions' : '/api/dashboard');
+  const path = refresh ? '/api/refresh' : sessionsOnly ? '/api/sessions' : '/api/dashboard';
+  const params = requestParameters(state.query, state.page, state.provider);
+  const endpoint = `${path}?${sessionsOnly ? projectionParameters(params, state.source.data?.projection) : params}`;
   const cached = !refresh && !sessionsOnly ? projectionCache.get(endpoint) : null;
   Object.assign(state.source, projectionLoadState({ hasData: Boolean(state.source.data), cached, refresh }));
   state.source.error = '';
-  if (cached) { state.source.data = cached; state.source.queryScope = queryScope; state.source.displayedQuery = requestedQuery; }
+  if (cached) { state.source.data = cached; state.source.queryScope = `${queryScope}|${cached.projection.key}`; state.source.displayedQuery = requestedQuery; }
   render();
   if (refresh) setButtonBusy($('refresh'), true, 'action.refreshing');
   try {
     const result = await channels.request(channel, endpoint, { method: refresh ? 'POST' : 'GET' });
     if (result.stale || generation !== projectionGeneration) return false;
-    if (sessionsOnly) state.source.data = { ...state.source.data, ...result.payload };
+    if (sessionsOnly) state.source.data = mergeSessionPage(state.source.data, result.payload);
     else {
       state.source.data = result.payload;
       if (refresh) projectionCache.clear(); else projectionCache.set(endpoint, result.payload);
     }
     state.source.status = 'ready'; state.source.projectionStale = false;
-    state.source.queryScope = queryScope; state.source.displayedQuery = requestedQuery;
+    state.source.queryScope = `${queryScope}|${state.source.data.projection.key}`; state.source.displayedQuery = requestedQuery;
     if (refresh) {
       const scan = result.payload.scan || {};
       const files = Number(scan.added || 0) + Number(scan.changed || 0) + Number(scan.reused || 0);
@@ -244,13 +249,31 @@ async function load({ sessionsOnly = false, refresh = false } = {}) {
     render(); return true;
   } catch (error) {
     if (error?.name === 'AbortError' || generation !== projectionGeneration) return false;
+    if (error?.code === 'PROJECTION_CONFLICT') { await reloadProjection(); return false; }
     state.source.status = 'error'; state.source.projectionStale = Boolean(state.source.data); state.source.error = apiError(error);
     render(); return false;
   } finally {
-    if (refresh) setButtonBusy($('refresh'), false, 'action.refreshing');
+    if (refresh && generation === projectionGeneration) setButtonBusy($('refresh'), false, 'action.refreshing');
   }
 }
-async function loadDetail(sessionKey) { const params = requestParameters(state.source.displayedQuery || state.query, { offset: 0, limit: state.page.limit }, state.provider); const result = await channels.request('detail', `/api/sessions/${encodeURIComponent(sessionKey)}?${params}`); if (result.stale) throw new DOMException('Superseded request', 'AbortError'); return result.payload; }
+async function reloadProjection() {
+  projectionCache.clear(); state.page.offset = 0;
+  showNotice(t('projection.conflictLoading'));
+  if (await load()) showNotice(t('projection.conflict'));
+}
+async function loadDetail(sessionKey) {
+  const generation = projectionGeneration;
+  const params = projectionParameters(requestParameters(state.source.displayedQuery || state.query, { offset: 0, limit: state.page.limit }, state.provider), state.source.data?.projection);
+  try {
+    const result = await channels.request('detail', `/api/sessions/${encodeURIComponent(sessionKey)}?${params}`);
+    if (result.stale || generation !== projectionGeneration) throw new DOMException('Superseded request', 'AbortError');
+    if (result.payload.projection?.key !== state.source.data?.projection?.key) throw Object.assign(new Error('Projection conflict.'), { code: 'PROJECTION_CONFLICT' });
+    return result.payload;
+  } catch (error) {
+    if (generation === projectionGeneration && error?.code === 'PROJECTION_CONFLICT') { await reloadProjection(); throw new DOMException('Projection replaced', 'AbortError'); }
+    throw error;
+  }
+}
 async function loadAccountUsage({ refresh = false } = {}) { accountUsage = { provider: state.provider, status: 'loading', windows: [] }; renderAccountUsage(); try { const path = refresh ? '/api/account-usage/refresh' : '/api/account-usage'; const result = await channels.request('accountUsage', `${path}?provider=${encodeURIComponent(state.provider)}`, { method: refresh ? 'POST' : 'GET' }); if (result.stale || result.payload.provider !== state.provider) return; accountUsage = result.payload; renderAccountUsage(); } catch (error) { if (error?.name === 'AbortError') return; accountUsage = { provider: state.provider, status: 'unavailable', reason: 'service-unavailable', windows: [] }; renderAccountUsage(); } }
 async function applyChartInterval(bounds, timezone) {
   if (state.source.status !== 'ready' || state.source.projectionStale) return;
@@ -279,8 +302,43 @@ function viewChanged(event) {
 function densityChanged() { syncState({ persistView: true }); state.page.offset = 0; render(); load(); }
 function setLocaleFromControl() { setLocale(controls.locale.value); try { window.localStorage.setItem(LOCALE_PREFERENCE_KEY, controls.locale.value); } catch {} applyDocumentTranslations(); translateButtonLabels(); viewChanged(); }
 async function checkUpdates() { setButtonBusy($('checkUpdates'), true, 'action.checking'); try { const result = await channels.request('update', '/api/update'); if (!result.stale) showNotice(result.payload.status === 'available' ? t('update.available', { version: result.payload.latestVersion }) : result.payload.status === 'current' ? t('update.current', { version: result.payload.currentVersion }) : t(`update.${result.payload.status || 'disabled'}`)); } catch (error) { if (error?.name !== 'AbortError') showNotice(apiError(error)); } finally { setButtonBusy($('checkUpdates'), false, 'action.checking'); } }
-async function refreshPricing() { if (state.source.status !== 'ready' || state.source.projectionStale) return; const generation = projectionGeneration; setButtonBusy($('refreshPricing'), true, 'action.refreshing'); try { const result = await channels.request('pricing', requestUrl('/api/pricing/refresh'), { method: 'POST' }); if (result.stale || generation !== projectionGeneration) return; state.source.data = result.payload; state.source.status = 'ready'; state.source.projectionStale = false; projectionCache.clear(); const changed = result.payload.pricingUpdate?.changedModels?.length || 0; showNotice(changed ? t('pricing.updated', { count: integerFormat.format(changed) }) : t('pricing.unchanged')); render(); } catch (error) { if (error?.name !== 'AbortError') showNotice(t('pricing.update.failed')); } finally { setButtonBusy($('refreshPricing'), false, 'action.refreshing'); $('refreshPricing').disabled = state.source.status !== 'ready' || Boolean(state.source.projectionStale); } }
-async function exportData() { if (state.source.status !== 'ready' || state.source.projectionStale) { showNotice(t('v2.projection.wait')); return; } setButtonBusy($('exportData'), true, 'action.exporting'); try { const format = $('exportFormat').value; const result = await channels.request('export', `${requestUrl('/api/export', 0)}&format=${encodeURIComponent(format)}`); if (result.stale) return; const url = URL.createObjectURL(result.payload); const link = document.createElement('a'); link.href = url; link.download = `local-ai-token-dashboard-${state.provider}-${format}.${({ 'csv-sessions': 'csv', 'csv-trend': 'csv', 'json-report': 'json', 'markdown-summary': 'md' })[format]}`; link.click(); URL.revokeObjectURL(url); } catch (error) { if (error?.name !== 'AbortError') showNotice(apiError(error)); } finally { setButtonBusy($('exportData'), false, 'action.exporting'); $('exportData').disabled = state.source.status !== 'ready' || Boolean(state.source.projectionStale); } }
+async function refreshPricing() {
+  if (state.source.status !== 'ready' || state.source.projectionStale) return;
+  const generation = ++projectionGeneration; exportGeneration += 1;
+  for (const name of ['dashboard', 'sessions', 'refresh', 'export', 'detail']) channels.abort(name);
+  drawerController.close(); setButtonBusy($('exportData'), false, 'action.exporting');
+  state.source.status = 'refreshing'; setButtonBusy($('refreshPricing'), true, 'action.refreshing'); render();
+  try {
+    const result = await channels.request('pricing', requestUrl('/api/pricing/refresh'), { method: 'POST' });
+    if (result.stale || generation !== projectionGeneration) return;
+    state.source.data = result.payload; state.source.projectionStale = false; projectionCache.clear();
+    state.source.queryScope = `${queryStateToSearch({ ...state.query, sort: 'recent' }, state.provider)}|${result.payload.projection.key}`;
+    state.source.displayedQuery = structuredClone(state.query);
+    const changed = result.payload.pricingUpdate?.changedModels?.length || 0;
+    showNotice(changed ? t('pricing.updated', { count: integerFormat.format(changed) }) : t('pricing.unchanged'));
+  } catch (error) { if (error?.name !== 'AbortError' && generation === projectionGeneration) showNotice(t('pricing.update.failed')); }
+  finally { if (generation === projectionGeneration) { state.source.status = 'ready'; setButtonBusy($('refreshPricing'), false, 'action.refreshing'); render(); } }
+}
+async function exportData() {
+  if (state.source.status !== 'ready' || state.source.projectionStale) { showNotice(t('v2.projection.wait')); return; }
+  const generation = projectionGeneration; const attempt = ++exportGeneration;
+  const provider = state.provider; const format = $('exportFormat').value;
+  const params = projectionParameters(requestParameters(state.source.displayedQuery, { offset: 0, limit: state.page.limit }, provider), state.source.data.projection);
+  params.set('format', format);
+  setButtonBusy($('exportData'), true, 'action.exporting');
+  try {
+    const result = await channels.request('export', `/api/export?${params}`, { responseType: 'blob' });
+    if (result.stale || generation !== projectionGeneration || attempt !== exportGeneration) return;
+    const url = URL.createObjectURL(result.payload); const link = document.createElement('a'); link.href = url;
+    link.download = `local-ai-token-dashboard-${provider}-${format}.${({ 'csv-sessions': 'csv', 'csv-trend': 'csv', 'json-report': 'json', 'markdown-summary': 'md' })[format]}`;
+    link.click(); URL.revokeObjectURL(url);
+  } catch (error) {
+    if (error?.name === 'AbortError' || generation !== projectionGeneration) return;
+    if (error?.code === 'PROJECTION_CONFLICT') await reloadProjection(); else showNotice(apiError(error));
+  } finally {
+    if (attempt === exportGeneration) { setButtonBusy($('exportData'), false, 'action.exporting'); $('exportData').disabled = state.source.status !== 'ready' || Boolean(state.source.projectionStale); }
+  }
+}
 async function diagnostics() { setButtonBusy($('loadDiagnostics'), true, 'action.loading'); try { const result = await channels.request('diagnostics', requestUrl('/api/diagnostics', 0)); if (!result.stale) { $('diagnostics').hidden = false; $('diagnostics').textContent = JSON.stringify(result.payload, null, 2); } } catch (error) { if (error?.name !== 'AbortError') showNotice(apiError(error)); } finally { setButtonBusy($('loadDiagnostics'), false, 'action.loading'); } }
 function setBudgetFormMessage(message = '') { $('budgetFormMessage').hidden = !message; $('budgetFormMessage').textContent = message; }
 function addBudget(event) { event.preventDefault(); const form = $('budgetForm'); if (!form.reportValidity()) return; const name = $('budgetName').value.trim(); const scope = $('budgetScope').value; const limit = Number($('budgetLimit').value); if (!name || !['cost', 'total-tokens'].includes(scope) || !Number.isFinite(limit) || limit <= 0) { setBudgetFormMessage(t('v2.budget.invalid')); return; } state.view.budgets = [...state.view.budgets, { id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, name, scope, limit }]; persistBudgets(); form.reset(); $('budgetEditor').open = false; setBudgetFormMessage(); renderBudgets(state.source.data || {}); }

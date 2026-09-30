@@ -1,0 +1,32 @@
+# Phase 4 projection and export validation
+
+Date: 2026-10-01 (Asia/Taipei). Environment: macOS, Node v26.0.0. Phase 3 was committed as `f0fab22` before implementation. Q19 selects displayed data: a conflict stops download, reloads the complete dashboard, and requires another download action. Q20 keeps manual browser updates. Q21 received no response from the waiting dialog. Implementation assumption: preserve the existing header-only empty CSV format; the UI recommends JSON/Markdown for full empty-result scope. This default can be changed in a follow-up.
+
+## Changes
+
+- FA07: export builds an unpaged list from all matching observations and Sessions. Page offset and limit remain validated but do not truncate exports. A 251-Session fixture exports 251 unique rows even with offset 200. Filters, sort, model projection, redaction and CSV formula protection remain in use.
+- FA16: dashboard, list and detail carry a projection key. Identity includes server epoch, provider, snapshot version, calculation pricing revision, normalized range/search/sort/filters, and captured query clock. Pagination is excluded. Clients send the key and clock for page/detail/export. A mismatch returns HTTP 409 `PROJECTION_CONFLICT`. Omission retains latest API behavior. A server restart cannot reuse an old key at version one.
+- Relative ranges and calendar comparison use the captured clock during guarded requests. Pricing check time does not change the calculation revision; effective pricing rules, rates and modifiers do. A pricing refresh aborts pending exports/details and replaces the complete projection. No historical snapshot store or browser polling is added.
+- The page merge copies only page fields after exact identity comparison. It cannot overwrite old KPI while leaving charts/models behind. Request channels suppress obsolete success and error responses even when a fetch implementation ignores abort. Query/provider changes invalidate export completion and reset busy ownership.
+- FA17: JSON metadata and Markdown identify exact UTC bounds, timezone, search/filters/sort, provider, snapshot, pricing basis/revision, clock, matching Session count and all-pages scope. CSV appends scope and pricing columns to existing columns. `X-Export-Scope` is a compact, URI-encoded JSON response header; full filters/rates are kept out of headers to avoid oversized headers. The UI states the matching count and all-pages scope, plus partial pricing/usage qualifiers.
+- JSON downloads request a Blob even though the response is application/json. Error JSON is still parsed as an API error. Export bodies over 32 MiB are rejected with `EXPORT_TOO_LARGE`, never returned as silently truncated success. Body size is checked after generation; this does not provide streaming or a strict peak-memory bound.
+
+Production files: new `server/projection.mjs`, `server/dashboard-data.mjs`, `server.mjs`, `public/scripts/projection-cache.mjs`, `request-channels.mjs`, `dashboard.mjs`, `i18n.mjs`, and `public/index.html`. No dependency or CSS redesign was added.
+
+## Executed checks
+
+- `node --test tests/phase4-projection.test.mjs`: 8 passed. Includes identity dimensions, canonical filters, page isolation, 251-row export, qualifiers/redaction, cache eviction, server restart and ignored-abort errors/JSON Blob, and empty CSV/report scope.
+- `node --test tests/phase1-accounting.test.mjs tests/phase2-calendar.test.mjs tests/client-state.test.mjs`: 69 passed (36 accounting/calendar and 33 existing client checks).
+- `node tests/phase4-http.mjs` and `--serve`: actual copied server and assets passed. Guarded list/detail, four export formats, 251 CSV rows at offset 200, pinned last24h, 251-to-259 snapshot change, page/detail/export conflicts, and price revision conflict without a snapshot change. Invalid identity/limit and same-origin POST boundaries pass. External fetch is disabled except for an isolated synthetic pricing response from a temporary file. No production cache/configuration or credential is read/written.
+- Syntax checks on changed production modules and the HTTP harness; `git diff --check`: passed.
+- Root desktop browser QA, English 1280px and Traditional Chinese 960px: matching-page navigation, manual snapshot retention, complete conflict reload, model/trend/KPI agreement, detail conflict closure, pricing failure retention and busy reset, filtering/export scope count and JSON Blob action. The 960px scroll width is 960px and scope text wraps. No page console errors were captured.
+
+The UI first retains 251 tokens/v3 after an isolated fixture advance. Next page detects conflict and reloads page one at 259/v4, including trend/model cost. A separate export action on an old snapshot stops and reloads; the notice requires another download action. Detail conflict closes the drawer and reloads at v5. The final filtered scope shows one matching Session. A separate zero-match desktop case shows the localized header-only CSV hint and JSON/Markdown alternative. Screenshots in this chat's visualization directory: `phase4-export-conflict.png`, `phase4-conflict-960.png`, `phase4-export-scope-960.png`, `phase4-empty-export-960.png`. All contain synthetic test data.
+
+## Limits and remaining work
+
+The in-app browser's `waitForEvent('download', { timeoutMs: 10000 })` timed out. It did not return a file path. API attachment/content checks and client Blob/action checks pass, but native browser file completion remains unverified. Only the in-app browser and MCP Apps were available. Do not claim a downloaded file was inspected.
+
+The 32 MiB rejection was inspected, not fault-injected with an oversized export. Windows, other Node versions, live pricing/current prices, real provider-log variants, production rollout, and Phase 5 quota/settings remain unverified. The standard source contract harness was skipped because it can request upstream prices and write source caches. No real Session rescan, production restart, configuration save, push, release, or deployment occurred. The temporary viewport was reset; the test tab and all fixture servers/temp files were removed.
+
+Windows-local validation: run the three focused Node commands above and `node tests/phase4-http.mjs`. Use `node tests/phase4-http.mjs --serve` for a disposable desktop surface; type `advance` to publish a changed fixture, then use page/detail/export. Stop with Ctrl+C to remove temporary files. The HTTP harness requires Node 18.19+ for --import; production stays Node >=18.

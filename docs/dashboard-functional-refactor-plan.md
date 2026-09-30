@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–3 implemented and validated; awaiting the next phase decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–4 implemented and validated; awaiting the next phase decision.
 
 ## Confirmed scope
 
@@ -90,11 +90,11 @@ Acceptance: 150,000-observation all-time query completes with correct total (no 
 
 ### Phase 4 — Projection, page, and export consistency
 
-Own projection responses/builders in `server/dashboard-data.mjs` and `server.mjs`, cache/state helpers in `public/scripts/projection-cache.mjs` / `request-channels.mjs`, and orchestration in `public/scripts/dashboard.mjs`. Address FA07/FA16/FA17. Decide latest-versus-displayed behavior before introducing API fields.
+Own projection responses/builders in `server/dashboard-data.mjs` and `server.mjs`, cache/state helpers in `public/scripts/projection-cache.mjs` / `request-channels.mjs`, and orchestration in `public/scripts/dashboard.mjs`. Address FA07/FA16/FA17. Q19 selects displayed data: on conflict, stop download and reload the complete dashboard; the user checks it and presses Download again. Q20 selects manual browser updates. No polling or retained historical snapshot store is added. Q21 received no dialog response. Compatibility assumption: empty CSV stays header-only; JSON/Markdown preserve full scope, with a client hint. This is an implementation default, not a confirmed user policy.
 
 Use a complete projection identity, including provider, normalized query, snapshot version, and pricing revision. Reject or reload page merges from another identity. Add export metadata without breaking existing omission behavior. Export matched Sessions through an unpaged/streaming path, not `dashboard.sessions`. Keep CSV safety, redaction, request bounds, attachment names, and bounded responses. Review stale failed requests and busy ownership against the new identity.
 
-Recommended compatibility path: omitted version retains today's API behavior; the shipped client supplies the displayed identity; a mismatch returns a specific conflict and causes an explicit complete reload before retry. This avoids an unbounded historical snapshot cache. User confirmation is required for the product behavior, not for routine implementation mechanics.
+Confirmed compatibility path: omitted version retains today's API behavior; the shipped client supplies the displayed identity; a mismatch returns a specific conflict and causes an explicit complete reload before retry. This avoids an unbounded historical snapshot cache. The confirmed product choices authorize this implementation. Evidence: [phase4-projection-validation.md](phase4-projection-validation.md).
 
 Acceptance: all 251 matched Sessions export once; sorting/filtering do not change coverage; page offset does not truncate export; newer pages never leave old charts/models; snapshot advancement during export is detected; every format identifies exact bounds and qualifiers; an old Provider response cannot alter current-provider data. An actual desktop download check is still required on a browser that exposes file completion.
 
