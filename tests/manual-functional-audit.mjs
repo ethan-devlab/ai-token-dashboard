@@ -83,6 +83,13 @@ try {
   ]);
   const reconciled = await parseSessionFile(reconciliationPath, 'mixed-sources.jsonl');
   report('FA10', 'Mixed-source coverage decision', { inputObservations: ['model-a cumulative 110', 'later model-b turn 6'], actualTotal: reconciled.usage.totalTokens, acceptedModels: reconciled.usageEvents.map((item) => item.model), covered: reconciled.reconciliation.covered, policyNeedsDecision: true });
+  const resetPath = await fixture('partial-reset.jsonl', [
+    { type: 'session_meta', timestamp: at, payload: { id: 'test-reset', model: 'model-a' } },
+    { type: 'event_msg', timestamp: at, payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } } } },
+    { type: 'event_msg', timestamp: '2026-09-15T13:00:00Z', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 100, output_tokens: 5, total_tokens: 105 } } } },
+  ]);
+  const reset = await parseSessionFile(resetPath, 'partial-reset.jsonl');
+  report('FA23', 'Partial cumulative counter reset', { inputCounters: [100, 100], outputCounters: [10, 5], acceptedInput: reset.usage.inputTokens, acceptedTotal: reset.usage.totalTokens, partialResets: reset.reconciliation.partialReset, ambiguous: reset.reconciliation.ambiguous, policyNeedsDecision: true });
 
   const capIndex = createSessionIndex({ sessionsDirectory: indexRoot, maxFiles: 1, parseConcurrency: 1, pricing });
   await writeFile(indexedPath, indexLines.map(JSON.stringify).join('\n') + '\n');

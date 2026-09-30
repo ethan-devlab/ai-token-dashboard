@@ -1,12 +1,28 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: proposed; implementation order and data policies await user decisions.
+Date: 2026-10-01 (Asia/Taipei). Status: Phase 1 product policies confirmed; ready for implementation review.
 
 ## Confirmed scope
 
 The user accepted the desktop UI result and requested functional inventory and refactoring. The user selected the complete functional chain and an evidence-backed audit before deciding implementation order. Keep the accepted desktop layout, Traditional Chinese/English, local uPlot, APIs, provider boundaries, and persisted preferences. Add functional status text only where needed to identify stale, incomplete, or unsupported data. No new framework, database, package installation, external service, Service/Tray implementation, or release work is included.
 
-The baseline is `665af57`. [dashboard-functional-audit.md](dashboard-functional-audit.md) contains 17 reproduced findings, four policy cases, and candidate risks. [functional-audit-evidence.json](functional-audit-evidence.json) stores isolated results. UI completion did not establish functional completeness.
+The baseline is `665af57`. [dashboard-functional-audit.md](dashboard-functional-audit.md) contains 17 reproduced findings, five policy cases (including the follow-up counter-reset probe), and candidate risks. [functional-audit-evidence.json](functional-audit-evidence.json) stores isolated results. UI completion did not establish functional completeness.
+
+Decisions confirmed after audit checkpoint commit `b222703`:
+
+- Start with usage and cost correctness.
+- If any file fails parsing, abort the entire refresh and retain the last complete snapshot. The reliability phase must preserve this decision.
+- Model filters apply to matching observations. KPI, trend, model, Session, and export totals describe only those observations.
+- Include mixed-source reconciliation and cross-file duplicate provenance in Phase 1; complete their policy decisions first.
+- Retain generic cache-write tokens when TTL is unknown. Do not guess a write price; report known cost as a lower bound.
+- Keep budget classification based on known cost. Explicitly describe partial pricing; do not change the selected `ok` behavior to indeterminate.
+- Per-model cumulative usage takes priority over unmatched turn usage. Unmatched same-model turns are not added again or claimed to be proven covered; report uncertainty. Turn-only models remain countable.
+- Deduplicate within provider/Session scope only when file contents are identical or explicit event identity proves duplication. A matching Session ID alone does not remove usage.
+- On partial counter decrease, skip the uncertain increment, advance the baseline, and report incomplete data. Do not reset the whole vector and re-add unchanged counters.
+- For the same explicit usage-event identity, select the latest valid version using reliable timestamp and same-file sequence. If cross-file versions cannot be ordered, flag a conflict and do not add them together or combine per-field maxima. A turn/context ID is not automatically a unique usage-event ID.
+- Main execution and each distinct subagent have separate deduplication scopes, even if they share a Session ID. Keep the existing default inclusion of subagents.
+- Preserve adopted Token totals with explicit incomplete/possible-duplicate reasons. Do not put one lower-bound symbol on all uncertain Token values: possible duplication can also overstate usage.
+- The user answered all Phase 1 policy questions. No production implementation has started. Later-phase policy decisions remain separate gates.
 
 ## Target invariants
 
@@ -26,11 +42,22 @@ Phase 0 is the audit checkpoint. Commit its records and probe scripts before cha
 
 Recommended first because incorrect numbers invalidate downstream analysis.
 
-Own `server/claude-session.mjs`, reconciliation in `server/session-index.mjs`, `server/usage.mjs`, event model/cost aggregation in `server/dashboard-data.mjs`, and narrowly related budget classification in `public/scripts/state.mjs` / `dashboard.mjs`. Update only the relevant service/client checks and accounting docs.
+Own `server/claude-session.mjs`, reconciliation/index accounting in `server/session-index.mjs`, `server/usage.mjs`, event model/cost aggregation in `server/dashboard-data.mjs`, and narrowly related Session/detail and quality/budget text in `public/scripts/dashboard.mjs`, `explorer.mjs`, `drawer.mjs`, and `i18n.mjs`. A small pure reconciliation helper is justified if both parse and index stages need the same rules; do not create a general plugin framework. Update only relevant service/client checks and accounting docs. Budget threshold classification in `state.mjs` stays as selected.
 
-Address FA04–FA06; decide FA10, FA18, and FA22 before their implementation. Retain generic cache-write tokens without assigning an unsupported TTL price. Rank by event model. Establish model-filter semantics before changing matching. Share complete/partial/unknown cost qualification across aggregates, models, trend, budgets, and export fields. Validate metadata/reconciliation counters without exposing events containing conversations.
+Address FA04–FA06 and the selected FA10/FA18 reconciliation scope. FA22 keeps known-cost classification with an explicit partial-pricing description. Retain generic cache-write tokens without assigning an unsupported TTL price. Rank by event model. Apply model filters to matching observations. Share complete/partial/unknown cost qualification across aggregates, models, trend, budgets, and export fields. Validate metadata/reconciliation counters without exposing events containing conversations.
 
-Acceptance: 10+20+70+5 yields 105; unknown TTL cost remains qualified; two/five tokens rank under the correct models; trend cost coverage matches aggregate coverage; ambiguous mixed sources and copied/resumed Sessions follow the chosen policy; a partial subtotal below budget does not imply known compliance. Implement first, then add focused regression checks.
+Acceptance: 10+20+70+5 yields 105; unknown TTL cost remains qualified; two/five tokens rank under the correct models; trend cost coverage matches aggregate coverage; ambiguous mixed sources and copied/resumed Sessions follow the chosen policy; a partial subtotal below budget retains known-cost `ok` classification with visible partial-pricing context. Implement first, then add focused regression checks.
+
+Implementation constraints and focused cases:
+
+- Preserve exact generic cache totals and detailed TTL counters without counting the same write twice. Inconsistent total versus TTL breakdown is a quality condition, not permission to discard known tokens. Unknown rates/modifiers must not become falsely complete known cost.
+- Event-level model filters run before usage/cost aggregation and before filtered Session summaries. Add selected-model metadata where needed; preserve legacy Session model metadata rather than silently changing its API meaning. Search, facets, model ranking, comparison, detail, and export must agree on which observations remain.
+- Keep source identity, reliable time, sequence, raw cumulative counter state, and duplicate evidence separate from accepted deltas. Deduplicating only already-computed cumulative deltas can lose usage or combine incompatible baselines. Reconcile verified versions before calculating deltas; retain unproven distinct records with quality markers according to the selected policy.
+- Scope duplicate evidence by provider, trustworthy Session identity, execution type, and agent identity. Byte-identical files are provable copies within that scope. Only explicit usage/message event IDs count as event identity; Session/turn/context IDs are grouping information. Preserve existing stable Session keys where a canonical source remains available.
+- Unordered conflicting versions do not receive arbitrary sums or per-field maxima. Keep a previously confirmed version when available; otherwise mark the observation unresolved and incomplete. Same-file later sequence can identify a version even when timestamps tie; cross-file sequence is not comparable.
+- Repeated identical cumulative counters are duplicates. A verified full restart and a partial decrease are separate states. For partial decrease, skip the uncertain increment and advance baseline; the next valid increment is still counted. Do not silently infer a full restart from one falling field.
+- Test cloned files, copied files with an appended event, two files with the same Session ID but no identity evidence, matching event IDs with later usage, equal/unreliable cross-file timestamps, model changes, turn-only and mixed models, partial reset followed by a normal delta, and main/subagent identity separation. Mark uncertain adopted totals in the API and existing quality surface.
+- Run the accounting/client checks affected by these changes and the isolated actual HTTP projection/export probe. Do not rescan real Session files or save real configuration. Live rollout-format coverage requires redacted representative fixtures or schema evidence; synthetic coverage must remain labelled.
 
 ### Phase 2 — Query and calendar correctness
 
@@ -68,11 +95,11 @@ Acceptance: null quota never shows 100% or epoch reset; measured zero still does
 
 Ask the first independent decisions together, then ask their dependent frontier in later dialogs:
 
-- First phase: recommended usage/cost, or prioritize calendar/export, or snapshot/refresh reliability.
-- Failed changed file: abort the entire pass and keep the previous snapshot, or publish healthy updates plus explicitly retained last-good failed files. Recommended: whole-pass rollback first for a simple, clear correctness boundary; evaluate partial retained snapshots only with explicit freshness metadata.
-- Mixed-model filter: recommended matching observations, which makes KPI/model/trend/export totals describe selected-model usage, or matching Sessions with all of their models included. Both require an explicit Session total label/contract.
+- First phase: usage/cost selected.
+- Failed changed file: whole-pass rollback selected. Healthy partial updates with retained failed files are not selected.
+- Mixed-model filter: matching observations selected. Session totals must use the same filtered observations; preserve existing metadata/API compatibility with explicit projection fields if needed.
 
-Dependent later decisions: mixed-source ambiguity and duplicate provenance; partial budget status; stale quota; current versus displayed export version; comparison calendar basis; current pricing versus a historical rate ledger; concurrent settings conflict UX; watcher-to-browser synchronization. Do not quietly settle accounting semantics in code.
+Phase 1 mixed-source, duplicate/version, reset, and budget decisions are confirmed above. Later decisions still include stale quota; current versus displayed export version; comparison calendar basis; current pricing versus a historical rate ledger; concurrent settings conflict UX; and watcher-to-browser synchronization. Do not quietly settle those future semantics in code.
 
 ## Validation and delivery
 

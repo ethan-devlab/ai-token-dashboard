@@ -115,6 +115,23 @@
         "policyNeedsDecision": true
       },
       {
+        "id": "FA23",
+        "title": "Partial cumulative counter reset",
+        "inputCounters": [
+          100,
+          100
+        ],
+        "outputCounters": [
+          10,
+          5
+        ],
+        "acceptedInput": 200,
+        "acceptedTotal": 215,
+        "partialResets": 1,
+        "ambiguous": 0,
+        "policyNeedsDecision": true
+      },
+      {
         "id": "FA11",
         "title": "Exact file cap",
         "existingFiles": 1,
