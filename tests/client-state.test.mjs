@@ -12,6 +12,42 @@ import { createRequestChannels } from '../public/scripts/request-channels.mjs';
 import { applyTableViewPreferences, budgetState, createDashboardState, customRangeError, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
 import { nearestPointIndex, pointPositions } from '../public/scripts/trend.mjs';
 import { countdownParts, formatCountdown, windowLabelKey } from '../public/scripts/account-usage.mjs';
+import { chartColumns, chartDomain, chartValue, comparisonFixture, nearestBucketIndex, numericScale, snappedInterval } from '../public/scripts/chart-geometry.mjs';
+
+test('comparison charts preserve sparse intervals, unknown values and bucket snapping', () => {
+  const { points } = comparisonFixture('sparse');
+  assert.deepEqual(chartDomain(points), [points[0].fromMs, points.at(-1).toMs]);
+  assert.deepEqual(snappedInterval(points, points[1].fromMs + 1, points[2].toMs - 1), [points[1].fromMs, points[2].toMs]);
+  assert.equal(nearestBucketIndex(points, points[1].fromMs + 1), 1);
+  assert.equal(nearestBucketIndex(points, points.at(-1).toMs), points.length - 1);
+  const columns = chartColumns(points, ['tokens', 'cost'], 'line');
+  assert.equal(columns[1].filter((value) => value === null).length, 2);
+  assert.equal(columns[0][0], (points[0].fromMs + points[0].toMs) / 2000);
+  assert.equal(chartValue({ cost: null }, 'cost'), null);
+  assert.equal(chartValue({ cost: 0 }, 'cost'), 0);
+});
+
+test('comparison scales retain a zero baseline and actual DST bucket durations', () => {
+  for (const name of ['empty', 'one', 'zero', 'sparse', 'partial', 'large', 'dense', 'dst']) {
+    const { points } = comparisonFixture(name);
+    for (const metric of ['tokens', 'cost']) {
+      const scale = numericScale(points, metric);
+      assert.equal(scale.ticks[0], 0);
+      assert.ok(Number.isFinite(scale.max) && scale.max > 0);
+      assert.ok(points.every((point) => chartValue(point, metric) == null || chartValue(point, metric) <= scale.max));
+    }
+  }
+  const { points } = comparisonFixture('dst');
+  assert.deepEqual(points.map((point) => (point.toMs - point.fromMs) / 3_600_000), [24, 23, 24]);
+});
+
+test('sub-micro-dollar costs do not become a false zero or contradictory bound', () => {
+  setLocale('en');
+  assert.match(formatCost(0.00000002), /^< \$0\.000001$/);
+  assert.match(formatCost(0.00000001, true), /^≥ \$1E-8$/);
+  assert.doesNotMatch(formatCost(0.00000001, true), /</);
+  assert.equal(formatCost(0), '$0.00');
+});
 
 test('filter drafts apply explicitly and chip removal preserves unrelated edits', () => {
   const filters = createFilterDraft({ models: ['native'], workspaces: ['old'] });

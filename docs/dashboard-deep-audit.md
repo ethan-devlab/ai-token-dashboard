@@ -205,3 +205,13 @@ Validation:
 Artifacts: `phase2-filter-draft-1440.png` and `phase2-settings-1200.png` under `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/`. Temporary locale, density, and display preferences were restored after QA.
 
 Limits: no Windows runtime, screen-reader session, settings save, unavailable-settings fixture, remote CI, or broad backend suite was run. Backend contracts did not change. Unit, locale, metric, density, and query updates still rebuild chart content; full chart lifecycle preservation and the native/uPlot comparison belong to Phase 3. Dashboard reordering, quota strip, and settings dirty-navigation behavior belong to Phase 4.
+
+## Phase 3 comparison checkpoint — 2026-09-30
+
+After the Phase 2 commit, a separate local comparison page was implemented. The user selected a same-position engine switch. Both candidates use identical inputs and application-owned interactions, including three modes, bars/lines, timestamp geometry, compact hover, pinned keyboard readout, complete-bucket selection, zoom/reset, explicit interval application, Return, and a semantic table. Production trend and model-ranking integration remain pending the engine decision.
+
+The comparison passed 25 client checks, direct desktop layout checks at 960/1200/1440/1600px, all 12 engine/mode/mark combinations, explicit edge-case fixtures, and a real local Apply/Return workflow. Unknown, zero, partial, and sub-micro-dollar values remain distinct. Dual-axis coincident series remain visible through outline/dash treatment. The uPlot instance is reused for redraw and resize.
+
+Final 20-sample redraw medians for real nine-bucket bars were 0.50ms for both engines. At 10,000 test buckets, lines measured Native 0.80ms/uPlot 0.70ms; bars measured Native 1.10ms/uPlot 1.20ms. These are JavaScript draw-callback times, not full browser paint, memory, or page-load measurements. Repeated runs varied; there is no stable performance winner. The pinned uPlot 1.6.32 module and CSS add 52,961 raw vendor bytes. The comparison page loads both engines; Native's zero-vendor production option does not describe this page's load.
+
+See `docs/chart-engine-comparison.md` for provenance, exact measurements, maintenance trade-offs, screenshots, acceptance evidence, and verification limits. No account quota, server API, settings save, or production chart-engine change occurred. Full Phase 3 and later phases remain open.

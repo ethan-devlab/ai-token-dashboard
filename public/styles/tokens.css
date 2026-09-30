@@ -41,4 +41,8 @@
   --control-height-compact: 2rem;
   --focus-width: 3px;
   --focus-offset: 3px;
+  --chart-height: 17.5rem;
+  --chart-gutter: 5.5rem;
+  --chart-top: 2rem;
+  --chart-bottom: 3.375rem;
 }
