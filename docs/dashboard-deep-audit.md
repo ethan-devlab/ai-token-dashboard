@@ -326,3 +326,25 @@ Root verification:
 - `git diff --check` passed. Application tests were not rerun for this CSS-only change; the Phase 5 run of 33 passing client checks remains the latest application-test result. Platform, assistive-technology, and download/unload limits recorded above still apply.
 
 Screenshots under `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/`: `phase6-settings-gap-1440.png`, `phase6-drawer-close-1440.png`, `phase6-dashboard-spacing-1440.png`, `phase6-dashboard-en-960.png`, `phase6-filters-960.png`, `phase6-chart-spacing-1440.png`, and `phase6-operations-spacing-1440.png`.
+
+## Post-review control interaction checkpoint — 2026-09-30
+
+Spacing work was committed as `e788fec`. The user then selected control interaction review and later confirmed continuation of this round.
+
+Idle disabled primary actions now use muted surface/text tokens. Enabled inputs and native selects have a subtle hover border. A real cascade defect was found: the invalid-input rule in base styles was overridden by later common input defaults. It now follows those defaults in shared components; invalid inputs retain their red border on hover. Settings inputs have stable accessible names through their original label spans. Associated field errors remain in `aria-describedby` and no longer become part of the field name.
+
+Trend Apply and Return now use the existing shared busy-label helper with Traditional Chinese and English operation labels. Pending actions disable interval controls, guard duplicate actions, and clear in `finally`. Keyboard completion previously left focus on the document. It now restores Start boundary focus without scrolling if focus is lost or remains on the disabled action. If the user moves to another control during the request, completion preserves that focus. Query bounds, APIs, and accounting semantics are unchanged.
+
+Root verification:
+
+- Final `npm run test:client`: 33 passed. `node --check` passed for trend, settings, i18n, and the manual server. `git diff --check` passed. No backend implementation changed; backend suites were not repeated.
+- The TEST ONLY server used `MANUAL_UI_DELAY_MS=2000 node tests/manual-ui-server.mjs`. Optional API delay is capped at 5000ms and excludes the provider list so initial projection loading does not accumulate two delays. The server forwards only allow-listed local GET projections, never forwards POST, and keeps mock settings in memory.
+- Delayed Refresh showed `Refreshing…`, `aria-busy=true`, disabled state, wait cursor, and retained eight rows. Its idle and busy widths were both 133.09px. Check again retained 110.60px. Mock settings Save retained 100.88px and showed `儲存中…`; a simulated failed save retained edits without a real `.env` write.
+- English chart Apply retained 163.35px in idle and busy states; Return retained 170.26px. They showed `Applying…`/`Returning…`, busy semantics, and wait cursors. Traditional Chinese Apply showed `套用中…`. September 6–15 Apply produced three trend buckets and four Session rows; Return restored eight. Enter activation for each action restored Start boundary focus. Moving focus to the Mark select during pending Apply preserved that select's focus after completion.
+- Invalid mock Port 70000 retained the exact accessible name `連接埠`, with `label-PORT` and separate help/error descriptions. Its hovered border was `rgb(255, 130, 148)`. Test settings were restored before the ephemeral server stopped.
+- On the actual production page, Select hover used `rgb(141, 153, 169)` and keyboard focus retained the 3px outline. Idle disabled Apply used `rgb(15, 20, 26)` background and `rgb(165, 175, 188)` text. A reversed custom range showed the red border and its explicit end-after-start error. The page was returned to the root month query with eight rows and the original view preferences. Actual 960px width had no document overflow; no production browser errors were recorded.
+- Enabled secondary Zoom and primary Refresh hover states matched their raised/success tokens on the TEST ONLY page. Disabled Clear did not change its background on pointer hover. Native select controls already had dark color scheme. Held pressed states and platform popup rendering were not individually captured; existing enabled-only pressed rules were reviewed in source.
+
+The test servers were stopped and temporary tabs closed. No real settings save, price refresh, quota refresh, JSONL rescan, push, release, or deployment occurred. These checks validate shipped client controls with explicit delayed/mock responses; they do not measure production speed or certify upstream services. Windows controls, forced colors, screen readers, text zoom, populated Claude, native unload UI, and browser download completion remain unverified as recorded above.
+
+Screenshots under `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/`: `phase7-production-controls-1440.png` (actual production), `phase7-chart-busy-test-only.png`, `phase7-settings-invalid-test-only.png`, and `phase7-busy-test-only.png` (explicit test-only scenarios).

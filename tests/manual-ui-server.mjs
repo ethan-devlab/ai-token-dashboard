@@ -2,16 +2,19 @@ import http from 'node:http';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 
 // Explicit manual QA surface. It never writes .env or forwards a POST.
 const publicRoot = fileURLToPath(new URL('../public/', import.meta.url));
 const settings = { HOST: '127.0.0.1', PORT: '3333', CODEX_SESSIONS_DIR: '/TEST_ONLY/codex', CLAUDE_SESSIONS_DIR: '/TEST_ONLY/claude', MAX_FILES: '10000', PARSE_CONCURRENCY: '4', ALLOW_REMOTE: '0', EXPOSE_FULL_PATHS: '0', AUTO_REFRESH: '0', AUTO_REFRESH_DEBOUNCE_MS: '1500', UPDATE_REPOSITORY: '' };
 const failures = new Set();
+const responseDelayMs = Math.min(5000, Math.max(0, Number(process.env.MANUAL_UI_DELAY_MS) || 0));
 const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
 const fail = (res) => json(res, 503, { error: { code: 'TEST_ONLY_FAILURE', message: 'TEST ONLY simulated request failure.' } });
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (responseDelayMs && url.pathname.startsWith('/api/') && url.pathname !== '/api/providers') await delay(responseDelayMs);
     if (url.pathname === '/api/settings') {
       const referer = new URL(req.headers.referer || 'http://localhost');
       if (referer.searchParams.get('test') === 'unavailable') return json(res, 403, { error: { code: 'SETTINGS_DISABLED', message: 'TEST ONLY settings disabled.' } });

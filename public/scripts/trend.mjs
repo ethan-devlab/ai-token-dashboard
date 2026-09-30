@@ -2,28 +2,32 @@ import { chartDomain, nearestBucketIndex, snappedInterval } from './chart-geomet
 import { CHART_HEIGHT, CHART_PADDING, createChartRenderer } from './chart-renderer.mjs';
 import { escapeHtml, formatCost, formatIntervalBoundary, integerFormat } from './format.mjs';
 import { getLocale, t } from './i18n.mjs';
+import { setButtonBusy } from './button-state.mjs';
 
 export function createUsageTrendController(host, { onApplyInterval, onReturnQuery }) {
-  host.innerHTML = `<p class="trend-summary" data-summary></p><p id="trendHelp" class="trend-help"></p><div data-plots></div><div id="trendReadout" class="trend-readout"></div><p class="visually-hidden" role="status" data-announcement></p><div class="control-row trend-interval"><label class="control"><span data-from-label></span><select data-from></select></label><label class="control"><span data-to-label></span><select data-to></select></label><button type="button" data-zoom></button><button type="button" data-reset></button><button type="button" class="button--primary" data-apply></button><button type="button" data-return></button></div><p class="trend-interval-label muted" data-interval-label></p><details class="trend-table"><summary></summary><div class="trend-table-wrap"><table><thead><tr><th data-time-heading></th><th data-token-heading></th><th data-cost-heading></th></tr></thead><tbody></tbody></table></div></details>`;
+  host.innerHTML = `<p class="trend-summary" data-summary></p><p id="trendHelp" class="trend-help"></p><div data-plots></div><div id="trendReadout" class="trend-readout"></div><p class="visually-hidden" role="status" data-announcement></p><div class="control-row trend-interval"><label class="control"><span data-from-label></span><select data-from></select></label><label class="control"><span data-to-label></span><select data-to></select></label><button type="button" data-zoom></button><button type="button" data-reset></button><button type="button" class="button--primary" data-i18n="chart.apply" data-apply></button><button type="button" data-i18n="chart.return" data-return></button></div><p class="trend-interval-label muted" data-interval-label></p><details class="trend-table"><summary></summary><div class="trend-table-wrap"><table><thead><tr><th data-time-heading></th><th data-token-heading></th><th data-cost-heading></th></tr></thead><tbody></tbody></table></div></details>`;
   const find = (name) => host.querySelector(`[data-${name}]`);
   const plots = find('plots'); const readout = host.querySelector('#trendReadout');
   const fromSelect = find('from'); const toSelect = find('to');
   let options = { trend: { points: [] }, timezone: 'UTC', mode: 'single', mark: 'bar', metric: 'cost', canApply: false, canReturn: false };
   let points = []; let domain = [0, 1]; let selectedTime; let interval; let previewIndex = -1;
   let frames = []; let pointerFrame = 0; let dragStart; let scopeKey; let dataKey; let presentationKey; let destroyed = false;
+  let pendingAction = null;
   const selectedIndex = () => points.findIndex((point) => point.fromMs === selectedTime);
   const boundary = (value) => formatIntervalBoundary(value, options.timezone);
   const intervalText = (bounds) => `${boundary(bounds[0])} → ${boundary(bounds[1])} · ${options.timezone} · [from,to)`;
   const metricLabel = (metric) => `${t(metric === 'cost' ? 'trend.cost' : 'total.tokens')}${metric === 'cost' ? ' · USD' : ''}`;
 
   function actions() {
-    const unavailable = !points.length || options.busy;
+    const unavailable = !points.length || options.busy || Boolean(pendingAction);
     fromSelect.disabled = unavailable; toSelect.disabled = unavailable;
     find('zoom').disabled = unavailable || !interval;
     find('reset').disabled = unavailable || domain.every((value, index) => value === chartDomain(points)[index]);
+    setButtonBusy(find('apply'), pendingAction === 'apply', 'chart.applying');
+    setButtonBusy(find('return'), pendingAction === 'return', 'chart.returning');
     find('apply').disabled = unavailable || !interval || !options.canApply;
-    find('return').disabled = options.busy || !options.canReturn;
-    plots.setAttribute('aria-busy', String(Boolean(options.busy)));
+    find('return').disabled = Boolean(options.busy || pendingAction) || !options.canReturn;
+    plots.setAttribute('aria-busy', String(Boolean(options.busy || pendingAction)));
   }
   function overlays() {
     const point = points[previewIndex >= 0 ? previewIndex : selectedIndex()];
@@ -135,13 +139,21 @@ export function createUsageTrendController(host, { onApplyInterval, onReturnQuer
   });
   find('zoom').addEventListener('click', () => { if (!interval) return; domain = [...interval]; draw(); actions(); });
   find('reset').addEventListener('click', () => { domain = chartDomain(points); draw(); actions(); });
-  async function runAction(button, callback) {
-    const hadFocus = document.activeElement === button;
-    await callback();
-    if (!destroyed && hadFocus && document.activeElement === document.body) fromSelect.focus();
+  async function runAction(name, callback) {
+    if (pendingAction) return;
+    const button = find(name);
+    pendingAction = name; actions();
+    try { await callback(); } finally {
+      pendingAction = null;
+      if (!destroyed) {
+        actions();
+        const focused = document.activeElement;
+        if (!fromSelect.disabled && (focused === document.body || focused === button && button.disabled)) fromSelect.focus({ preventScroll: true });
+      }
+    }
   }
-  find('apply').addEventListener('click', () => { if (options.canApply && interval) void runAction(find('apply'), () => onApplyInterval([...interval], options.timezone)); });
-  find('return').addEventListener('click', () => { if (options.canReturn) void runAction(find('return'), onReturnQuery); });
+  find('apply').addEventListener('click', () => { if (options.canApply && interval) void runAction('apply', () => onApplyInterval([...interval], options.timezone)); });
+  find('return').addEventListener('click', () => { if (options.canReturn) void runAction('return', onReturnQuery); });
   const observer = new ResizeObserver(() => { if (!destroyed && frames.length) draw(); }); observer.observe(plots);
 
   return {
@@ -173,7 +185,7 @@ export function createUsageTrendController(host, { onApplyInterval, onReturnQuer
       const coverage = (next.mode !== 'single' || next.metric === 'cost') && points.some((point) => point.partialCost || point.cost == null);
       find('summary').textContent = next.unavailable ? t(next.busy ? 'load.trend' : 'load.noData') : `${summary} · ${next.timezone}${next.mode === 'dual' ? ` · ${t('chart.dualHint')}` : ''}${coverage ? ` · ${t('chart.costCoverage')}` : ''}`;
       host.querySelector('#trendHelp').textContent = t('chart.help');
-      for (const [name, key] of [['from-label','chart.from'],['to-label','chart.to'],['zoom','chart.zoom'],['reset','chart.reset'],['apply','chart.apply'],['return','chart.return'],['time-heading','chart.interval'],['token-heading','total.tokens'],['cost-heading','trend.cost']]) find(name).textContent = t(key);
+      for (const [name, key] of [['from-label','chart.from'],['to-label','chart.to'],['zoom','chart.zoom'],['reset','chart.reset'],['time-heading','chart.interval'],['token-heading','total.tokens'],['cost-heading','trend.cost']]) find(name).textContent = t(key);
       host.querySelector('.trend-table summary').textContent = t('trend.table');
       if (dataChanged || scopeChanged || presentationKey !== nextPresentation) { if (presentationKey !== nextPresentation || !frames.length || !points.length) rebuild(); else draw(); }
       selection(); setInterval(interval); actions();

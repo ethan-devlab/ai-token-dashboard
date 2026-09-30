@@ -36,6 +36,7 @@
 .button:not(:disabled):not([aria-busy="true"]):hover, button:not(.drawer-backdrop):enabled:not([aria-busy="true"]):hover, .view-menu summary:hover { background: var(--action-hover); }
 .button:not(:disabled):not([aria-busy="true"]):active, button:not(.drawer-backdrop):enabled:not([aria-busy="true"]):active, .view-menu summary:active { background: var(--action-pressed); }
 button:disabled { opacity: 0.65; cursor: not-allowed; }
+.button--primary:disabled:not([aria-busy="true"]) { --action-bg: var(--color-surface-muted); --action-border: var(--color-border); --action-text: var(--color-muted); opacity: 1; }
 button[aria-busy="true"] { cursor: wait; }
 .button-label { display: grid; }
 .button-label > span { grid-area: 1 / 1; }
@@ -43,4 +44,6 @@ button[aria-busy="true"] { cursor: wait; }
 :where(button, a, input, select, summary, canvas, [tabindex]):focus-visible { outline: var(--focus-width) solid var(--color-accent); outline-offset: var(--focus-offset); }
 input[type="checkbox"] { inline-size: 1rem; block-size: 1rem; margin: 0; padding: 0; flex-shrink: 0; accent-color: var(--color-accent); }
 input:disabled, select:disabled { opacity: 0.65; cursor: not-allowed; }
+input:not([type="checkbox"]):enabled:not([aria-invalid="true"]):hover, select:enabled:hover { border-color: var(--color-subtle); }
+input[aria-invalid="true"] { border-color: var(--color-danger); }
 summary { cursor: pointer; }

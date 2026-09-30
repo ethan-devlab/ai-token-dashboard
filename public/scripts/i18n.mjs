@@ -119,7 +119,7 @@ const chartDictionaries = {
     'chart.help': 'Left/Right/Home/End select a bucket; Enter pins it; Escape ends preview. Drag to select complete buckets, or use the interval selects below.',
     'chart.dualHint': 'Independent token and USD scales; scale positions do not establish a correlation.', 'chart.buckets': 'buckets',
     'chart.from': 'Start boundary', 'chart.to': 'End boundary', 'chart.zoom': 'Zoom to selection', 'chart.reset': 'Reset zoom',
-    'chart.apply': 'Apply to local query', 'chart.return': 'Return to prior query', 'chart.interval': 'Interval and timezone',
+    'chart.apply': 'Apply to local query', 'chart.applying': 'Applying…', 'chart.return': 'Return to prior query', 'chart.returning': 'Returning…', 'chart.interval': 'Interval and timezone',
     'chart.costCoverage': 'Costs include known amounts only. ≥ marks a lower bound; — means unknown.', 'model.all': 'View all {count} models',
   },
   'zh-Hant': {
@@ -128,7 +128,7 @@ const chartDictionaries = {
     'chart.help': '左右方向鍵／Home／End 選點；Enter 固定、Escape 關閉預覽。拖曳選取完整資料區間，或用下方起迄選單操作。',
     'chart.dualHint': 'Token 與 USD 使用獨立刻度；刻度位置不代表相關性。', 'chart.buckets': '資料區間',
     'chart.from': '起始邊界', 'chart.to': '結束邊界', 'chart.zoom': '放大所選區間', 'chart.reset': '重置縮放',
-    'chart.apply': '套用至本機查詢', 'chart.return': '返回先前查詢', 'chart.interval': '區間與時區',
+    'chart.apply': '套用至本機查詢', 'chart.applying': '套用中…', 'chart.return': '返回先前查詢', 'chart.returning': '返回中…', 'chart.interval': '區間與時區',
     'chart.costCoverage': '費用僅包含已知部分；≥ 表示已知下界，— 表示未知。', 'model.all': '查看全部 {count} 個模型',
   },
 };

@@ -3,7 +3,6 @@
 html { background: var(--color-canvas); }
 body { margin: 0; min-inline-size: 960px; background: var(--color-canvas); color: var(--color-text); font-family: var(--font-sans); font-size: var(--text-base); line-height: var(--line-normal); }
 button, input, select { font: inherit; }
-input[aria-invalid="true"] { border-color: var(--color-danger); }
 h1, h2, p { margin: 0; }
 h1 { font-size: var(--text-2xl); letter-spacing: -0.04em; }
 h2 { font-size: var(--text-xl); letter-spacing: -0.025em; }

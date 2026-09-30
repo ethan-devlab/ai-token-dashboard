@@ -64,6 +64,8 @@ function updateDirty() {
 
 for (const key of SETTINGS_KEYS) {
   const input = inputFor(key);
+  const labelText = input.parentElement.querySelector('span[data-i18n]');
+  if (labelText) { labelText.id = `label-${key}`; input.setAttribute('aria-labelledby', labelText.id); }
   const error = document.createElement('span'); error.id = `error-${key}`; error.className = 'field-error'; error.hidden = true;
   input.parentElement.append(error);
   const hint = ['MAX_FILES', 'PARSE_CONCURRENCY'].includes(key) ? 'parseHint' : ['HOST', 'PORT', 'EXPOSE_FULL_PATHS'].includes(key) ? 'networkHint' : ['AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS'].includes(key) ? 'watcherHint' : '';
