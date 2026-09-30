@@ -96,7 +96,9 @@ function sorted(sessions, sort) {
 function trend(sessions, range) {
   const events = sessions.flatMap((session) => session.usageEvents);
   if (!events.length) return { points: [], unit: 'day', partialCost: false };
-  const span = (range.toMs ?? Math.max(...events.map((event) => Date.parse(event.timestamp)))) - (range.fromMs ?? Math.min(...events.map((event) => Date.parse(event.timestamp))));
+  let earliest = Infinity; let latest = -Infinity;
+  for (const event of events) { const time = Date.parse(event.timestamp); earliest = Math.min(earliest, time); latest = Math.max(latest, time); }
+  const span = (range.toMs ?? latest) - (range.fromMs ?? earliest);
   const unit = range.mode === 'last24h' || range.mode === 'today' || span <= 2 * DAY_MS ? 'hour' : range.mode === 'week' || range.mode === 'month' || span <= 400 * DAY_MS ? 'day' : range.mode === 'year' || span <= 6 * 366 * DAY_MS ? 'month' : 'year';
   const points = new Map();
   for (const session of sessions) for (const event of session.usageEvents) {

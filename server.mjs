@@ -63,7 +63,7 @@ function requestContext(requestUrl) {
 }
 function headers(contentType, length, csp, id, attachment = null) { return { 'Content-Type': contentType, 'Content-Length': length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': csp, 'X-Request-Id': id, ...(attachment ? { 'Content-Disposition': attachment } : {}) }; }
 function json(res, status, value, id) { const body = JSON.stringify(value); res.writeHead(status, headers('application/json; charset=utf-8', Buffer.byteLength(body), API_CSP, id)); res.end(body); }
-function error(res, failure, id) { json(res, failure.status || 500, { error: { code: failure.code || 'INTERNAL_ERROR', message: failure.status ? failure.message : 'Internal server error.', requestId: id } }, id); }
+function error(res, failure, id) { json(res, failure.status || 500, { error: { code: failure.code || 'INTERNAL_ERROR', message: failure.status ? failure.message : 'Internal server error.', requestId: id, ...(failure.refreshStatus ? { reason: failure.refreshStatus.reason, failedFiles: failure.refreshStatus.failedFiles, retainedSnapshot: failure.refreshStatus.retainedSnapshot } : {}) } }, id); }
 function allowedHost(host) {
   const configured = `${CONFIG.host.includes(':') && !CONFIG.host.startsWith('[') ? `[${CONFIG.host}]` : CONFIG.host}:${CONFIG.port}`.toLowerCase();
   if (String(host || '').toLowerCase() === configured) return true;

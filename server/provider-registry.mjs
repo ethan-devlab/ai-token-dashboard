@@ -3,57 +3,73 @@ import { stat } from 'node:fs/promises';
 import { createSessionIndex } from './session-index.mjs';
 import { createSummaryCache } from './summary-cache.mjs';
 
-async function directoryAvailable(directory) {
+const WATCHER_RETRY_MS = 1000;
+async function directoryState(directory) {
   const value = await stat(directory).catch(() => null);
-  return Boolean(value?.isDirectory());
+  return value?.isDirectory() ? `${value.dev}:${value.ino}` : null;
 }
-
 function createProvider({ id, label, sessionsDirectory, pricingService, config }) {
   const index = createSessionIndex({ provider: id, sessionsDirectory, maxFiles: config.maxFiles, parseConcurrency: config.parseConcurrency, pricing: () => pricingService.current() });
-  const cache = createSummaryCache(() => index.refresh());
-  let watcher = null;
-  let watcherTimer = null;
+  const cache = createSummaryCache(() => index.prepareRefresh());
+  let watcher = null; let watcherTimer = null; let recoveryTimer = null; let startPromise = null;
+  let rootIdentity = null; let closed = false; let watcherStarted = false;
   let watcherStatus = config.autoRefresh ? 'starting' : 'disabled';
-
+  function scheduleRefresh() {
+    if (closed || !cache.initialized()) return;
+    clearTimeout(watcherTimer);
+    watcherTimer = setTimeout(() => {
+      watcherTimer = null;
+      if (!closed) cache.refresh().catch((error) => {
+        if (error.reason === 'files-changed' || error.reason === 'files-changing') scheduleRefresh();
+      });
+    }, config.autoRefreshDebounceMs);
+    watcherTimer.unref?.();
+  }
+  function changed() { if (!closed) { cache.invalidate(); scheduleRefresh(); } }
+  function detach() { const previous = watcher; watcher = null; rootIdentity = null; previous?.close(); }
+  function scheduleRecovery() {
+    if (closed || !config.autoRefresh || !watcherStarted || recoveryTimer) return;
+    recoveryTimer = setTimeout(() => { recoveryTimer = null; startWatcher().catch(() => undefined); }, WATCHER_RETRY_MS);
+    recoveryTimer.unref?.();
+  }
+  async function startWatcher() {
+    if (closed || !config.autoRefresh) return;
+    watcherStarted = true;
+    if (startPromise) return startPromise;
+    startPromise = (async () => {
+      const identity = await directoryState(sessionsDirectory);
+      if (closed) return;
+      if (watcher && identity === rootIdentity) return;
+      const rebinding = Boolean(rootIdentity || watcherStatus === 'unavailable' || watcherStatus === 'failed');
+      detach();
+      if (!identity) { watcherStatus = 'unavailable'; return; }
+      try {
+        const next = watch(sessionsDirectory, { recursive: true }, changed);
+        watcher = next; rootIdentity = identity;
+        next.on('error', () => { if (closed || watcher !== next) return; detach(); watcherStatus = 'failed'; changed(); scheduleRecovery(); });
+        next.on('close', () => { if (closed || watcher !== next) return; watcher = null; rootIdentity = null; watcherStatus = 'failed'; scheduleRecovery(); });
+        watcherStatus = 'watching';
+        if (rebinding) changed();
+      } catch { watcherStatus = 'failed'; }
+    })();
+    try { return await startPromise; }
+    finally { startPromise = null; scheduleRecovery(); }
+  }
   async function availability() {
-    const available = await directoryAvailable(sessionsDirectory);
+    const available = Boolean(await directoryState(sessionsDirectory));
+    if (watcherStarted && config.autoRefresh && !closed) await startWatcher();
     return { id, label, available, ...(available ? {} : { reason: 'sessions-directory-missing' }) };
   }
-
-  async function startWatcher() {
-    if (!config.autoRefresh) return;
-    if (!(await directoryAvailable(sessionsDirectory))) { watcherStatus = 'unavailable'; return; }
-    try {
-      watcher = watch(sessionsDirectory, { recursive: true }, () => {
-        if (!cache.initialized()) return;
-        clearTimeout(watcherTimer);
-        watcherTimer = setTimeout(() => cache.refresh().catch(() => undefined), config.autoRefreshDebounceMs);
-      });
-      watcher.on('error', () => { watcherStatus = 'failed'; });
-      watcherStatus = 'watching';
-    } catch {
-      watcherStatus = 'failed';
-    }
+  async function close() {
+    closed = true; watcherStatus = 'closed';
+    clearTimeout(watcherTimer); clearTimeout(recoveryTimer); watcherTimer = null; recoveryTimer = null;
+    detach(); cache.close(); await index.close();
   }
-
-  function close() {
-    clearTimeout(watcherTimer);
-    watcher?.close();
-  }
-
   return Object.freeze({
-    id,
-    label,
-    sessionsDirectory,
-    pricingService,
-    cache,
-    availability,
-    startWatcher,
-    close,
-    watcher: () => ({ enabled: config.autoRefresh, status: watcherStatus, debounceMs: config.autoRefreshDebounceMs }),
+    id, label, sessionsDirectory, pricingService, cache, availability, startWatcher, close,
+    watcher: () => ({ enabled: config.autoRefresh, status: watcherStatus, debounceMs: config.autoRefreshDebounceMs, retryMs: config.autoRefresh ? WATCHER_RETRY_MS : null }),
   });
 }
-
 export function createProviderRegistry({ config, pricingServices }) {
   const providers = new Map([
     ['codex', createProvider({ id: 'codex', label: 'Codex', sessionsDirectory: config.codexSessionsDirectory, pricingService: pricingServices.codex, config })],
@@ -63,7 +79,7 @@ export function createProviderRegistry({ config, pricingServices }) {
     get: (id) => providers.get(id) || null,
     list: async () => ({ defaultProvider: 'codex', providers: await Promise.all([...providers.values()].map((provider) => provider.availability())) }),
     startWatchers: () => Promise.all([...providers.values()].map((provider) => provider.startWatcher())),
-    close: () => providers.forEach((provider) => provider.close()),
+    close: () => Promise.all([...providers.values()].map((provider) => provider.close())),
     diagnostics: async () => Promise.all([...providers.values()].map(async (provider) => ({ ...(await provider.availability()), snapshot: provider.cache.status(), watcher: provider.watcher(), pricing: provider.pricingService.status() }))),
   });
 }

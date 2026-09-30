@@ -40,7 +40,7 @@ function renderAccountUsage() {
     const used = document.createElement('span'); used.className = 'muted'; used.textContent = t('accountUsage.used', { value: window.usedPercent == null ? '—' : Math.round(Number(window.usedPercent) * 10) / 10 }); card.append(heading, meter, used, reset); host.append(card);
   }
 }
-function apiError(error) { if (error?.code === 'INVALID_RANGE') return t('range.serverInvalid'); if (error?.code === 'INVALID_TIMEZONE') return t('range.invalidTimezone'); return error instanceof Error ? error.message : t('load.error'); }
+function apiError(error) { if (error?.code === 'SESSION_REFRESH_FAILED') return error.retainedSnapshot === false ? t('quality.refreshUnavailable') : t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${error.reason || 'refresh-failed'}`), count: error.failedFiles || 0 }); if (error?.code === 'INVALID_RANGE') return t('range.serverInvalid'); if (error?.code === 'INVALID_TIMEZONE') return t('range.invalidTimezone'); return error instanceof Error ? error.message : t('load.error'); }
 function aggregate(data) { return data.aggregate?.usage || data.totals || {}; }
 function cost(data) { return data.aggregate?.cost || data.cost || {}; }
 function page(data) { return data.page || data; }
@@ -117,7 +117,7 @@ function renderProjectionStatus() {
   const retained = Boolean(state.source.data && (failed || state.source.projectionStale));
   const refreshedFailed = failed && lastLoadOptions.refresh;
   $('projectionStatus').dataset.state = status;
-  $('projectionStatus').textContent = failed ? [refreshedFailed ? t('projection.refreshFailed') : state.source.data ? t('v2.projection.error') : t('load.error'), state.source.error].filter(Boolean).join(' ') : state.source.projectionStale ? t('v2.projection.stale') : ['loading', 'refreshing'].includes(status) ? t('v2.projection.loading') : '';
+  $('projectionStatus').textContent = failed ? [refreshedFailed && state.source.data ? t('projection.refreshFailed') : state.source.data ? t('v2.projection.error') : t('load.error'), state.source.error].filter(Boolean).join(' ') : state.source.projectionStale ? t('v2.projection.stale') : ['loading', 'refreshing'].includes(status) ? t('v2.projection.loading') : '';
   $('retainedProjection').hidden = !retained;
   const range = state.source.data?.range;
   const retainedDates = retained && range?.fromMs != null ? `${formatIntervalBoundary(range.fromMs, range.timezone)} → ${formatIntervalBoundary(range.toMs, range.timezone)} · ` : '';
@@ -137,9 +137,9 @@ function renderMetadata(data) {
   const scan = data.scan || {}; const duration = scan.parseDurationMs ?? data.durationMs;
   const items = [`${t('v2.timezone')}: ${data.range?.timezone || state.query.timezone}`, `${t('v2.metadata.sessions')}: ${integerFormat.format(data.sessionCount ?? page(data).matchedSessionCount ?? 0)}`, `${t('v2.metadata.snapshot')}: ${scan.snapshotVersion ?? '—'}`, `${t('v2.metadata.reuse')}: ${scan.reused == null ? '—' : integerFormat.format(scan.reused)}`, `${t('v2.metadata.parse')}: ${duration == null ? '—' : `${integerFormat.format(duration)} ms`}`];
   $('info').textContent = items.join(' · ');
-  const watcher = data.watcher || scan.watcher || {}; const status = ['watching', 'starting', 'failed', 'disabled'].includes(watcher.status) ? watcher.status : 'manual'; $('watcherText').textContent = t(`v2.watcher.${status}`, { duration: watcher.debounceMs ?? '—' });
+  const watcher = data.watcher || scan.watcher || {}; const status = ['watching', 'starting', 'failed', 'unavailable', 'disabled', 'closed'].includes(watcher.status) ? watcher.status : 'manual'; $('watcherText').textContent = t(`v2.watcher.${status}`, { duration: watcher.debounceMs ?? '—' });
 }
-function renderQuality(data) { const quality = data.quality || {}; const scan = quality.scan || {}; const range = quality.range || {}; const messages = Array.isArray(quality.messages) ? quality.messages : [[scan.failedFiles, t('quality.files', { count: scan.failedFiles })], [scan.invalidLines, t('quality.lines', { count: scan.invalidLines })], [range.estimatedTimestamps, t('quality.estimated', { count: range.estimatedTimestamps })], [range.pricingCoverage?.partial, t('quality.partial')]].filter(([active]) => active).map(([, message]) => message).concat(usageWarnings(range.reconciliation)); const host = $('quality'); host.hidden = !messages.length; host.dataset.state = quality.severity === 'error' ? 'error' : 'warning'; host.textContent = messages.join(' · '); }
+function renderQuality(data) { const quality = data.quality || {}; const scan = quality.scan || {}; const range = quality.range || {}; const messages = Array.isArray(quality.messages) ? quality.messages : [[scan.failedFiles, t('quality.files', { count: scan.failedFiles })], [scan.truncated, t('quality.truncated', { count: scan.maxFiles })], [scan.refreshFailure, t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${scan.refreshFailure?.reason || 'refresh-failed'}`), count: scan.refreshFailure?.failedFiles || 0 })], [scan.invalidLines, t('quality.lines', { count: scan.invalidLines })], [range.estimatedTimestamps, t('quality.estimated', { count: range.estimatedTimestamps })], [range.pricingCoverage?.partial, t('quality.partial')]].filter(([active]) => active).map(([, message]) => message).concat(usageWarnings(range.reconciliation)); const host = $('quality'); host.hidden = !messages.length; host.dataset.state = quality.severity === 'error' ? 'error' : 'warning'; host.textContent = messages.join(' · '); }
 function renderPricing(data) {
   const pricing = data.pricing || {}; const rates = pricing.rates; const refresh = pricing.refresh || {}; const checkedAt = pricing.checkedAt || refresh.lastSuccessfulAt;
   $('pricingStatus').textContent = checkedAt ? t('pricing.checked', { date: formatDate(checkedAt) }) : t('pricing.bundled', { date: pricing.updatedAt || '—' });

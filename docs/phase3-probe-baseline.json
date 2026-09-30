@@ -1,0 +1,8 @@
+{
+  "baseline": "443007b",
+  "fixtureOnly": true,
+  "exactCap": true,
+  "failedFile": { "total": 0, "failed": 1 },
+  "scanWrite": { "firstRejected": false, "firstTotal": 20020, "firstReadSize": 2480125, "finalSize": 2480125, "nextChanged": 1, "nextTotal": 20020 },
+  "concurrentRefreshLoaderCalls": 1
+}

@@ -1,0 +1,15 @@
+{
+  "fixtureOnly": true,
+  "exactCap": false,
+  "failedFile": {
+    "rejected": true,
+    "code": "SESSION_REFRESH_FAILED"
+  },
+  "scanWrite": {
+    "firstRejected": true,
+    "finalSize": 2480125,
+    "nextChanged": 1,
+    "nextTotal": 20020
+  },
+  "concurrentRefreshLoaderCalls": 1
+}

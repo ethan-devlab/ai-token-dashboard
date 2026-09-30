@@ -4,6 +4,8 @@ Phase 1 disposition (2026-10-01): FA04–FA06 and the selected FA10/FA18/FA22/FA
 
 Phase 2 disposition (2026-10-01): FA01–FA03 and FA21 are implemented. The selected calendar/progress comparison, IANA/DST, and strict local-input policies are also implemented. See [phase2-calendar-validation.md](phase2-calendar-validation.md). Original findings below retain their baseline evidence.
 
+Phase 3 disposition (2026-10-01): FA08/FA09/FA11/FA14/FA19 are implemented. The scan/write fingerprint mismatch was reproduced before changes; whole-refresh rollback, stable-pass publication, file coverage, and watcher recovery were validated. See [phase3-reliability-validation.md](phase3-reliability-validation.md). The original audit below remains historical evidence.
+
 Date: 2026-10-01 (Asia/Taipei). Baseline: `665af57` on `main`.
 
 The user accepted the UI result and selected a complete functional review before implementation decisions. This review covers both provider parsers, token/cost calculations, ranges, projections, pagination, refresh/watchers, quotas, exports, settings, pricing, and update checks. Production code and data have not changed.

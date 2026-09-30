@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1 and 2 implemented and validated; awaiting the Phase 3 decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–3 implemented and validated; awaiting the next phase decision.
 
 ## Confirmed scope
 
@@ -81,6 +81,10 @@ Acceptance: W01 starts December 29, 2025; impossible February dates and month 13
 Own discovery and refresh in `server/session-index.mjs`, worker lifecycle in `server/session-parser-worker.mjs`, `server/summary-cache.mjs`, and `server/provider-registry.mjs`. Address FA08/FA09/FA11/FA14/FA19. First reproduce candidate scan/write and worker timing failures; do not build a speculative scanner.
 
 Replace argument-spread min/max with bounded iteration. Discover enough metadata to distinguish exact cap from omitted files. Propagate completeness/cap/retained-file quality. Implement the chosen failed-file policy and a dirty-generation follow-up when a verified in-flight change requires it. Recover a missing/error watcher without duplicate watchers/timers. Keep disk data immutable and index/snapshots memory-only.
+
+Implementation evidence: [phase3-reliability-validation.md](phase3-reliability-validation.md). FA08/FA09/FA11/FA14/FA19 are resolved in synthetic fixtures and desktop QA. Refresh prepares a candidate index and publishes index provenance and summary together only after stable verification. Any hard file failure aborts the whole pass. Malformed-line and uncertain-usage policies from Phase 1 remain unchanged.
+
+Implementation assumptions: verify admitted file fingerprints before/after parse and before publication; include inode/device/ctime and nanosecond mtime to detect replacements. A cache refresh can attempt at most three passes for in-flight changes; it retains the prior snapshot if stability cannot be established. The watcher schedules a later retry for unstable-file failures. Missing/error watchers retry and check root identity every second, only when AUTO_REFRESH is enabled. Server-side refresh does not add browser polling; browser synchronization remains a later product decision. File-cap exclusions are not reported as confirmed deletions. Omitted counts are a known minimum, not an invented exact count.
 
 Acceptance: 150,000-observation all-time query completes with correct total (no speed claim); unchanged-file reuse holds; a changed-file failure does not silently discard 110 known tokens; genuine deletion removes usage under the selected policy; exact cap is not flagged, exceeding it is flagged end to end; directory recovery resumes watching; teardown removes watchers and workers. Validate in fixtures, not the user's Session directory.
 
