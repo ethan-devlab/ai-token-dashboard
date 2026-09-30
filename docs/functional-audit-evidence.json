@@ -1,0 +1,347 @@
+{
+  "auditedAtClientDate": "2026-10-01",
+  "baselineCommit": "665af57",
+  "node": "v26.0.0",
+  "productionChanged": false,
+  "serviceTestsPassed": 19,
+  "clientTestsPassed": 33,
+  "offline": {
+    "audit": "TEST ONLY offline functional probes",
+    "reports": [
+      {
+        "id": "FA01",
+        "title": "Selected ISO week",
+        "selected": "2026-W01",
+        "expectedStart": "2025-12-29T00:00:00.000Z",
+        "actualStart": "2026-09-14T00:00:00.000Z"
+      },
+      {
+        "id": "FA02",
+        "title": "Invalid civil date",
+        "input": "2026-02-31T00:00",
+        "expected": "INVALID_RANGE",
+        "actualStart": "2026-03-03T00:00:00.000Z"
+      },
+      {
+        "id": "FA03",
+        "title": "Repeated DST hour",
+        "expectedDistinct": true,
+        "actualDistinct": false,
+        "first": "2026-11-01T05:00:00.000Z",
+        "second": "2026-11-01T05:00:00.000Z"
+      },
+      {
+        "id": "FA04",
+        "title": "Generic Claude cache writes",
+        "reportedCacheWrite": 70,
+        "actualCacheWrite": 0,
+        "expectedTotal": 105,
+        "actualTotal": 35
+      },
+      {
+        "id": "FA05",
+        "title": "Mixed-model session attribution",
+        "events": [
+          {
+            "model": "model-a",
+            "tokens": 2
+          },
+          {
+            "model": "model-b",
+            "tokens": 5
+          }
+        ],
+        "actualRanking": [
+          {
+            "model": "model-a",
+            "tokens": 7,
+            "cost": 0.000012,
+            "partialCost": false
+          }
+        ],
+        "actualFacets": [
+          "model-a"
+        ],
+        "modelBMatched": 0
+      },
+      {
+        "id": "FA06",
+        "title": "Partial cost parity",
+        "aggregatePartial": true,
+        "modelPartial": true,
+        "trendPartial": false,
+        "unknownModifiers": [
+          "model-a:inferenceGeo=missing",
+          "model-a:serviceTier=missing",
+          "model-a:speed=missing"
+        ]
+      },
+      {
+        "id": "FA07",
+        "title": "Session export pagination",
+        "matched": 251,
+        "csvDataRows": 200,
+        "csvDataRowsWithOffset200": 51
+      },
+      {
+        "id": "FA08",
+        "title": "Large all-time projection",
+        "observations": 150000,
+        "actual": "RangeError",
+        "message": "Maximum call stack size exceeded"
+      },
+      {
+        "id": "FA09",
+        "title": "Changed-file parse failure",
+        "beforeTotal": 110,
+        "refreshedTotal": 0,
+        "failedFiles": 1,
+        "afterRetryTotal": 0,
+        "lastGoodFileRetained": false,
+        "exactLimitMarkedTruncated": false
+      },
+      {
+        "id": "FA10",
+        "title": "Mixed-source coverage decision",
+        "inputObservations": [
+          "model-a cumulative 110",
+          "later model-b turn 6"
+        ],
+        "actualTotal": 110,
+        "acceptedModels": [
+          "model-a"
+        ],
+        "covered": 1,
+        "policyNeedsDecision": true
+      },
+      {
+        "id": "FA11",
+        "title": "Exact file cap",
+        "existingFiles": 1,
+        "maxFiles": 1,
+        "actualTruncated": true
+      },
+      {
+        "id": "FA19",
+        "title": "File cap warning propagation",
+        "indexTruncated": true,
+        "dashboardHasTruncated": false,
+        "qualityHasTruncated": false,
+        "dashboardMaxFiles": null
+      },
+      {
+        "id": "FA12",
+        "title": "Null quota fields",
+        "codexRemaining": 100,
+        "codexReset": "1970-01-01T00:00:00.000Z",
+        "claudeRemaining": 100,
+        "expected": "unknown or unsupported"
+      },
+      {
+        "id": "FA13",
+        "title": "Quota failure after success",
+        "initialStatus": "available",
+        "failedStatus": "unavailable",
+        "retainedWindows": 0,
+        "nextStatus": "unavailable",
+        "calls": 2,
+        "policyNeedsDecision": true
+      },
+      {
+        "id": "FA14",
+        "title": "Watcher recovery after directory appears",
+        "availability": true,
+        "watcher": {
+          "enabled": true,
+          "status": "unavailable",
+          "debounceMs": 100
+        }
+      },
+      {
+        "id": "FA15",
+        "title": "Superseded failed request",
+        "actualOlder": {
+          "thrown": "Error",
+          "message": "TEST ONLY old request failure"
+        },
+        "expected": "stale or abort signal handling at caller",
+        "policyNeedsCallerReview": true
+      },
+      {
+        "id": "CHECK01",
+        "title": "Isolated settings persistence",
+        "unrelatedRetained": true,
+        "invalidRejected": true,
+        "validPortRetained": true
+      },
+      {
+        "id": "CHECK02",
+        "title": "Whole refresh failure retains snapshot",
+        "version": 1,
+        "retainedSessionCount": 1,
+        "refreshing": false
+      },
+      {
+        "id": "CHECK03",
+        "title": "Detail observation bound",
+        "returned": 2000,
+        "limit": 2000,
+        "totalTokens": 2001,
+        "explicitTruncatedFlag": null
+      },
+      {
+        "id": "FA16",
+        "title": "Client page merge across snapshot versions",
+        "evidence": "Replay of dashboard load sessionsOnly merge with real builders",
+        "snapshotVersion": 2,
+        "kpiTokens": 2,
+        "trendTokens": 1,
+        "modelTokens": 1,
+        "sessionTokens": 2
+      },
+      {
+        "id": "FA17",
+        "title": "Markdown exact interval provenance",
+        "suppliedBounds": [
+          1788624000000,
+          1789401600000
+        ],
+        "includesStart": false,
+        "includesEnd": false,
+        "body": "# Local AI Token Dashboard\n\nProvider: codex\n\nRange: custom (UTC)\n\nTotal tokens: 1\n\nKnown token cost: 0.000001"
+      },
+      {
+        "id": "FA18",
+        "title": "Duplicate session identity across files",
+        "sameSessionId": true,
+        "distinctKeys": true,
+        "actualTotal": 20,
+        "policyNeedsDecision": true
+      },
+      {
+        "id": "CHECK04",
+        "title": "Incremental file reuse",
+        "firstTotal": 110,
+        "nextTotal": 110,
+        "reused": 1,
+        "changed": 0,
+        "added": 0
+      },
+      {
+        "id": "FA20",
+        "title": "Concurrent settings saves at same millisecond",
+        "injection": "Frozen Date.now in this isolated probe only",
+        "results": [
+          {
+            "status": "fulfilled",
+            "returnedPort": "3334"
+          },
+          {
+            "status": "rejected",
+            "code": "ENOENT"
+          }
+        ],
+        "actualPort": "3335"
+      },
+      {
+        "id": "FA22",
+        "title": "Partial cost budget classification",
+        "evidence": "Replay of renderBudgets known-cost input",
+        "knownLowerBound": 10,
+        "limit": 100,
+        "partial": true,
+        "actual": {
+          "actual": 10,
+          "limit": 100,
+          "ratio": 0.1,
+          "status": "ok"
+        },
+        "policyNeedsDecision": true
+      }
+    ]
+  },
+  "http": {
+    "audit": "TEST ONLY offline isolated shipped HTTP server",
+    "reports": [
+      {
+        "id": "HTTP01",
+        "title": "Complete Session CSV",
+        "dashboardMatched": 251,
+        "dashboardPage": 100,
+        "csvStatus": 200,
+        "csvDataRows": 200
+      },
+      {
+        "id": "HTTP02",
+        "title": "Historical week query",
+        "status": 200,
+        "expectedStart": "2025-12-29T00:00:00.000Z",
+        "actualStart": "2026-09-28T00:00:00.000Z"
+      },
+      {
+        "id": "HTTP03",
+        "title": "Invalid civil date",
+        "status": 200,
+        "actualStart": "2026-03-03T00:00:00.000Z"
+      },
+      {
+        "id": "HTTP04",
+        "title": "Invalid calendar period",
+        "status": 200,
+        "returnedMode": "month",
+        "returnedStart": "2026-09-01T00:00:00.000Z"
+      },
+      {
+        "id": "HTTP05",
+        "title": "Claude generic cache through API",
+        "status": 200,
+        "expectedTotal": 105,
+        "actualTotal": 35,
+        "cacheWrite": 0
+      },
+      {
+        "id": "HTTPCHECK01",
+        "title": "Provider and Origin boundary",
+        "blockedOriginStatus": 403,
+        "blockedOriginCode": "INVALID_ORIGIN",
+        "invalidProviderStatus": 400,
+        "crossProviderStatus": 404,
+        "noCredentialsQuotaStatus": "unavailable",
+        "noCredentialsReason": "not-signed-in"
+      },
+      {
+        "id": "HTTPCHECK02",
+        "title": "Isolated settings contract",
+        "invalidStatus": 400,
+        "invalidCode": "INVALID_SETTINGS",
+        "settingsStatus": 200,
+        "restartRequired": true
+      },
+      {
+        "id": "HTTPCHECK03",
+        "title": "Provider snapshot refresh",
+        "initialVersion": 1,
+        "nextVersion": 2,
+        "reusedFiles": 251,
+        "totalTokens": 2761
+      },
+      {
+        "id": "HTTP07",
+        "title": "Export after another client advances snapshot",
+        "displayedVersion": 1,
+        "displayedTotal": 2761,
+        "newerVersion": 3,
+        "exportTotal": 2772,
+        "exportSnapshotVersion": null
+      },
+      {
+        "id": "HTTP06",
+        "title": "Zero page limit",
+        "status": 200,
+        "limit": 0,
+        "rows": 0,
+        "hasNext": true
+      }
+    ]
+  }
+}
