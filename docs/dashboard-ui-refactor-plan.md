@@ -1,8 +1,8 @@
 # Desktop dashboard UI refactor plan
 
-Status: implementation in progress. The user confirmed the decision summary and selected uPlot after the native/uPlot comparison on 2026-09-30.
+Status: local implementation and integration review complete; final user review is pending. The user confirmed the decision summary and selected uPlot after the native/uPlot comparison on 2026-09-30. Platform verification limits are recorded in the deep audit.
 
-Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`; Phase 1 repairs as `a38a3c1`; Phase 2 shared CSS and controls as `2d1bcf3`; the Phase 3 comparison checkpoint as `2a4773d`; production uPlot integration as `bbeaa8e`. The user selected full Phase 4 in a dialog after that commit. Phase 4 composition, quota, bounded Session scrolling, pricing rows, overview precision, retained-query recovery, and settings dirty state are implemented and verified. Commit Phase 4 before Phase 5 integration review. Historical comparison measurements remain in `docs/chart-engine-comparison.md`.
+Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`; Phase 1 repairs as `a38a3c1`; Phase 2 shared CSS and controls as `2d1bcf3`; the Phase 3 comparison checkpoint as `2a4773d`; production uPlot integration as `bbeaa8e`; Phase 4 composition, quota, bounded Session scrolling, pricing rows, overview precision, retained-query recovery, and settings dirty state as `6b10d5d`. The user selected full Phase 5 in a dialog after the Phase 4 commit. Integration review repaired unavailable-provider projections, export availability and filename extensions, and budget lower-bound labels. The final client checks and direct desktop flows passed within the documented environment. Historical comparison measurements remain in `docs/chart-engine-comparison.md`.
 
 ## Outcome and confirmed scope
 

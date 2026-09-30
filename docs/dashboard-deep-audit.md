@@ -272,3 +272,41 @@ Screenshots:
 - `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase4-failed-query-test-only.png`
 
 Limits: the in-app browser reload did not expose a native unload dialog, so the warning's actual platform UI is unverified. Windows controls/forced colors, screen-reader output, populated Claude, full browser paint/memory, remote CI, and deployment remain unverified. No real settings POST, price refresh, quota refresh, or JSONL refresh was invoked in this phase. The simulated checks do not certify the upstream services. Native modal navigation was directly verified. Windows follow-up: `npm run test:client`, the targeted settings command above, and `npm start`; verify the browser's dirty reload/exit prompt and desktop controls. Optional manual harness: keep the real server on localhost:3333, run `node tests/manual-ui-server.mjs`, and use its printed TEST ONLY URL. Phase 5 integration review remains.
+
+## Phase 5 integration checkpoint — 2026-09-30
+
+Phase 4 was committed as `6b10d5d`. The user selected full Phase 5 in the next decision dialog. Integration review used the real local dashboard and the previously verified Phase 4 supporting flows.
+
+A real Codex-to-unavailable-Claude switch exposed a new isolation defect: the state had no projection, but old Codex KPIs, models, and Session rows remained visible. The no-projection render now clears those values, exact labels, quality, comparison, pricing, and watcher content. Chart text distinguishes unavailable data from an empty successful result. Provider changes also clear previously displayed diagnostics. Export is disabled unless a projection is ready and current. Returning to Codex restored all eight real Session rows. A separate cost-budget check found a missing partial-cost qualifier; budget measurements now use the same qualified overview format as the KPI. Export download names include the format's file extension.
+
+Verified evidence:
+
+- Final `npm run test:client`: 33 passed. Both changed modules passed `node --check`; the final diff passed `git diff --check`. No server implementation changed, so the existing Phase 3 timezone and Phase 4 atomic-settings checks were not repeated.
+- Real Provider switch: Claude showed `—` KPIs, zero Session rows, zero chart canvases, unavailable model/pricing content, and a disabled Download button. Codex restored its month projection. This verifies unavailable-provider isolation, not populated Claude behavior.
+- A model-checkbox draft left the eight rows and URL unchanged. Apply selected `gpt-6-sol`, produced two rows, and wrote the model query key and active chip. Clear restored eight rows and the original query scope.
+- Stacked/line presentation, Home selection, an open trend table, and native boundary controls worked together. Zoom selected September 6–15. Apply produced three trend buckets, four Sessions, and USD 242.93; numeric URL bounds were `1788624000000` and `1789401600000`. Return restored the month and eight Sessions. The checked quota content was unchanged by Return. An earlier quota comparison captured initial loading and was discarded.
+- Read-only export requests used those exact interval bounds. Trend CSV returned HTTP 200, `text/csv`, and three data rows. Each row's provider, bounds, label, timezone, Token, cost, and partial flag matched the dashboard trend. JSON report range, totals, and cost matched the dashboard response. The CSV response had a `.csv` attachment name.
+- A temporary local budget named `TEST ONLY Phase 5` displayed `≥ US$274.78 / US$300.00`, matching the KPI lower bound. The test budget was removed through its named UI action. No service budget or configuration was written.
+- Official Settings navigation showed the four loaded groups and a clean state. Returning without edits restored the real dashboard. Final state: Codex, current month, Asia/Taipei, single Token/bar view, closed trend table, Session CSV selection, no test budget, eight rows, no document overflow at actual 1440px. No browser errors were recorded in this final flow.
+
+Finding disposition within the supported local review:
+
+| Findings | Implemented result and evidence checkpoint |
+| --- | --- |
+| F01, F02, F03 | Hidden-state precedence, stable modal focus, and in-bounds desktop view panel; Phases 1, 2, and 4. |
+| F04, F05, F08, F09 | Timestamp/DST geometry, cost parity, meaningful axes, compact hover and keyboard readout; Phases 1 and 3. |
+| F06, F07, F12, F13 | Contrast tokens, Session-only density, shared action states and explicit preference scope; Phases 1 and 2. Native platform states remain a follow-up. |
+| F10, F11 | Associated range errors, retained-query recovery, explicit checkbox drafts and active chips; Phases 1, 2, 4, and 5. |
+| F14, F15, F16, F17 | Query-timezone dates, correct KPI labels, semantic pricing rows, unknown diagnostic values; Phases 1 and 4. |
+| F18, F19, F20 | Persistent chart state/lifecycle, calmer panel order, one named Session action, bounded scrolling and sticky headers; Phases 2–4. |
+
+No known P1 from the baseline remains unrepaired in the supported local surface. This is an implementation disposition, not a WCAG certification or proof that every platform/state passed. Remaining validation is owned by the maintainer's platform review: populated Claude, Windows native selects/hover/focus and forced colors, assistive technology, text zoom, and native browser unload prompts. Full paint, memory, cold-load timing, remote CI, release, and deployment were not measured or performed.
+
+Download limitation: the in-app browser's `waitForEvent('download', { timeoutMs: 10000 })` timed out after the UI Download action. No completion event or saved path was returned. The API content checks above passed, but browser file creation is unverified. On Windows, run `npm start`, open the supported desktop browser, select an exact interval, and verify that Download saves a correctly named file with the displayed scope. A read-only API reproduction command in Windows PowerShell is `curl.exe --fail "http://localhost:3333/api/export?provider=codex&mode=custom&from=1788624000000&to=1789401600000&timezone=Asia%2FTaipei&format=csv-trend" --output "$env:TEMP\ctd-trend.csv"`. Verify dirty reload/exit with the TEST ONLY settings harness rather than saving real `.env` changes.
+
+Final screenshots:
+
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase5-dashboard-1440.png`
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase5-unavailable-provider.png`
+
+QA preferences were restored to the prior single/bar Token view; the temporary budget was removed. No real settings save, pricing refresh, quota refresh, JSONL rescan, push, or release was part of this phase.

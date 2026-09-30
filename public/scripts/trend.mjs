@@ -46,7 +46,7 @@ export function createUsageTrendController(host, { onApplyInterval, onReturnQuer
   function selection(announce = false) {
     const point = points[selectedIndex()];
     readout.replaceChildren();
-    if (!point) { readout.textContent = t(options.busy ? 'load.trend' : 'trend.empty'); overlays(); return; }
+    if (!point) { readout.textContent = t(options.busy ? 'load.trend' : options.unavailable ? 'load.noData' : 'trend.empty'); overlays(); return; }
     const label = document.createElement('strong'); label.textContent = intervalText([point.fromMs, point.toMs]);
     const values = document.createElement('p'); values.textContent = `${t('total.tokens')}: ${integerFormat.format(point.tokens)} · ${t('trend.cost')}: ${formatCost(point.cost, point.partialCost)}`;
     readout.append(label, values);
@@ -171,7 +171,7 @@ export function createUsageTrendController(host, { onApplyInterval, onReturnQuer
       const peak = known.reduce((highest, point) => !highest || point[next.metric] > highest[next.metric] ? point : highest, null);
       const summary = peak ? t('trend.summary', { unit: t(`trend.${next.trend?.unit || 'day'}`), count: integerFormat.format(points.length), label: boundary(peak.fromMs), value: next.metric === 'cost' ? formatCost(peak.cost, peak.partialCost) : `${integerFormat.format(peak.tokens)} ${t('total.tokens')}`, partial: '' }) : `${integerFormat.format(points.length)} ${t('chart.buckets')}`;
       const coverage = (next.mode !== 'single' || next.metric === 'cost') && points.some((point) => point.partialCost || point.cost == null);
-      find('summary').textContent = `${summary} · ${next.timezone}${next.mode === 'dual' ? ` · ${t('chart.dualHint')}` : ''}${coverage ? ` · ${t('chart.costCoverage')}` : ''}`;
+      find('summary').textContent = next.unavailable ? t(next.busy ? 'load.trend' : 'load.noData') : `${summary} · ${next.timezone}${next.mode === 'dual' ? ` · ${t('chart.dualHint')}` : ''}${coverage ? ` · ${t('chart.costCoverage')}` : ''}`;
       host.querySelector('#trendHelp').textContent = t('chart.help');
       for (const [name, key] of [['from-label','chart.from'],['to-label','chart.to'],['zoom','chart.zoom'],['reset','chart.reset'],['apply','chart.apply'],['return','chart.return'],['time-heading','chart.interval'],['token-heading','total.tokens'],['cost-heading','trend.cost']]) find(name).textContent = t(key);
       host.querySelector('.trend-table summary').textContent = t('trend.table');
