@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phase 1 implemented and validated; awaiting the next phase decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1 and 2 implemented and validated; awaiting the Phase 3 decision.
 
 ## Confirmed scope
 
@@ -61,7 +61,18 @@ Implementation constraints and focused cases:
 
 ### Phase 2 — Query and calendar correctness
 
-Own `server/timezone.mjs`, query validation in `server.mjs`, and only required query-state helpers. Address FA01–FA03 and FA21. Preserve numeric interval URLs and valid existing query parameters. Reject impossible dates, mode-incompatible periods, invalid ISO weeks, zero page limits, and invalid instant bounds with the existing error envelope. Decide prior-period comparison semantics before changing them.
+Own `server/timezone.mjs`, query validation in `server.mjs`, and only required query-state helpers. Address FA01–FA03 and FA21. Preserve numeric interval URLs and valid existing query parameters. Reject impossible dates, mode-incompatible periods, invalid ISO weeks, zero page limits, and invalid instant bounds with the existing error envelope.
+
+Confirmed Phase 2 decisions (Q13–Q18):
+
+- Day/week/month/year compare the prior calendar period. Last 24 hours and custom ranges compare equal actual milliseconds. All-time has no comparison.
+- An unfinished calendar period compares the same local date/time progress. If the corresponding date does not exist, use the prior period end, not the last valid date at the same hour.
+- Keep IANA region choices, including Asia/Taipei and America/New_York. Use UTC instants internally and region rules for local boundaries, including DST. Q17 clarified and superseded the earlier ambiguous request to avoid DST.
+- Reject ambiguous or nonexistent custom local times. Keep exact chart/URL UTC millisecond bounds so users can select either repeated hour without a silent default.
+
+Implementation assumptions: an automatic comparison with ambiguous or nonexistent prior local progress is unavailable, while the selected dashboard remains available. Future periods have no comparison before they start. Calendar midnight gaps use the first valid instant; repeated midnight uses the earliest boundary. An empty prior calendar period has no comparison. These rules are documented and tested where applicable. Preserve the selected KPI period; use additive comparison currentRange/currentTotals to show its separate progress cutoff.
+
+Implemented evidence: [phase2-calendar-validation.md](phase2-calendar-validation.md). FA01–FA03 and FA21 are resolved in isolated fixtures and desktop QA.
 
 Acceptance: W01 starts December 29, 2025; impossible February dates and month 13 return 400; valid leap day passes; both New York repeated hours remain separate; spring transition, year/week rollover, IANA query boundary, and numeric exact interval checks pass. `limit=0` fails while `offset=0` remains valid. Run only timezone/query contract checks and a supported desktop control flow.
 
@@ -99,7 +110,7 @@ Ask the first independent decisions together, then ask their dependent frontier 
 - Failed changed file: whole-pass rollback selected. Healthy partial updates with retained failed files are not selected.
 - Mixed-model filter: matching observations selected. Session totals must use the same filtered observations; preserve existing metadata/API compatibility with explicit projection fields if needed.
 
-Phase 1 mixed-source, duplicate/version, reset, and budget decisions are confirmed above. Later decisions still include stale quota; current versus displayed export version; comparison calendar basis; current pricing versus a historical rate ledger; concurrent settings conflict UX; and watcher-to-browser synchronization. Do not quietly settle those future semantics in code.
+Phase 1 mixed-source, duplicate/version, reset, and budget decisions are confirmed above. Later decisions still include stale quota; current versus displayed export version; current pricing versus a historical rate ledger; concurrent settings conflict UX; and watcher-to-browser synchronization. Do not quietly settle those future semantics in code.
 
 ## Validation and delivery
 

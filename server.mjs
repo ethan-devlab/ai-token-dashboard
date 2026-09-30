@@ -39,7 +39,7 @@ const VALID_EXPORTS = new Set(['csv-sessions', 'csv-trend', 'json-report', 'mark
 
 class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
 function requestId() { return randomUUID(); }
-function parseInteger(value, name, fallback, maximum) { if (value == null) return fallback; if (!/^\d+$/.test(value)) throw new ApiError(400, 'INVALID_QUERY', `Invalid ${name}.`); const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed > maximum) throw new ApiError(400, 'INVALID_QUERY', `Invalid ${name}.`); return parsed; }
+function parseInteger(value, name, fallback, maximum, minimum = 0) { if (value == null) return fallback; if (!/^\d+$/.test(value)) throw new ApiError(400, 'INVALID_QUERY', `Invalid ${name}.`); const parsed = Number(value); if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) throw new ApiError(400, 'INVALID_QUERY', `Invalid ${name}.`); return parsed; }
 function parseTimestamp(value, name) { if (value == null) return null; if (!/^-?\d+$/.test(value)) throw new ApiError(400, 'INVALID_QUERY', `Invalid ${name}.`); const parsed = Number(value); if (!Number.isSafeInteger(parsed)) throw new ApiError(400, 'INVALID_QUERY', `Invalid ${name}.`); return parsed; }
 function parseList(searchParams, name) { const values = searchParams.getAll(name).flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean); if (values.length > 100 || values.some((value) => value.length > 128)) throw new ApiError(400, 'INVALID_QUERY', `Invalid ${name}.`); return [...new Set(values)]; }
 function requestContext(requestUrl) {
@@ -56,9 +56,10 @@ function requestContext(requestUrl) {
   const sort = requestUrl.searchParams.get('sort') || 'recent';
   if (!VALID_SORTS.has(sort)) throw new ApiError(400, 'INVALID_QUERY', 'Invalid sort.');
   let range;
-  try { range = resolveRange({ mode, fromMs, toMs, period, start, end, timezone: requestUrl.searchParams.get('timezone') || undefined }); }
+  const nowMs = Date.now();
+  try { range = resolveRange({ mode, fromMs, toMs, period, start, end, timezone: requestUrl.searchParams.get('timezone') || undefined, nowMs }); }
   catch (error) { if (error?.code === 'INVALID_TIMEZONE' || error?.code === 'INVALID_RANGE') throw new ApiError(400, error.code, error.message); throw error; }
-  return { range, q, sort, offset: parseInteger(requestUrl.searchParams.get('offset'), 'offset', 0, 1_000_000), limit: parseInteger(requestUrl.searchParams.get('limit'), 'limit', 100, 200), filters: { models: parseList(requestUrl.searchParams, 'models'), workspaces: parseList(requestUrl.searchParams, 'workspaces'), pricingStatus: parseList(requestUrl.searchParams, 'pricingStatus'), usageSource: parseList(requestUrl.searchParams, 'usageSource'), cliVersion: parseList(requestUrl.searchParams, 'cliVersion'), originator: parseList(requestUrl.searchParams, 'originator'), executionType: parseList(requestUrl.searchParams, 'executionType'), quality: parseList(requestUrl.searchParams, 'quality') } };
+  return { range, nowMs, q, sort, offset: parseInteger(requestUrl.searchParams.get('offset'), 'offset', 0, 1_000_000), limit: parseInteger(requestUrl.searchParams.get('limit'), 'limit', 100, 200, 1), filters: { models: parseList(requestUrl.searchParams, 'models'), workspaces: parseList(requestUrl.searchParams, 'workspaces'), pricingStatus: parseList(requestUrl.searchParams, 'pricingStatus'), usageSource: parseList(requestUrl.searchParams, 'usageSource'), cliVersion: parseList(requestUrl.searchParams, 'cliVersion'), originator: parseList(requestUrl.searchParams, 'originator'), executionType: parseList(requestUrl.searchParams, 'executionType'), quality: parseList(requestUrl.searchParams, 'quality') } };
 }
 function headers(contentType, length, csp, id, attachment = null) { return { 'Content-Type': contentType, 'Content-Length': length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': csp, 'X-Request-Id': id, ...(attachment ? { 'Content-Disposition': attachment } : {}) }; }
 function json(res, status, value, id) { const body = JSON.stringify(value); res.writeHead(status, headers('application/json; charset=utf-8', Buffer.byteLength(body), API_CSP, id)); res.end(body); }

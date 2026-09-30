@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { bucketFor, nextBucketFor } from './timezone.mjs';
+import { bucketFor, comparisonRanges, nextBucketFor } from './timezone.mjs';
 import { matchPricingRule } from './pricing.mjs';
 import { addUsage, USAGE_KEYS, zeroUsage } from './usage.mjs';
 
@@ -101,7 +101,7 @@ function trend(sessions, range) {
   const points = new Map();
   for (const session of sessions) for (const event of session.usageEvents) {
     const time = bucketFor(Date.parse(event.timestamp), unit, range.timezone);
-    const point = points.get(time) || { fromMs: time, toMs: nextBucketFor(time, unit, range.timezone), label: new Intl.DateTimeFormat('en-CA', { timeZone: range.timezone, month: unit === 'year' ? undefined : '2-digit', day: unit === 'hour' || unit === 'day' ? '2-digit' : undefined, year: unit === 'month' || unit === 'year' ? 'numeric' : undefined, hour: unit === 'hour' ? '2-digit' : undefined, hourCycle: 'h23' }).format(new Date(time)), tokens: 0, cost: 0, partialCost: false };
+    const point = points.get(time) || { fromMs: time, toMs: nextBucketFor(time, unit, range.timezone), label: new Intl.DateTimeFormat('en-CA', { timeZone: range.timezone, month: unit === 'year' ? undefined : '2-digit', day: unit === 'hour' || unit === 'day' ? '2-digit' : undefined, year: unit === 'month' || unit === 'year' ? 'numeric' : undefined, hour: unit === 'hour' ? '2-digit' : undefined, hourCycle: 'h23', timeZoneName: unit === 'hour' ? 'shortOffset' : undefined }).format(new Date(time)), tokens: 0, cost: 0, partialCost: false };
     point.tokens += event.usage.totalTokens;
     const itemCost = calculateCost(session.__pricing, [event]);
     point.cost += itemCost.total; point.partialCost ||= serialiseCost(itemCost).pricingCoverage.partial;
@@ -127,21 +127,19 @@ function context(summary, request, scan, sessions) {
   return { provider: summary.provider || 'codex', generatedAt: summary.generatedAt, range: request.range, pricing: { provider: summary.pricing.provider || summary.provider || 'codex', updatedAt: summary.pricing.updatedAt, checkedAt: summary.pricing.checkedAt || null, source: summary.pricing.source, currency: summary.pricing.currency, unitTokens: summary.pricing.unitTokens, rates: summary.pricing.rates, costDisclaimer: summary.pricing.costDisclaimer || null, toolFeesExcluded: summary.pricing.provider === 'claude' }, totals, cost, pricingCoverage: cost.pricingCoverage, quality: { scan: { invalidLines: summary.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0), failedFiles: summary.errors.length, ...scan }, range: { estimatedTimestamps: events.filter((event) => event.timestampEstimated).length, reconciliation, usage: usageQuality(reconciliation), pricingCoverage: cost.pricingCoverage } }, scan, facets: facets(sessions) };
 }
 function comparison(summary, request, options) {
-  if (request.range.mode === 'all' || request.range.fromMs == null || request.range.toMs == null) return null;
-  const duration = request.range.toMs - request.range.fromMs;
-  const prior = { ...request, range: { ...request.range, fromMs: request.range.fromMs - duration, toMs: request.range.fromMs } };
-  const sessions = filteredSessions(summary, prior, options);
-  const totals = sessions.reduce((sum, session) => addUsage(sum, session.usage), zeroUsage());
-  return { range: prior.range, totals, percentTotalTokens: totals.totalTokens ? ((request.currentTotals.totalTokens - totals.totalTokens) / totals.totalTokens) * 100 : null };
+  const periods = comparisonRanges(request.range, request.nowMs);
+  if (!periods || !periods.available) return periods;
+  const sum = (range) => filteredSessions(summary, { ...request, range }, options).reduce((total, session) => addUsage(total, session.usage), zeroUsage());
+  const totals = sum(periods.range); const currentTotals = sum(periods.currentRange);
+  return { ...periods, totals, currentTotals, percentTotalTokens: totals.totalTokens ? ((currentTotals.totalTokens - totals.totalTokens) / totals.totalTokens) * 100 : null };
 }
 function page(sessions, request, options) { const matched = sorted(sessions, request.sort); const items = matched.slice(request.offset, request.offset + request.limit).map((session) => sessionSummary(session, options)); return { sessions: items, matchedSessionCount: matched.length, offset: request.offset, limit: request.limit, hasPrevious: request.offset > 0, hasNext: request.offset + items.length < matched.length }; }
 
 export function buildDashboardPayload(summary, request, scan, options = {}) {
   const sessions = filteredSessions(summary, request, options).map((session) => ({ ...session, __pricing: summary.pricing }));
   const base = context(summary, request, scan, sessions);
-  const currentTotals = base.totals;
   const modelFacets = facets(filteredSessions(summary, { ...request, filters: { ...request.filters, models: [] } }, options)).models;
-  return { ...base, facets: { ...base.facets, models: modelFacets }, sessionCount: sessions.length, trend: trend(sessions, request.range), models: models(sessions), comparison: comparison(summary, { ...request, currentTotals }, options), ...page(sessions, request, options) };
+  return { ...base, facets: { ...base.facets, models: modelFacets }, sessionCount: sessions.length, trend: trend(sessions, request.range), models: models(sessions), comparison: comparison(summary, request, options), ...page(sessions, request, options) };
 }
 export function buildSessionsPayload(summary, request, scan, options = {}) { const sessions = filteredSessions(summary, request, options); return { ...context(summary, request, scan, sessions), ...page(sessions, request, options) }; }
 export function buildSessionDetail(summary, request, sessionKey, options = {}) {

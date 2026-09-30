@@ -40,7 +40,7 @@ function renderAccountUsage() {
     const used = document.createElement('span'); used.className = 'muted'; used.textContent = t('accountUsage.used', { value: window.usedPercent == null ? '—' : Math.round(Number(window.usedPercent) * 10) / 10 }); card.append(heading, meter, used, reset); host.append(card);
   }
 }
-function apiError(error) { return error instanceof Error ? error.message : t('load.error'); }
+function apiError(error) { if (error?.code === 'INVALID_RANGE') return t('range.serverInvalid'); if (error?.code === 'INVALID_TIMEZONE') return t('range.invalidTimezone'); return error instanceof Error ? error.message : t('load.error'); }
 function aggregate(data) { return data.aggregate?.usage || data.totals || {}; }
 function cost(data) { return data.aggregate?.cost || data.cost || {}; }
 function page(data) { return data.page || data; }
@@ -49,7 +49,20 @@ function syncState({ persistView = false } = {}) { const priorBudgets = state.vi
 function updateUrl() { const search = queryStateToSearch(state.query, state.provider); window.history.replaceState(null, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`); }
 function updateRangeControls() { document.querySelectorAll('.range-control').forEach((element) => { element.hidden = element.dataset.range !== controls.rangeMode.value; }); }
 function renderTotals(data) { const usage = aggregate(data); const values = { total: usage.totalTokens, input: usage.inputTokens, output: usage.outputTokens, cache: usage.cachedInputTokens, uncached: usage.uncachedInputTokens, cacheWrite: usage.cacheWriteTokens, reasoning: usage.reasoningOutputTokens }; for (const [id, value] of Object.entries(values)) { $(id).textContent = formatCompactNumber(value, state.view.unit); const exact = document.querySelector(`[data-exact-for="${id}"]`); if (exact) exact.textContent = `${integerFormat.format(value || 0)} ${t(`${id}.tokens`)}`; } const value = cost(data); const coverage = value.coverage || data.pricingCoverage; const partial = coverage?.partial || value.partial || value.minimumKnown; $('cost').textContent = formatOverviewCost(value.total, partial); $('costExact').textContent = formatCost(value.total, partial); $('costDetail').textContent = coverage?.ratio == null ? '' : `${integerFormat.format(coverage.pricedTokens || 0)} / ${integerFormat.format(coverage.billableTokens || 0)} ${t('status.priced')}`; }
-function renderComparison(data) { const comparison = data.comparison; if (!comparison || comparison.available === false) { $('comparison').textContent = t('v2.comparison.none'); return; } const previous = comparison.totals?.totalTokens; const percent = comparison.percentTotalTokens ?? comparison.percent; $('comparison').textContent = `${t('v2.comparison.previous')}: ${previous == null ? '—' : integerFormat.format(previous)} ${t('total.tokens')} · ${percent == null ? t('v2.comparison.new') : `${Number(percent).toFixed(1)}%`}`; }
+function renderComparison(data) {
+  const comparison = data.comparison; const target = $('comparison');
+  if (!comparison || comparison.available === false) { target.textContent = t(comparison?.reason === 'ambiguous-progress' ? 'v2.comparison.ambiguous' : 'v2.comparison.none'); return; }
+  const percent = comparison.percentTotalTokens ?? comparison.percent;
+  const headline = `${t('v2.comparison.previous')}: ${comparison.totals?.totalTokens == null ? '—' : integerFormat.format(comparison.totals.totalTokens)} ${t('total.tokens')} · ${percent == null ? t('v2.comparison.new') : `${Number(percent).toFixed(1)}%`}`;
+  target.replaceChildren();
+  const lines = [headline];
+  if (comparison.basis) lines.push(t(comparison.basis === 'elapsed' ? 'v2.comparison.elapsed' : comparison.partial ? 'v2.comparison.progress' : 'v2.comparison.calendar'));
+  if (comparison.currentRange && comparison.range) {
+    const bounds = (range) => `${formatIntervalBoundary(range.fromMs, range.timezone)} → ${formatIntervalBoundary(range.toMs, range.timezone)}`;
+    lines.push(`${t('v2.comparison.current')}: ${integerFormat.format(comparison.currentTotals.totalTokens)} · ${bounds(comparison.currentRange)}`, `${t('v2.comparison.previous')}: ${bounds(comparison.range)}`);
+  }
+  for (const text of lines) { const row = document.createElement('p'); row.textContent = text; target.append(row); }
+}
 function budgetMeasurement(data, budget) { const supplied = data.budgetMeasurements?.[budget.id] ?? data.budgetMeasurements?.[budget.scope]; if (supplied != null) return supplied; if (budget.scope === 'total-tokens') return { value: aggregate(data).totalTokens }; if (budget.scope === 'cost') return { value: cost(data).total }; return null; }
 function renderBudgets(data) {
   const host = $('budgets');
