@@ -99,6 +99,19 @@ export function getLocale() {
   return activeLocale;
 }
 
+const compositionDictionaries = {
+  en: {
+    'settings.parseHint': 'Maximum files: 1–100000. Parse concurrency: 1–16.', 'settings.networkHint': 'Full paths are loopback-only. Port range: 1–65535.', 'settings.watcherHint': 'Debounce range: 100–60000 ms. Manual reparse remains available when watching is disabled.',
+    'accountUsage.details': 'Full quota and source details', 'projection.retained': 'Displayed data from the last successful query', 'projection.retry': 'Retry', 'projection.restore': 'Return to displayed query', 'projection.query': '{range} · {timezone} · Search: {search} · Filters: {filters}', 'projection.none': 'None', 'projection.refreshFailed': 'JSONL refresh failed. The prior snapshot is retained.', 'explorer.scroll': 'Session table scroll area', 'explorer.noSessions': 'This provider has no local sessions. Check its directory in Settings, then reparse JSONL.', 'explorer.noRange': 'No sessions in this time range. Select a different period.', 'explorer.noMatches': 'No sessions match the applied search or filters. Clear them or select a different period.', 'price.unit': 'USD per 1M tokens',
+    'settings.clean': 'No unsaved changes.', 'settings.dirty': 'Unsaved changes. Save to .env to keep them.', 'settings.leaveTitle': 'Unsaved changes', 'settings.leaveText': 'Leaving will discard the edits on this page.', 'settings.keep': 'Keep editing', 'settings.discard': 'Discard and return', 'settings.repositoryHint': 'Use owner/repo. Leave blank to disable update checks.', 'settings.invalid': 'Correct the highlighted field before saving.',
+  },
+  'zh-Hant': {
+    'settings.parseHint': '最大檔案數 1–100000；解析並行數 1–16。', 'settings.networkHint': '完整路徑僅限 loopback；連接埠範圍為 1–65535。', 'settings.watcherHint': '延遲範圍為 100–60000 ms。停用自動監看後仍可手動重新解析。',
+    'accountUsage.details': '完整額度與來源', 'projection.retained': '目前顯示上次成功查詢的資料', 'projection.retry': '重試', 'projection.restore': '返回已顯示查詢', 'projection.query': '{range} · {timezone} · 搜尋：{search} · 篩選：{filters}', 'projection.none': '無', 'projection.refreshFailed': '重新解析 JSONL 失敗，已保留先前快照。', 'explorer.scroll': 'Session 資料表捲動區域', 'explorer.noSessions': '此 Provider 尚無本機 Session。請在設定確認目錄，再重新解析 JSONL。', 'explorer.noRange': '此時間範圍沒有 Session，請選擇其他期間。', 'explorer.noMatches': '沒有符合已套用搜尋或篩選的 Session。可清除條件或選擇其他期間。', 'price.unit': '每 1M Token 的 USD 費率',
+    'settings.clean': '沒有未儲存變更。', 'settings.dirty': '有未儲存變更，儲存至 .env 才會保留。', 'settings.leaveTitle': '尚有未儲存變更', 'settings.leaveText': '離開會捨棄本頁變更。', 'settings.keep': '繼續編輯', 'settings.discard': '捨棄並返回', 'settings.repositoryHint': '使用 owner/repo；留空可停用更新檢查。', 'settings.invalid': '請修正標示的欄位後再儲存。',
+  },
+};
+
 const chartDictionaries = {
   en: {
     'chart.mode': 'Layout', 'chart.single': 'Single metric', 'chart.stacked': 'Stacked', 'chart.dual': 'Dual axis',
@@ -148,7 +161,7 @@ const controlDictionaries = {
 };
 
 export function t(key, values = {}) {
-  return interpolate(chartDictionaries[activeLocale]?.[key] ?? controlDictionaries[activeLocale]?.[key] ?? v2Dictionaries[activeLocale]?.[key] ?? dictionaries[activeLocale]?.[key] ?? v2Dictionaries.en[key] ?? dictionaries.en[key] ?? key, values);
+  return interpolate(compositionDictionaries[activeLocale]?.[key] ?? chartDictionaries[activeLocale]?.[key] ?? controlDictionaries[activeLocale]?.[key] ?? v2Dictionaries[activeLocale]?.[key] ?? dictionaries[activeLocale]?.[key] ?? v2Dictionaries.en[key] ?? dictionaries.en[key] ?? key, values);
 }
 
 export function applyDocumentTranslations(root = document) {

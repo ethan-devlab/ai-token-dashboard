@@ -16,6 +16,18 @@ export function formatCost(value, partial = false) {
   }
   return `${partial ? '≥ ' : ''}${moneyFormat.format(Number(value))}`;
 }
+export function formatOverviewCost(value, partial = false) {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  const number = Number(value);
+  const currency = (amount) => new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  if (!partial) return number > 0 && number < 0.01 ? `< ${currency(0.01)}` : currency(number);
+  // A lower bound must never round upward past the known subtotal.
+  if (number > 0 && number < 0.01) return formatCost(number, true);
+  // Truncate the decimal value without multiplying into a binary rounding error (0.29 * 100).
+  const [whole, fraction = ''] = number.toString().split('.');
+  const floorCents = number < 0 ? Math.floor(number * 100) / 100 : whole.includes('e') ? number : Number(`${whole}.${fraction.slice(0, 2)}`);
+  return `≥ ${currency(floorCents)}`;
+}
 export const moneyFormat = Object.freeze({
   format: (value) => new Intl.NumberFormat(getLocale(), {
     style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 6,

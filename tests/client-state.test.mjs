@@ -4,15 +4,16 @@ import test from 'node:test';
 import { redactPath, renderSessionDrawer } from '../public/scripts/drawer.mjs';
 import { renderExplorerRows } from '../public/scripts/explorer.mjs';
 import { createFilterDraft, facetItems } from '../public/scripts/filters.mjs';
-import { formatCost, formatDate } from '../public/scripts/format.mjs';
+import { formatCost, formatOverviewCost, formatDate } from '../public/scripts/format.mjs';
+import { settingsChanged } from '../public/scripts/settings-state.mjs';
 import { detectLocale, setLocale, t } from '../public/scripts/i18n.mjs';
 import { createProjectionCache } from '../public/scripts/projection-cache.mjs';
-import { projectionLoadState } from '../public/scripts/projection-state.mjs';
+import { projectionLoadState, emptyExplorerKey } from '../public/scripts/projection-state.mjs';
 import { createRequestChannels } from '../public/scripts/request-channels.mjs';
 import { applyTableViewPreferences, budgetState, createDashboardState, customRangeError, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readQueryState, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
 import { modelRanking, renderModelBreakdown } from '../public/scripts/model-breakdown.mjs';
 import { comparisonFixture } from './fixtures/chart-fixtures.mjs';
-import { countdownParts, formatCountdown, windowLabelKey } from '../public/scripts/account-usage.mjs';
+import { countdownParts, formatCountdown, windowLabelKey, remainingPercent } from '../public/scripts/account-usage.mjs';
 import { chartColumns, chartDomain, chartValue, nearestBucketIndex, numericScale, snappedInterval } from '../public/scripts/chart-geometry.mjs';
 
 test('comparison charts preserve sparse intervals, unknown values and bucket snapping', () => {
@@ -329,4 +330,56 @@ test('datetime-local zero-second normalization preserves exact interval bounds',
   assert.deepEqual(normalized.intervalBounds, query.intervalBounds); assert.equal(customRangeError(normalized), '');
   controls.customEnd.value = '2026-11-01T01:30';
   assert.equal(readQueryState(controls, {}, query).intervalBounds, undefined);
+});
+
+test('overview cost precision keeps zero, small positive values and valid lower bounds distinct', () => {
+  setLocale('en');
+  assert.equal(formatOverviewCost(null), '—');
+  assert.equal(formatOverviewCost(0), '$0.00');
+  assert.equal(formatOverviewCost(0.001), '< $0.01');
+  assert.equal(formatOverviewCost(12.3456), '$12.35');
+  assert.equal(formatOverviewCost(12.3499, true), '≥ $12.34');
+  assert.equal(formatOverviewCost(0.29, true), '≥ $0.29');
+  assert.equal(formatOverviewCost(0.009, true), '≥ $0.009');
+  assert.equal(formatOverviewCost(1e-8, true), '≥ $1E-8');
+});
+
+test('quota percentages preserve unknown values rather than reporting zero remaining', () => {
+  assert.equal(remainingPercent({}), null);
+  assert.equal(remainingPercent({ remainingPercent: null }), null);
+  assert.equal(remainingPercent({ remainingPercent: 'invalid' }), null);
+  assert.equal(remainingPercent({ remainingPercent: 0 }), 0);
+  assert.equal(remainingPercent({ remainingPercent: 55.5 }), 55.5);
+  assert.equal(remainingPercent({ remainingPercent: 102 }), 100);
+});
+
+test('settings dirtiness clears on reversion and follows the last successful save', () => {
+  const saved = { PORT: '3333', AUTO_REFRESH: '0', UPDATE_REPOSITORY: '' };
+  assert.equal(settingsChanged(null, saved), false);
+  assert.equal(settingsChanged(saved, { ...saved }), false);
+  assert.equal(settingsChanged(saved, { ...saved, AUTO_REFRESH: '1' }), true);
+  const edited = { ...saved, PORT: '3334' };
+  assert.equal(settingsChanged(saved, edited), true);
+  assert.equal(settingsChanged(edited, edited), false);
+  assert.equal(settingsChanged(saved, saved), false);
+});
+
+test('empty session messages distinguish filters, no local files, range and unavailable provider', () => {
+  const emptyScan = { added: 0, changed: 0, reused: 0, failed: 0 };
+  assert.equal(emptyExplorerKey({}, emptyScan), 'explorer.noSessions');
+  assert.equal(emptyExplorerKey({ search: 'x' }, emptyScan), 'explorer.noMatches');
+  assert.equal(emptyExplorerKey({ filters: { models: ['x'] } }, emptyScan), 'explorer.noMatches');
+  assert.equal(emptyExplorerKey({}, {}), 'explorer.noRange');
+  assert.equal(emptyExplorerKey({}, { ...emptyScan, failed: 1 }), 'explorer.noRange');
+  assert.equal(emptyExplorerKey({}, emptyScan, false), 'provider.unavailable');
+});
+
+test('drawer diagnostics retain unknown counts and distinguish explicit measured zero', () => {
+  setLocale('en');
+  const missing = renderSessionDrawer({ detail: {}, status: 'ready', timezone: 'UTC' });
+  assert.match(missing, /JSONL lines —/);
+  assert.match(missing, /— accepted observations/);
+  const measured = renderSessionDrawer({ detail: { diagnostics: { lineCount: 0, invalidLines: 0, resets: 0 }, observations: [] }, status: 'ready', timezone: 'UTC' });
+  assert.match(measured, /JSONL lines 0/);
+  assert.match(measured, /0 accepted observations/);
 });

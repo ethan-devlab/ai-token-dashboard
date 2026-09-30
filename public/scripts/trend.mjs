@@ -46,7 +46,7 @@ export function createUsageTrendController(host, { onApplyInterval, onReturnQuer
   function selection(announce = false) {
     const point = points[selectedIndex()];
     readout.replaceChildren();
-    if (!point) { readout.textContent = t('trend.empty'); overlays(); return; }
+    if (!point) { readout.textContent = t(options.busy ? 'load.trend' : 'trend.empty'); overlays(); return; }
     const label = document.createElement('strong'); label.textContent = intervalText([point.fromMs, point.toMs]);
     const values = document.createElement('p'); values.textContent = `${t('total.tokens')}: ${integerFormat.format(point.tokens)} · ${t('trend.cost')}: ${formatCost(point.cost, point.partialCost)}`;
     readout.append(label, values);

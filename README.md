@@ -20,9 +20,13 @@ Drag across complete buckets or use the start/end boundary selects. **Zoom** cha
 
 All chart assets are served locally. See the [MIT license](public/scripts/vendor/uplot-LICENSE.txt) and the [archived engine comparison](docs/chart-engine-comparison.md).
 
+The overview uses short costs and optional exact values. Partial amounts remain lower bounds. A compact account-quota strip below the KPIs shows the service's remaining quota, reset times, and check time. Expand it for complete quota details and source information. Session rows scroll within a bounded table; its header and paging remain available. Failed queries mark the retained data's original scope and provide **Retry** and **Return to displayed query**.
+
 ## Configuration
 
 `.env` is ignored by Git. `UPDATE_REPOSITORY` is read only from this file; other launch values may be temporarily overridden through the process environment. When the dashboard is bound to a loopback host, the **Settings** link opens `/settings.html`: it validates and atomically writes only the documented `.env` keys, preserves unrelated lines, and requires a dashboard restart before saved values take effect. The settings page is disabled in remote mode.
+
+Settings edits stay on the current page until Save succeeds. Unsaved changes are marked. Returning to the dashboard offers **Keep editing** or **Discard and return**; browser exit/reload registers its native warning while changes are unsaved. A failed save retains edits. No draft is stored in local storage.
 
 | Setting | Default | Notes |
 | --- | --- | --- |

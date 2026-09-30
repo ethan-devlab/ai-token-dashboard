@@ -25,3 +25,20 @@ export function formatCountdown(resetsAt, translate, now = Date.now()) {
   const time = [value.hours, value.minutes, value.seconds].map((part) => String(part).padStart(2, '0')).join(':');
   return value.days ? translate('accountUsage.countdown.days', { days: value.days, time }) : time;
 }
+
+export function remainingPercent(window) {
+  const value = window?.remainingPercent;
+  return value == null || !Number.isFinite(Number(value)) ? null : Math.max(0, Math.min(100, Number(value)));
+}
+
+export function renderQuotaStrip(host, windows, translate, formatDate) {
+  host.replaceChildren(...windows.map((window) => {
+    const item = document.createElement('div'); item.className = 'quota-strip-window';
+    const label = document.createElement('span'); label.textContent = translate(windowLabelKey(window));
+    const value = document.createElement('strong'); const remaining = remainingPercent(window);
+    value.textContent = remaining == null ? '—' : translate('accountUsage.remaining', { value: Math.round(remaining * 10) / 10 });
+    const reset = document.createElement('span'); reset.className = 'muted';
+    reset.textContent = window.resetsAt ? translate('accountUsage.resets', { date: formatDate(window.resetsAt) }) : translate('accountUsage.reset.unknown');
+    item.append(label, value, reset); return item;
+  }));
+}

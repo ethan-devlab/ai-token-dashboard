@@ -2,7 +2,7 @@
 
 Status: implementation in progress. The user confirmed the decision summary and selected uPlot after the native/uPlot comparison on 2026-09-30.
 
-Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`; Phase 1 repairs as `a38a3c1`; Phase 2 shared CSS and controls as `2d1bcf3`; the Phase 3 comparison checkpoint as `2a4773d`. The user selected uPlot. Phase 3 production integration and model-ranking repairs are implemented and verified. The prototype route was removed; its measurements remain in `docs/chart-engine-comparison.md`. Phase 4 has not started. Commit Phase 3 before starting it.
+Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`; Phase 1 repairs as `a38a3c1`; Phase 2 shared CSS and controls as `2d1bcf3`; the Phase 3 comparison checkpoint as `2a4773d`; production uPlot integration as `bbeaa8e`. The user selected full Phase 4 in a dialog after that commit. Phase 4 composition, quota, bounded Session scrolling, pricing rows, overview precision, retained-query recovery, and settings dirty state are implemented and verified. Commit Phase 4 before Phase 5 integration review. Historical comparison measurements remain in `docs/chart-engine-comparison.md`.
 
 ## Outcome and confirmed scope
 

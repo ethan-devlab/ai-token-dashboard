@@ -1,8 +1,8 @@
 # Desktop dashboard deep audit
 
-Review date: 2026-09-30. Status: planning evidence, not implementation approval.
+Review date: 2026-09-30. Status: baseline audit with phased repair evidence.
 
-The findings and source line references below describe the audit baseline. Phase 1 repair evidence is appended at the end; the remaining findings are scheduled in the approved refactor plan.
+The findings, scores, and source line references below describe the audit baseline. Phase 1–4 repair evidence is appended at the end. Phase 5 owns the final integration review and remaining platform validation limits.
 
 ## Scope and method
 
@@ -242,3 +242,33 @@ Screenshots:
 - `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase3-production-dst-fold.png` (TEST ONLY harness)
 
 Limits: Windows runtime, screen-reader output, populated Claude, fault-injected HTTP failure, full browser paint, memory, cold-load speed, settings POST, remote CI, and deployment were not verified. The comparison benchmark remains archived evidence. Phase 4 still owns quota composition, panel order, bounded Session scrolling, overview cost precision, richer failed-query recovery, and settings dirty-navigation behavior. No configuration, pricing, provider parser, quota service, or server security boundary was changed. Windows follow-up: `npm run test:client`, the targeted timezone command above, and `npm start`, followed by desktop interaction checks.
+
+## Phase 4 composition checkpoint — 2026-09-30
+
+Phase 3 was committed as `bbeaa8e`. The user then selected full Phase 4 in a decision dialog.
+
+The dashboard now follows the approved order: query, KPIs, compact service quota, token breakdown/quality, trend/models, Session, comparison/budgets, and maintenance. Full quota cards expand in place with source/check-time information. Unknown quota remains unknown rather than zero. Empty supporting panels no longer reserve 120px. The repeated model eyebrow was removed. Overview cost uses two decimals, with optional exact values. Partial overview bounds round down; small partial costs retain their precision instead of acquiring a false upper bound.
+
+The Session table has a named keyboard-focusable region with a 32rem limit, both overflow directions, and sticky headers. Paging remains outside. Long IDs/workspaces wrap. Pricing uses model headings and semantic label/value rows. Missing drawer diagnostic counts show `—`; explicit zero remains zero. Drawer Close can find a replacement detail button for the same Session after a background row update. Retained Session detail requests use the displayed query, and their dates retain its timezone.
+
+Failed queries mark the retained projection's actual dates, timezone, search, and filters. Retry repeats the failed operation; Return restores the displayed query and period-control focus. Failed JSONL refresh has a distinct message. Export, interval Apply, and pricing updates remain disabled while stale. First loading, empty local files, no range results, no search/filter matches, provider unavailable, and quota unavailable have distinct presentation. Metadata no longer converts missing parse/reuse counts to zero.
+
+Settings keep four expanded groups with field help, native constraints, associated field errors, a visible Save action, and page-local dirty state. Reverting edits clears dirtiness. In-app departure offers Keep editing/Discard in a native modal; Escape restores Back-link focus. Successful save clears dirty state and retains the restart notice. Failed save retains edits. Loading failures leave fields disabled with Retry; remote-disabled settings hide the form. In-app departure is disabled during Save. A native unload-warning handler is registered only while dirty; no configuration draft is persisted.
+
+Verification:
+
+- `npm run test:client`: 33 passed. New focused checks cover overview precision and valid lower bounds, unknown quota, settings reversion/success baselines, distinct empty states, and unknown versus measured-zero diagnostics. Changed modules passed syntax checks; `git diff --check` passed.
+- `node --test --test-name-pattern='settings persistence' tests/server-services.test.mjs`: 1 passed. This existing temporary-file check retains allow-list validation and atomic persistence. No server implementation was changed.
+- Direct root QA checked real Codex data, quota disclosure, semantic pricing cards, English no-match recovery, and the Session drawer. The real drawer showed unknown JSONL/skipped/reset counts alongside 121 accepted observations. Keyboard End scrolled the Session region to 859px within its 512px height; the sticky header remained exactly at its container top.
+- Dashboard and settings passed actual 960/1200/1440/1600px widths without document overflow. Measured dashboard plot widths were 854/630/774/870px. The view panel at 960px stayed within x=152–456. Settings retained four groups and an in-bounds Save action. An earlier viewport command affected another tab; those measurements were discarded and the dashboard widths were rerun with `innerWidth` verification.
+- `tests/manual-ui-server.mjs` served a clearly labeled TEST ONLY surface. It forwards only local GET projections and never forwards a POST or writes `.env`. Mock settings saves use memory only. Native modal Keep editing, Escape, reversion, invalid Port association, failed-save edit retention, successful-save clean state, Discard navigation, and remote-disabled hidden form were checked. A simulated failed query retained eight real summary rows and disabled export/Apply; Return restored them and focus. Retry succeeded after one simulated failure. Failed refresh had its own message. Unknown quota and measured 0% stayed distinct.
+- On the TEST ONLY surface, a failed New York query still opened the retained Session with the original query and timezone. Its detail succeeded and Close returned to the named detail button. These checks test production client code with mocked failure responses, not real service failures or real `.env` saves.
+- No browser errors were recorded on the production dashboard/settings pages. The harness's deliberate 503 failures are expected test errors. The harness server was stopped and its tab closed after checks.
+
+Screenshots:
+
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase4-dashboard-1440.png`
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase4-settings-1440.png`
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase4-failed-query-test-only.png`
+
+Limits: the in-app browser reload did not expose a native unload dialog, so the warning's actual platform UI is unverified. Windows controls/forced colors, screen-reader output, populated Claude, full browser paint/memory, remote CI, and deployment remain unverified. No real settings POST, price refresh, quota refresh, or JSONL refresh was invoked in this phase. The simulated checks do not certify the upstream services. Native modal navigation was directly verified. Windows follow-up: `npm run test:client`, the targeted settings command above, and `npm start`; verify the browser's dirty reload/exit prompt and desktop controls. Optional manual harness: keep the real server on localhost:3333, run `node tests/manual-ui-server.mjs`, and use its printed TEST ONLY URL. Phase 5 integration review remains.

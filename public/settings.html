@@ -15,11 +15,13 @@
     <main class="app-shell settings-shell">
       <header class="app-header">
         <div><p class="eyebrow" data-i18n="settings.eyebrow">本機設定</p><h1 data-i18n="settings.title">儀表板設定</h1><p class="subtitle" data-i18n="settings.subtitle">編輯本機 .env 設定。變更會在重新啟動後套用。</p></div>
-        <div class="header-actions"><a class="button button--secondary" href="/" data-i18n="settings.back">返回儀表板</a></div>
+        <div class="header-actions"><a id="settingsBack" class="button button--secondary" href="/" data-i18n="settings.back">返回儀表板</a></div>
       </header>
 
       <p id="settingsNotice" class="notice" role="status" aria-live="polite" data-i18n="settings.loading">正在讀取本機設定…</p>
       <section id="settingsUnavailable" class="surface settings-unavailable" role="status" hidden><h2 data-i18n="settings.unavailableTitle">設定僅限本機</h2><p data-i18n="settings.unavailable">此伺服器目前使用遠端繫結，因此無法安全地從瀏覽器編輯其 .env。請在主機上修改設定，重新啟動後再返回儀表板。</p></section>
+      <p id="settingsDirty" class="settings-dirty" role="status"></p>
+      <div class="projection-actions"><button id="settingsRetry" type="button" data-i18n="projection.retry" hidden>重試</button></div>
       <form id="settingsForm" class="settings-form">
         <fieldset class="surface settings-group">
           <legend data-i18n="settings.source">SESSION 來源</legend>
@@ -30,6 +32,7 @@
             <label class="control settings-control"><span data-i18n="settings.parseConcurrency">解析並行數</span><input name="PARSE_CONCURRENCY" type="number" min="1" max="16" required /></label>
           </div>
           <p id="directoryHint" class="muted settings-hint" data-i18n="settings.pathHint">此本機路徑不會傳送至外部服務。</p>
+          <p id="parseHint" class="muted settings-hint" data-i18n="settings.parseHint">最大檔案數 1–100000；解析並行數 1–16。</p>
         </fieldset>
 
         <fieldset class="surface settings-group">
@@ -43,6 +46,7 @@
             <label class="control"><input name="EXPOSE_FULL_PATHS" type="checkbox" /> <span data-i18n="settings.exposeFullPaths">顯示完整路徑</span></label>
           </div>
           <p id="remoteWarning" class="settings-warning" hidden data-i18n="settings.remoteWarning">遠端存取可能暴露本機使用量中繼資料。除非理解網路邊界，否則請保持關閉。</p>
+          <p id="networkHint" class="muted settings-hint" data-i18n="settings.networkHint">完整路徑僅限 loopback；連接埠範圍為 1–65535。</p>
         </fieldset>
 
         <fieldset class="surface settings-group">
@@ -51,15 +55,18 @@
             <label class="control settings-control"><span data-i18n="settings.autoRefreshDebounce">監看延遲（ms）</span><input name="AUTO_REFRESH_DEBOUNCE_MS" type="number" min="100" max="60000" required /></label>
           </div>
           <div class="settings-checks"><label class="control"><input name="AUTO_REFRESH" type="checkbox" /> <span data-i18n="settings.autoRefresh">自動監看 JSONL 變更</span></label></div>
+          <p id="watcherHint" class="muted settings-hint" data-i18n="settings.watcherHint">延遲範圍為 100–60000 ms。停用自動監看後仍可手動重新解析。</p>
         </fieldset>
 
         <fieldset class="surface settings-group">
           <legend data-i18n="settings.updates">更新</legend>
-          <div class="settings-grid"><label class="control settings-control"><span data-i18n="settings.updateRepository">GitHub 更新儲存庫</span><input name="UPDATE_REPOSITORY" type="text" autocomplete="off" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*" /></label></div>
+          <div class="settings-grid"><label class="control settings-control"><span data-i18n="settings.updateRepository">GitHub 更新儲存庫</span><input aria-describedby="repositoryHint" name="UPDATE_REPOSITORY" type="text" autocomplete="off" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*" /></label></div>
         </fieldset>
 
+        <p id="repositoryHint" class="settings-hint muted" data-i18n="settings.repositoryHint">使用 owner/repo；留空可停用更新檢查。</p>
         <div class="settings-actions"><p class="muted" data-i18n="settings.restart">這些值僅儲存於本機，必須在重新啟動儀表板後才會套用。</p><button class="button--primary" id="settingsSave" type="submit" data-i18n="settings.save">儲存至 .env</button></div>
       </form>
+      <dialog id="settingsLeave" class="settings-leave" aria-labelledby="settingsLeaveTitle" aria-describedby="settingsLeaveText"><h2 id="settingsLeaveTitle" data-i18n="settings.leaveTitle">尚有未儲存變更</h2><p id="settingsLeaveText" data-i18n="settings.leaveText">離開會捨棄本頁變更。</p><div class="settings-leave-actions"><button id="settingsKeep" class="button--primary" type="button" autofocus data-i18n="settings.keep">繼續編輯</button><button id="settingsDiscard" type="button" data-i18n="settings.discard">捨棄並返回</button></div></dialog>
     </main>
   </body>
 </html>

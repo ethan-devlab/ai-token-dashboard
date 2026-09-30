@@ -28,14 +28,14 @@ export function createSessionDrawerController({ getState, getElement, loadDetail
     closeButton.textContent = t('drawer.close');
     content.setAttribute('aria-busy', String(state.drawer.status === 'loading'));
     const hadContentFocus = content.contains(doc.activeElement);
-    content.innerHTML = renderSessionDrawer({ detail: state.drawer.detail, status: state.drawer.status, error: state.drawer.error, showDetails: state.view.showDetails, timezone: state.source.data?.range?.timezone || state.query.timezone });
+    content.innerHTML = renderSessionDrawer({ detail: state.drawer.detail, status: state.drawer.status, error: state.drawer.error, showDetails: state.view.showDetails, timezone: state.drawer.timezone || state.source.data?.range?.timezone || state.query.timezone });
     if (focus || hadContentFocus) closeButton.focus();
   }
   function open(session, trigger) {
     const state = getState(); const key = session.sessionKey || session.id || session.sessionId;
     if (!key) return;
     const sessionKey = String(key);
-    state.drawer = { sessionKey, trigger, detail: null, status: 'loading', error: '' };
+    state.drawer = { sessionKey, trigger, detail: null, status: 'loading', error: '', timezone: state.source.data?.range?.timezone || state.query.timezone };
     render(true);
     loadDetail(state.drawer.sessionKey).then((detail) => {
       if (getState().drawer.sessionKey !== sessionKey) return;
@@ -46,9 +46,11 @@ export function createSessionDrawerController({ getState, getElement, loadDetail
     });
   }
   function close() {
-    const state = getState(); const trigger = state.drawer.trigger; const wasOpen = Boolean(state.drawer.sessionKey);
+    const state = getState(); const trigger = state.drawer.trigger; const sessionKey = state.drawer.sessionKey; const wasOpen = Boolean(sessionKey);
     state.drawer = { sessionKey: null, trigger: null, detail: null, status: 'idle', error: '' };
-    render(); if (wasOpen) (trigger?.isConnected ? trigger : getElement('search')).focus();
+    render();
+    const replacement = [...(getElement('rows')?.querySelectorAll('button.expand-session') || [])].find((button) => button.dataset.sessionKey === sessionKey);
+    if (wasOpen) (trigger?.isConnected ? trigger : replacement || getElement('search')).focus();
   }
   function containFocus(event) { if (getState().drawer.sessionKey && !drawer.contains(event.target)) closeButton.focus(); }
   function keyboard(event) {
