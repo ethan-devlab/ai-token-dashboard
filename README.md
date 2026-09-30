@@ -1,6 +1,6 @@
 # Local AI Token Dashboard
 
-Dependency-free, desktop-local Node.js dashboard for Codex and Claude Code JSONL usage. v2.1 adds provider-isolated parsers, snapshots, pricing, filters, budgets, refresh state, and exports. Use the header dropdown to switch providers without rescanning an existing snapshot.
+Desktop-local Node.js dashboard for Codex and Claude Code JSONL usage. The server uses Node.js built-ins; charts use a local, pinned uPlot 1.6.32 asset. v2.1 adds provider-isolated parsers, snapshots, pricing, filters, budgets, refresh state, and exports. Use the header dropdown to switch providers without rescanning an existing snapshot.
 
 ## Run
 
@@ -11,6 +11,14 @@ npm start
 ```
 
 Open `http://localhost:3333`. The dashboard is desktop-only and keeps session data in the local server process.
+
+## Charts
+
+Select a single metric, stacked Token/cost plots, or dual axes; use bars or unsmoothed lines. The dashboard retains existing view preferences and saves the new layout and mark choices locally. Pointer movement shows a compact preview. Click a bucket to pin its complete values, or use Left/Right/Home/End and Enter. The data table exposes the same amounts and cost qualifiers.
+
+Drag across complete buckets or use the start/end boundary selects. **Zoom** changes only the plot. **Apply** updates the local usage query, URL, KPIs, model list, sessions, and export scope. Account quota retains its own service period. **Return** restores the prior query during the same page session. Reload preserves the current exact interval, including DST offsets, but clears the Return history. Editing the query clears the chart interval and zoom; view changes preserve them.
+
+All chart assets are served locally. See the [MIT license](public/scripts/vendor/uplot-LICENSE.txt) and the [archived engine comparison](docs/chart-engine-comparison.md).
 
 ## Configuration
 

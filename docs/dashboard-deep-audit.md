@@ -215,3 +215,30 @@ The comparison passed 25 client checks, direct desktop layout checks at 960/1200
 Final 20-sample redraw medians for real nine-bucket bars were 0.50ms for both engines. At 10,000 test buckets, lines measured Native 0.80ms/uPlot 0.70ms; bars measured Native 1.10ms/uPlot 1.20ms. These are JavaScript draw-callback times, not full browser paint, memory, or page-load measurements. Repeated runs varied; there is no stable performance winner. The pinned uPlot 1.6.32 module and CSS add 52,961 raw vendor bytes. The comparison page loads both engines; Native's zero-vendor production option does not describe this page's load.
 
 See `docs/chart-engine-comparison.md` for provenance, exact measurements, maintenance trade-offs, screenshots, acceptance evidence, and verification limits. No account quota, server API, settings save, or production chart-engine change occurred. Full Phase 3 and later phases remain open.
+
+## Phase 3 production checkpoint — 2026-09-30
+
+The user selected uPlot after reviewing the comparison at commit `2a4773d`. The production dashboard now uses one pinned local uPlot renderer. The comparison route, controller, styles, and native renderer are removed. The MIT license is bundled next to the vendor module. Synthetic fixtures are confined to `tests/fixtures` and an explicit temporary TEST ONLY browser harness; the harness server was stopped and its tab closed after verification.
+
+The chart controller retains its shell, selected timestamp, interval, zoom, and table disclosure across view changes. Data and resize updates reuse plot instances. Pointer movement changes overlays through one animation frame without redrawing or announcing each hover. Explicit keyboard/pin actions announce complete values. Native boundary selects provide an alternative to drag. Unknown, zero, partial, and small costs retain their qualifiers. Model bars use actual ratios; a complete model table includes all rows without a minimum-width distortion.
+
+Apply and Return use the current API contract. Numeric `from`/`to` bounds preserve repeated civil hours. A found `datetime-local` normalization defect was fixed: dropping zero seconds no longer discards exact bounds during control synchronization. Manual civil-time or timezone edits clear those bounds. Projection generation prevents a completed old request from replacing a newer result across request channels. Query changes reset chart interval/zoom; Return history is page-local and is cleared by reload. Account quota keeps its own service periods.
+
+Verified evidence:
+
+- `npm run test:client`: 28 passed, including exact interval URL round trips, zero-second normalization, old view preferences, true model ratios, all-model access, cost qualifiers, gaps, and actual DST bucket durations. Changed modules passed syntax checks and the diff passed whitespace checks.
+- `node --test --test-name-pattern='timezone ranges' tests/server-services.test.mjs`: the targeted timezone check passed. No backend code was changed.
+- Real September Codex data: 9 buckets, 8 sessions, and 4 models. Apply of September 6–15 produced 3 buckets and 4 sessions, changed totals/models/export scope, and retained the checked quota response. Return restored the month, totals, partial-cost qualifier, sessions, and URL. Reload retained exact applied bounds. Direct pointer drag snapped to the same complete-bucket interval.
+- A real numeric-bound query for New York November 1, 01:00 GMT-4 to 01:00 GMT-5 remained valid despite identical civil input values. It returned an empty future range without a validation error. A labeled test harness separately verified rendering of that one-hour bucket and 24/23/24-hour spring buckets.
+- The production controller passed empty, one-point, zero, sparse, partial, large, and 10,000-point TEST ONLY cases, plus all six mode/mark combinations. These are behavioral checks, not a production speed claim. Token and cost stayed distinct in dual mode through outlined bars or dashed lines.
+- Home selection, native interval controls, zoom, open tables, stacked/line changes, locale/unit changes, and a density-triggered projection update preserved controller state. Both languages and the complete real model/trend tables were checked. Tables have a 320px local scroll limit.
+- Desktop widths 960/1200/1440/1600px had no document overflow. Plot-frame widths were 854/630/774/870px in the production composition. No browser errors were recorded. Root visual QA checked the single and dual production views directly.
+- The root page, renderer, vendor module, and CSS returned HTTP 200, correct MIME, exact local file content, unchanged CSP, and `nosniff`. The removed comparison route returned 404.
+
+Screenshots:
+
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase3-production-1440.png`
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase3-production-dual-1440.png`
+- `/Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/phase3-production-dst-fold.png` (TEST ONLY harness)
+
+Limits: Windows runtime, screen-reader output, populated Claude, fault-injected HTTP failure, full browser paint, memory, cold-load speed, settings POST, remote CI, and deployment were not verified. The comparison benchmark remains archived evidence. Phase 4 still owns quota composition, panel order, bounded Session scrolling, overview cost precision, richer failed-query recovery, and settings dirty-navigation behavior. No configuration, pricing, provider parser, quota service, or server security boundary was changed. Windows follow-up: `npm run test:client`, the targeted timezone command above, and `npm start`, followed by desktop interaction checks.

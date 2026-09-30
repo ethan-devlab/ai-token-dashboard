@@ -1,8 +1,8 @@
 # Desktop dashboard UI refactor plan
 
-Status: implementation in progress. The user confirmed the decision summary on 2026-09-30. The production chart engine remains open until the native/uPlot prototype comparison.
+Status: implementation in progress. The user confirmed the decision summary and selected uPlot after the native/uPlot comparison on 2026-09-30.
 
-Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`; Phase 1 repairs as `a38a3c1`; Phase 2 shared CSS and controls as `2d1bcf3`. Phase 3 has a verified, separate native/uPlot comparison prototype. The user selected a switch at the same plot position, with the same data and controls. See `docs/chart-engine-comparison.md` for evidence. Production engine selection, integration into the dashboard, and model-ranking repairs remain pending. Phase 4 has not started.
+Implementation progress on 2026-09-30: Phase 0 baseline is committed as `2979899`; Phase 1 repairs as `a38a3c1`; Phase 2 shared CSS and controls as `2d1bcf3`; the Phase 3 comparison checkpoint as `2a4773d`. The user selected uPlot. Phase 3 production integration and model-ranking repairs are implemented and verified. The prototype route was removed; its measurements remain in `docs/chart-engine-comparison.md`. Phase 4 has not started. Commit Phase 3 before starting it.
 
 ## Outcome and confirmed scope
 
@@ -21,7 +21,7 @@ The working tree includes the previous overview refactor. Before a new developme
 | Topic | Confirmed decision | Pending detail |
 | --- | --- | --- |
 | Scope | Whole desktop interface, including session details and settings. | None. |
-| Chart engine | Build a bounded native/uPlot comparison prototype before selecting the production engine. | Final engine selection after prototype evidence. |
+| Chart engine | Compare native/uPlot at the same position, then use the user-selected uPlot engine with pinned local assets. | None. |
 | Information priority | Keep a compact quota strip below the KPIs. Show remaining quota, reset time, and update status; disclose full quota details. Follow with usage analysis and Session. | None. |
 | Advanced facets | Searchable lists with native checkboxes; persistent selected values with individual removal. Edit a draft and use Apply to update the query. Mark unapplied changes. Removing an applied chip or clearing all filters takes effect immediately and reconciles corresponding draft values. | None. |
 | Chart interactions | Include time zoom and reset in both prototypes. Snap interval selection to complete data buckets, show boundaries and timezone, and apply it through an explicit button. Provide a return to the prior query. | None. |
@@ -37,7 +37,7 @@ The working tree includes the previous overview refactor. Before a new developme
 | Quota details | Expand complete quota cards in place beneath the compact strip. Retain source and update-state information. | None. |
 | Failed query | Retain the last successful data with its original period and filters visibly labeled. Offer retry or return to the original query. Disable interval application and current-query export while retained data does not match the requested query. | None. |
 
-The user confirmed the complete decision summary and explicitly finished the interview. This delivery is the refactor plan. Before implementation starts, complete the baseline phase commit. The prototype decision does not select uPlot as the production engine.
+The user confirmed the complete decision summary and explicitly finished the initial interview. The baseline phase was committed before implementation. After reviewing the comparison checkpoint, the user selected uPlot as the production engine. Further phase decisions use a dialog, as requested by the user.
 
 1. Preserve the current visual language; improve consistency, density, and behavior.
 2. Repair data labels, hidden states, timezone display, and modal focus before changing chart engines.
@@ -144,7 +144,7 @@ The term plot describes the data coordinates; chart includes axes, selection, su
 | Option | Useful fit | Additional project work | Position |
 | --- | --- | --- | --- |
 | Refactored native Canvas plus HTML/SVG labels | Current sparse aggregated trend and simple model ranking | Implement honest time geometry, axes, lifecycle, tooltip, keyboard behavior, and table parity. Keeps zero frontend dependencies. | Baseline candidate in the approved comparison prototype. |
-| uPlot | Focused time-series interactions, time scales, shared cursor, or future zoom | Map timestamps to its columnar format; provide project keyboard selection, selected-value text, semantic table, locale, timezone, and partial-cost handling. Review label collision behavior. | Library candidate in the approved comparison prototype; production selection remains open. |
+| uPlot | Focused time-series interactions, time scales, shared cursor, or future zoom | Map timestamps to its columnar format; provide project keyboard selection, selected-value text, semantic table, locale, timezone, and partial-cost handling. Review label collision behavior. | Selected by the user after the comparison; integrated as the sole production engine. |
 | Chart.js | Standard line/bar charts and a familiar plugin ecosystem | Its time scale needs a date library and adapter. Canvas accessibility and project keyboard/table behavior still need application work. | Viable, but brings more date integration than this scope currently needs. |
 | Apache ECharts | Several chart types, broader analytics interactions, choice of Canvas/SVG | Configure renderer and import/register required components. Enable and validate ARIA descriptions; still provide project keyboard/table behavior and accounting labels. | Consider only if a broader chart scope is approved. |
 
@@ -290,7 +290,7 @@ For Windows-local follow-up, the existing project commands remain `npm run test:
 - Changes to time geometry and labels must preserve server accounting. This plan intentionally does not change aggregation or fill missing buckets.
 - A chart library can reduce axis work but will not automatically preserve keyboard interaction, table parity, coverage semantics, or timezone meaning.
 - Populated Claude, screen-reader behavior, Windows native controls, large-data frame times, and text zoom remain validation gaps.
-- The user confirmed the decision summary. The remaining product decision is the production chart engine, which depends on the native/uPlot comparison evidence. Show both candidates against the same accepted interactions before that decision.
+- The user selected uPlot after reviewing both candidates. Its local asset and version maintenance are accepted; production timing is not inferred from the archived comparison benchmark.
 
 ## Planning-pass validation
 

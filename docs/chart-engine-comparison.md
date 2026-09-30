@@ -1,10 +1,10 @@
 # Native Canvas and uPlot comparison
 
-Date: 2026-09-30. Status: prototype verified; production engine decision pending.
+Date: 2026-09-30. Status: archived comparison at commit `2a4773d`. The user selected uPlot after reviewing this evidence. The production dashboard now uses only uPlot; the comparison route and its controller were removed.
 
 ## Scope
 
-Open `/chart-comparison.html` on the existing localhost server. The prototype uses the existing dashboard API, provider, timezone, and facet parameters. The user chose a same-position engine switch. Both engines share the data, plot dimensions, metric controls, external readout, semantic table, interval selection, and query projection.
+This section describes the prototype at commit `2a4773d`, not a current route. That version served `/chart-comparison.html` on the existing localhost server. The prototype used the existing dashboard API, provider, timezone, and facet parameters. The user chose a same-position engine switch. Both engines shared the data, plot dimensions, metric controls, external readout, semantic table, interval selection, and query projection.
 
 This page does not replace the production trend or model ranking. Applying an interval updates this page's real local usage projection and URL. Return restores its previous query. The dashboard link returns to the initial dashboard query. Account quota is not requested or changed. Explicit test fixtures cannot apply a query and have no simulated model or session results.
 
@@ -26,7 +26,7 @@ The pinned version is uPlot 1.6.32. Its official distribution and API are descri
 
 `sha512-KIMVnG68zvu5XXUbC4LQEPnhwOxBuLyW1AHtpm6IKTXImkbLgkMy+jabjLgSLMasNuGGzQm/ep3tOkyTxpiQIw==`
 
-The local module contains the official minified IIFE distribution with only `export default uPlot;` appended. The official minified CSS and MIT license are retained. There is no package installation, bundler, CDN, remote font, or external usage-data request.
+The local module contains the official minified IIFE distribution with only `export default uPlot;` appended. The official minified CSS and [MIT license](../public/scripts/vendor/uplot-LICENSE.txt) are retained. There is no package installation, bundler, CDN, remote font, or external usage-data request.
 
 | Candidate | Added vendor runtime bytes | Gzip estimate |
 | --- | ---: | ---: |
@@ -71,6 +71,6 @@ Native Canvas is the recommended default for the current aggregated dashboard: i
 
 uPlot is a valid alternative if library-managed scales, paths, and lifecycle are preferred over the added local asset and version maintenance. The application still owns timezone semantics, complete-bucket bars, keyboard interaction, readout, cost coverage, interval application, and table parity. The prototype uses a custom bar path because elapsed bucket widths must remain accurate.
 
-The user must select the production engine. After selection, integrate one permanent renderer into `trend.mjs`, preserve existing preferences through a compatible extension, repair model-ranking ratios and complete-list access, and verify the production lifecycle. This prototype is a checkpoint within Phase 3, not its completion.
+The user selected uPlot. Production integration uses one renderer, a stable chart controller, compatible mode/mark preferences, true model ratios, and complete-list access. Synthetic fixtures now live under `tests/fixtures`; they cannot appear as production data. The earlier Native recommendation above records the comparison trade-off and does not override the user decision. See the production Phase 3 checkpoint in `dashboard-deep-audit.md` for current verification. These redraw measurements remain prototype measurements; they were not rerun as a production performance benchmark.
 
 Not verified: Windows controls, a screen-reader session, populated Claude, autumn DST ambiguity in this prototype, fault-injected failed queries, full browser paint/memory, cold-load performance, settings POST, remote CI, or deployment. The broad backend suites were not run because the server and API contracts did not change. Windows follow-up: `npm run test:client` and `npm start`, followed by desktop interaction checks.

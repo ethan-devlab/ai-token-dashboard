@@ -96,3 +96,12 @@ export function isoWeekStart(value) {
   monday.setHours(0, 0, 0, 0);
   return monday;
 }
+
+export function formatIntervalBoundary(value, timezone) {
+  return new Intl.DateTimeFormat(getLocale(), { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'shortOffset' }).format(value);
+}
+
+export function zonedDateTimeValue(value, timezone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(value).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+}

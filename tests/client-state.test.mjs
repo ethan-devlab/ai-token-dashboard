@@ -9,10 +9,11 @@ import { detectLocale, setLocale, t } from '../public/scripts/i18n.mjs';
 import { createProjectionCache } from '../public/scripts/projection-cache.mjs';
 import { projectionLoadState } from '../public/scripts/projection-state.mjs';
 import { createRequestChannels } from '../public/scripts/request-channels.mjs';
-import { applyTableViewPreferences, budgetState, createDashboardState, customRangeError, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
-import { nearestPointIndex, pointPositions } from '../public/scripts/trend.mjs';
+import { applyTableViewPreferences, budgetState, createDashboardState, customRangeError, densityPageLimit, providerFromSearch, queryStateFromSearch, queryStateToSearch, readProviderPreference, readQueryState, readViewPreferences, requestParameters, saveProviderPreference, saveViewPreferences } from '../public/scripts/state.mjs';
+import { modelRanking, renderModelBreakdown } from '../public/scripts/model-breakdown.mjs';
+import { comparisonFixture } from './fixtures/chart-fixtures.mjs';
 import { countdownParts, formatCountdown, windowLabelKey } from '../public/scripts/account-usage.mjs';
-import { chartColumns, chartDomain, chartValue, comparisonFixture, nearestBucketIndex, numericScale, snappedInterval } from '../public/scripts/chart-geometry.mjs';
+import { chartColumns, chartDomain, chartValue, nearestBucketIndex, numericScale, snappedInterval } from '../public/scripts/chart-geometry.mjs';
 
 test('comparison charts preserve sparse intervals, unknown values and bucket snapping', () => {
   const { points } = comparisonFixture('sparse');
@@ -226,21 +227,14 @@ test('i18n selects a saved language and resolves v2 messages', () => {
   assert.equal(t('trend.detail.tokens'), '總 Token');
 });
 
-test('canvas trend selection remains pointer and keyboard safe at bounds', () => {
-  const points = [0, 1, 2, 3].map((fromMs) => ({ fromMs }));
-  assert.equal(nearestPointIndex(points, 16, 216), 0);
-  assert.equal(nearestPointIndex(points, 116, 216), 2);
-  assert.equal(nearestPointIndex(points, 999, 216), 3);
-});
-
-test('sparse trend geometry and pointer selection use actual elapsed time', () => {
-  const points = [0, 1, 8].map((day) => ({ fromMs: day * 86_400_000 }));
-  assert.deepEqual(pointPositions(points, 216), [16, 39, 200]);
-  assert.equal(nearestPointIndex(points, 120, 216), 2);
-  assert.equal(nearestPointIndex([], 120, 216), -1);
-  assert.deepEqual(pointPositions([{ fromMs: 50 }], 216), [108]);
-  const dst = ['2026-10-31T04:00:00Z', '2026-11-01T04:00:00Z', '2026-11-02T05:00:00Z'].map((time) => ({ fromMs: Date.parse(time) }));
-  assert.deepEqual(pointPositions(dst, 1012), [16, 496, 996]);
+test('bucket selection handles empty data, bounds and gaps', () => {
+  const { points } = comparisonFixture('sparse');
+  assert.equal(nearestBucketIndex([], 0), -1);
+  assert.equal(nearestBucketIndex(points, -1), 0);
+  assert.equal(nearestBucketIndex(points, points.at(-1).toMs + 1000), points.length - 1);
+  assert.equal(nearestBucketIndex(points, points[1].toMs + 1), 1);
+  assert.equal(nearestBucketIndex(points, points[2].fromMs - 1), 2);
+  assert.equal(snappedInterval(points, points[1].toMs + 1, points[2].fromMs - 1), null);
 });
 
 test('session row and drawer dates follow the projection timezone in both languages', () => {
@@ -278,4 +272,61 @@ test('custom range validation names missing, reversed and equal civil times', ()
   assert.equal(customRangeError({ ...query, customEnd: '2026-09-22T00:00' }), 'range.endBeforeStart');
   assert.equal(customRangeError({ ...query, customEnd: '2026-09-23T00:00:00' }), 'range.endBeforeStart');
   assert.equal(customRangeError({ ...query, rangeMode: 'month', customEnd: '' }), '');
+});
+
+test('chart interval URLs preserve exact DST boundaries and existing filters', () => {
+  const defaults = createDashboardState().query;
+  const query = queryStateFromSearch(defaults, '?range=custom&start=2026-11-01T01:00&end=2026-11-01T01:00&timezone=America/New_York&from=1793509200000&to=1793512800000&models=x');
+  assert.deepEqual(query.intervalBounds, [1793509200000, 1793512800000]);
+  assert.equal(customRangeError(query), '');
+  const restored = queryStateFromSearch(defaults, queryStateToSearch(query));
+  assert.deepEqual(restored.intervalBounds, query.intervalBounds);
+  const params = requestParameters(restored);
+  assert.equal(params.get('from'), '1793509200000');
+  assert.equal(params.get('to'), '1793512800000');
+  assert.equal(params.has('start'), false);
+  assert.equal(params.get('models'), 'x');
+  assert.equal(queryStateFromSearch(defaults, '?range=custom&from=2&to=1').intervalBounds, null);
+  assert.equal(queryStateFromSearch(defaults, '?range=month&from=1&to=2').intervalBounds, null);
+});
+
+test('old chart preferences retain metric, columns and budgets with new defaults', () => {
+  const data = new Map(); const storage = { getItem: (key) => data.get(key), setItem: (key, value) => data.set(key, value) };
+  const view = createDashboardState().view;
+  view.visibleColumns.input = false;
+  view.budgetsByProvider.codex = [{ name: 'Existing budget', scope: 'all', limit: 100 }];
+  saveViewPreferences(storage, { ...view, trendMetric: 'tokens', trendMode: 'dual', trendMark: 'line' });
+  const stored = JSON.parse([...data.values()][0]); delete stored.trendMode; delete stored.trendMark;
+  storage.setItem([...data.keys()][0], JSON.stringify(stored));
+  const old = readViewPreferences(storage);
+  assert.equal(old.trendMetric, 'tokens'); assert.equal(old.trendMode, 'single'); assert.equal(old.trendMark, 'bar');
+  assert.equal(old.visibleColumns.input, false);
+  assert.deepEqual(old.budgetsByProvider.codex, view.budgetsByProvider.codex);
+  saveViewPreferences(storage, { ...createDashboardState().view, trendMode: 'stacked', trendMark: 'line' });
+  assert.equal(readViewPreferences(storage).trendMode, 'stacked'); assert.equal(readViewPreferences(storage).trendMark, 'line');
+});
+
+test('model ranks retain true small ratios, unknown costs and all rows', () => {
+  const models = Array.from({ length: 12 }, (_, index) => ({ model: `model-${index}`, tokens: index + 1, cost: index === 0 ? null : index / 1e8, partialCost: index === 1 }));
+  models.push({ model: 'large', tokens: 1e12, cost: 1000 });
+  const ranks = modelRanking(models, 'cost');
+  assert.equal(ranks[0].ratio, 1); assert.equal(ranks.at(-1).value, null);
+  assert.ok(Math.abs(ranks.find(({ item }) => item.model === 'model-1').ratio / 1e-11 - 1) < 1e-12);
+  const host = { innerHTML: '', querySelector: () => null };
+  setLocale('en'); renderModelBreakdown(host, models, 'cost');
+  assert.equal((host.innerHTML.match(/<li>/g) || []).length, 8);
+  assert.equal((host.innerHTML.match(/<tr>/g) || []).length, 14);
+  assert.match(host.innerHTML, /View all 13 models/);
+  assert.match(host.innerHTML, /≥ \$1E-8/);
+  assert.doesNotMatch(host.innerHTML, /role="progressbar"/);
+});
+
+test('datetime-local zero-second normalization preserves exact interval bounds', () => {
+  const query = queryStateFromSearch(createDashboardState().query, '?range=custom&timezone=America/New_York&from=1793509200000&to=1793512800000');
+  assert.equal(query.customStart, '2026-11-01T01:00:00'); assert.equal(query.customEnd, '2026-11-01T01:00:00');
+  const controls = Object.fromEntries([['rangeMode',query.rangeMode],['weekInput',''],['monthInput',''],['yearInput',''],['customStart','2026-11-01T01:00'],['customEnd','2026-11-01T01:00'],['search',''],['sort','recent'],['timezone',query.timezone]].map(([key,value]) => [key,{ value, dataset: {} }]));
+  const normalized = readQueryState(controls, {}, query);
+  assert.deepEqual(normalized.intervalBounds, query.intervalBounds); assert.equal(customRangeError(normalized), '');
+  controls.customEnd.value = '2026-11-01T01:30';
+  assert.equal(readQueryState(controls, {}, query).intervalBounds, undefined);
 });

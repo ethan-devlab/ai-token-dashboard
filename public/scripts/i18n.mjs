@@ -99,40 +99,24 @@ export function getLocale() {
   return activeLocale;
 }
 
-const comparisonDictionaries = {
+const chartDictionaries = {
   en: {
-    'compare.measureFailed': 'Measurement failed.', 'compare.outline': 'outline', 'compare.dashed': 'dashed',
-    'compare.eyebrow': 'ENGINE COMPARISON PROTOTYPE', 'compare.title': 'Native Canvas / uPlot',
-    'compare.intro': 'Same position, data, and controls. This is a decision prototype; the production dashboard engine is unchanged.',
-    'compare.engine': 'Engine', 'compare.mode': 'Layout', 'compare.single': 'Single metric', 'compare.stacked': 'Stacked panels', 'compare.dual': 'Dual axis',
-    'compare.mark': 'Mark', 'compare.bar': 'Bars', 'compare.line': 'Lines', 'compare.data': 'Data', 'compare.live': 'Current local usage',
-    'compare.liveStatus': 'Local server projection. Zoom changes the chart only; Apply changes the local query.',
-    'compare.test': 'TEST CASE: synthetic values, not actual usage. Query application is disabled.',
-    'compare.help': 'Left/Right/Home/End select a bucket; Enter pins it; Escape ends preview. Drag to select complete buckets, or use the interval selects below.',
-    'compare.from': 'First bucket', 'compare.to': 'Last bucket', 'compare.zoom': 'Zoom to selection', 'compare.reset': 'Reset zoom',
-    'compare.apply': 'Apply to local query', 'compare.return': 'Return to prior query', 'compare.interval': 'Interval and timezone', 'compare.buckets': 'buckets',
-    'compare.projection': 'Local query projection', 'compare.quota': 'Account quota keeps its service period. Chart zoom and local interval application do not change account quota.',
-    'compare.measure': 'Measurements', 'compare.measureAction': 'Measure current engine 20 times',
-    'compare.measureHint': 'Measures rebuild/draw-callback time, not full browser paint or memory. Both engines use a shared preview layer; pointer selection does not redraw the data plot.',
-    'compare.dualHint': 'Independent token and USD scales; scale positions do not establish a correlation.',
-    'compare.retained': 'Query failed. The prior projection and its original period are retained; interval application is disabled.',
+    'chart.mode': 'Layout', 'chart.single': 'Single metric', 'chart.stacked': 'Stacked', 'chart.dual': 'Dual axis',
+    'chart.mark': 'Mark', 'chart.bar': 'Bars', 'chart.line': 'Lines', 'chart.outline': 'outline', 'chart.dashed': 'dashed',
+    'chart.help': 'Left/Right/Home/End select a bucket; Enter pins it; Escape ends preview. Drag to select complete buckets, or use the interval selects below.',
+    'chart.dualHint': 'Independent token and USD scales; scale positions do not establish a correlation.', 'chart.buckets': 'buckets',
+    'chart.from': 'Start boundary', 'chart.to': 'End boundary', 'chart.zoom': 'Zoom to selection', 'chart.reset': 'Reset zoom',
+    'chart.apply': 'Apply to local query', 'chart.return': 'Return to prior query', 'chart.interval': 'Interval and timezone',
+    'chart.costCoverage': 'Costs include known amounts only. ≥ marks a lower bound; — means unknown.', 'model.all': 'View all {count} models',
   },
   'zh-Hant': {
-    'compare.measureFailed': '量測失敗。', 'compare.outline': '外框', 'compare.dashed': '虛線',
-    'compare.eyebrow': '圖表比較原型', 'compare.title': '原生 Canvas / uPlot',
-    'compare.intro': '同位置、同資料與互動；此頁是引擎決策原型，正式 dashboard 尚未更換引擎。',
-    'compare.engine': '引擎', 'compare.mode': '排列', 'compare.single': '單一指標', 'compare.stacked': '上下排列', 'compare.dual': '雙軸',
-    'compare.mark': '圖形', 'compare.bar': '長條', 'compare.line': '折線', 'compare.data': '資料', 'compare.live': '目前本機用量',
-    'compare.liveStatus': '本機伺服器投影。縮放只改變圖表；按套用才改變本機查詢。',
-    'compare.test': '測試案例：合成資料，非真實用量。區間套用已停用。',
-    'compare.help': '左右方向鍵／Home／End 選點；Enter 固定、Escape 關閉預覽。拖曳選取完整資料區間，或用下方起迄選單操作。',
-    'compare.from': '起始區間', 'compare.to': '結束區間', 'compare.zoom': '放大所選區間', 'compare.reset': '重置縮放',
-    'compare.apply': '套用至本機查詢', 'compare.return': '返回先前查詢', 'compare.interval': '區間與時區', 'compare.buckets': '資料區間',
-    'compare.projection': '本機查詢投影', 'compare.quota': '帳戶額度保留服務原有期間；圖表縮放與本機區間套用不會改動帳戶額度。',
-    'compare.measure': '量測', 'compare.measureAction': '量測目前引擎 20 次',
-    'compare.measureHint': '量測重建／繪圖回呼時間；不等同完整瀏覽器 paint 或記憶體。兩者使用共用預覽層，pointer 選點不重繪資料圖形。',
-    'compare.dualHint': 'Token 與 USD 使用獨立尺度；位置相同不代表兩者相關。',
-    'compare.retained': '查詢失敗。保留先前投影及其原始期間，並停用區間套用。',
+    'chart.mode': '排列', 'chart.single': '單一指標', 'chart.stacked': '上下排列', 'chart.dual': '雙軸',
+    'chart.mark': '圖形', 'chart.bar': '長條', 'chart.line': '折線', 'chart.outline': '外框', 'chart.dashed': '虛線',
+    'chart.help': '左右方向鍵／Home／End 選點；Enter 固定、Escape 關閉預覽。拖曳選取完整資料區間，或用下方起迄選單操作。',
+    'chart.dualHint': 'Token 與 USD 使用獨立刻度；刻度位置不代表相關性。', 'chart.buckets': '資料區間',
+    'chart.from': '起始邊界', 'chart.to': '結束邊界', 'chart.zoom': '放大所選區間', 'chart.reset': '重置縮放',
+    'chart.apply': '套用至本機查詢', 'chart.return': '返回先前查詢', 'chart.interval': '區間與時區',
+    'chart.costCoverage': '費用僅包含已知部分；≥ 表示已知下界，— 表示未知。', 'model.all': '查看全部 {count} 個模型',
   },
 };
 
@@ -164,7 +148,7 @@ const controlDictionaries = {
 };
 
 export function t(key, values = {}) {
-  return interpolate(comparisonDictionaries[activeLocale]?.[key] ?? controlDictionaries[activeLocale]?.[key] ?? v2Dictionaries[activeLocale]?.[key] ?? dictionaries[activeLocale]?.[key] ?? v2Dictionaries.en[key] ?? dictionaries.en[key] ?? key, values);
+  return interpolate(chartDictionaries[activeLocale]?.[key] ?? controlDictionaries[activeLocale]?.[key] ?? v2Dictionaries[activeLocale]?.[key] ?? dictionaries[activeLocale]?.[key] ?? v2Dictionaries.en[key] ?? dictionaries.en[key] ?? key, values);
 }
 
 export function applyDocumentTranslations(root = document) {
