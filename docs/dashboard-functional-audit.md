@@ -1,5 +1,7 @@
 # Dashboard functional audit
 
+Phase 1 disposition (2026-10-01): FA04–FA06 and the selected FA10/FA18/FA22/FA23 policies are implemented. See [phase1-accounting-validation.md](phase1-accounting-validation.md) for current evidence. The findings and original probe JSON below remain the audit baseline; later-phase findings are still open.
+
 Date: 2026-10-01 (Asia/Taipei). Baseline: `665af57` on `main`.
 
 The user accepted the UI result and selected a complete functional review before implementation decisions. This review covers both provider parsers, token/cost calculations, ranges, projections, pagination, refresh/watchers, quotas, exports, settings, pricing, and update checks. Production code and data have not changed.

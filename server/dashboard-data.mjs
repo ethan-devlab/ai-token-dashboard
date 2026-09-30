@@ -11,9 +11,9 @@ function modifierState(pricing, event) {
   const values = event.pricingModifiers || {};
   let multiplier = 1;
   const unknown = [];
-  if (values.inferenceGeo === 'us' && pricing.modifiers.usGeoPattern?.test(model)) multiplier *= pricing.modifiers.usGeoMultiplier;
+  if (values.inferenceGeo === 'us' && pricing.modifiers.usGeoPattern?.test(model) && pricing.modifiers.usGeoMultiplier != null) multiplier *= pricing.modifiers.usGeoMultiplier;
   else if (values.inferenceGeo !== 'global') unknown.push(`${model}:inferenceGeo=${values.inferenceGeo || 'missing'}`);
-  if (values.speed === 'fast' && pricing.modifiers.fastPattern?.test(model)) multiplier *= pricing.modifiers.fastMultiplier;
+  if (values.speed === 'fast' && pricing.modifiers.fastPattern?.test(model) && pricing.modifiers.fastMultiplier != null) multiplier *= pricing.modifiers.fastMultiplier;
   else if (values.speed !== 'standard') unknown.push(`${model}:speed=${values.speed || 'missing'}`);
   if (values.serviceTier !== 'standard') unknown.push(`${model}:serviceTier=${values.serviceTier || 'missing'}`);
   return { multiplier, unknown };
@@ -23,8 +23,8 @@ export function calculateCost(pricing, events) {
   const cost = { total: 0, input: 0, cached: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, pricedTokens: 0, billableTokens: 0, unpricedTokens: 0, unknownModels: new Set(), unavailableComponents: new Set(), unknownModifiers: new Set() };
   for (const event of events) {
     const eventUsage = event.usage || zeroUsage();
-    const detailedCacheWrite = eventUsage.cacheWrite5mTokens + eventUsage.cacheWrite1hTokens;
-    const genericCacheWrite = detailedCacheWrite ? 0 : eventUsage.cacheWriteTokens;
+    const detailedCacheWrite = (eventUsage.cacheWrite5mTokens || 0) + (eventUsage.cacheWrite1hTokens || 0);
+    const genericCacheWrite = Math.max(0, (eventUsage.cacheWriteTokens || 0) - detailedCacheWrite);
     const billable = eventUsage.uncachedInputTokens + eventUsage.cachedInputTokens + genericCacheWrite + detailedCacheWrite + eventUsage.outputTokens;
     cost.billableTokens += billable;
     const matched = matchPricingRule(pricing, event.model, event.timestamp);
@@ -32,7 +32,9 @@ export function calculateCost(pricing, events) {
     const rate = matched.rates;
     const modifier = modifierState(pricing, event);
     for (const item of modifier.unknown) cost.unknownModifiers.add(item);
-    for (const [name, tokens, price] of [['input', eventUsage.uncachedInputTokens, rate.input], ['cached', eventUsage.cachedInputTokens, rate.cachedInput], ['cacheWrite', genericCacheWrite, rate.cacheWrite], ['cacheWrite5m', eventUsage.cacheWrite5mTokens, rate.cacheWrite5m], ['cacheWrite1h', eventUsage.cacheWrite1hTokens, rate.cacheWrite1h], ['output', eventUsage.outputTokens, rate.output]]) {
+    // Unknown modifiers can change every rate. A base-rate guess is not a known subtotal.
+    if (modifier.unknown.length) { cost.unpricedTokens += billable; continue; }
+    for (const [name, tokens, price] of [['input', eventUsage.uncachedInputTokens, rate.input], ['cached', eventUsage.cachedInputTokens, rate.cachedInput], ['cacheWrite', genericCacheWrite, pricing.provider === 'claude' ? null : rate.cacheWrite], ['cacheWrite5m', eventUsage.cacheWrite5mTokens, rate.cacheWrite5m], ['cacheWrite1h', eventUsage.cacheWrite1hTokens, rate.cacheWrite1h], ['output', eventUsage.outputTokens, rate.output]]) {
       if (!tokens) continue;
       if (price == null) { cost.unpricedTokens += tokens; cost.unavailableComponents.add(`${matched.id}:${name}`); continue; }
       const amount = tokens / pricing.unitTokens * price * modifier.multiplier;
@@ -54,6 +56,10 @@ function inRange(event, range) {
 }
 function normalise(value) { return String(value || '').toLowerCase(); }
 function valuesMatch(selected, value) { return !selected.length || selected.includes(String(value || 'unknown')); }
+function usageQuality(reconciliation = {}) {
+  const reasons = ['partialReset', 'mixedSource', 'conflict', 'incomplete', 'invalidUsage', 'possibleDuplicate', 'cacheWriteInconsistent'].filter((key) => reconciliation[key] > 0);
+  return { incomplete: Boolean(reconciliation.partialReset || reconciliation.mixedSource || reconciliation.conflict || reconciliation.incomplete || reconciliation.invalidUsage), possibleDuplicate: Boolean(reconciliation.possibleDuplicate), cacheWriteInconsistent: Boolean(reconciliation.cacheWriteInconsistent), reasons };
+}
 function redact(value, options) {
   if (value == null) return null;
   if (options.exposeFullPaths) return String(value);
@@ -64,19 +70,21 @@ function redact(value, options) {
 }
 function filteredSessions(summary, request, options) {
   return summary.sessions.map((session) => {
-    const usageEvents = session.usageEvents.filter((event) => inRange(event, request.range));
+    const usageEvents = session.usageEvents.filter((event) => inRange(event, request.range) && valuesMatch(request.filters.models, event.model));
     const usage = usageEvents.reduce((sum, event) => addUsage(sum, event.usage), zeroUsage());
     const cost = serialiseCost(calculateCost(summary.pricing, usageEvents));
     const lastTimestamp = usageEvents.reduce((latest, event) => !latest || Date.parse(event.timestamp) > Date.parse(latest) ? event.timestamp : latest, null);
-    return { ...session, usageEvents, usage, cost, lastTimestamp, pricingStatus: cost.pricingCoverage.partial ? 'partial' : 'priced', workspace: redact(session.cwd, options) };
-  }).filter((session) => session.usageEvents.length > 0).filter((session) => {
+    const models = [...new Set(usageEvents.map((event) => event.model || 'unknown'))].sort();
+    const hasRelevantObservation = (session.usageObservations || session.usageEvents).some((event) => inRange(event, request.range) && valuesMatch(request.filters.models, event.model));
+    return { ...session, usageEvents, usage, cost, models, hasRelevantObservation, usageQuality: usageQuality(session.reconciliation), lastTimestamp, pricingStatus: cost.pricingCoverage.partial ? 'partial' : 'priced', workspace: redact(session.cwd, options) };
+  }).filter((session) => session.hasRelevantObservation).filter((session) => {
     const filters = request.filters;
-    const text = [session.sessionId, session.model, session.workspace, session.originator, session.cliVersion, session.executionType].map(normalise).join(' ');
-    return (!request.q || text.includes(normalise(request.q))) && valuesMatch(filters.models, session.model) && valuesMatch(filters.workspaces, session.workspace) && valuesMatch(filters.pricingStatus, session.pricingStatus) && valuesMatch(filters.usageSource, session.usageSource) && valuesMatch(filters.cliVersion, session.cliVersion) && valuesMatch(filters.originator, session.originator) && valuesMatch(filters.executionType || [], session.executionType) && (!filters.quality.length || filters.quality.some((value) => value === 'invalid' && session.invalidLineCount > 0 || value === 'reconciled' && session.reconciliation.ambiguous > 0));
+    const text = [session.sessionId, session.model, ...session.models, session.workspace, session.originator, session.cliVersion, session.executionType].map(normalise).join(' ');
+    return (!request.q || text.includes(normalise(request.q))) && valuesMatch(filters.workspaces, session.workspace) && valuesMatch(filters.pricingStatus, session.pricingStatus) && valuesMatch(filters.usageSource, session.usageSource) && valuesMatch(filters.cliVersion, session.cliVersion) && valuesMatch(filters.originator, session.originator) && valuesMatch(filters.executionType || [], session.executionType) && (!filters.quality.length || filters.quality.some((value) => value === 'invalid' && session.invalidLineCount > 0 || value === 'reconciled' && (session.usageQuality.incomplete || session.usageQuality.possibleDuplicate)));
   });
 }
 function sessionSummary(session, options) {
-  return { provider: session.provider, sessionKey: session.sessionKey, sessionId: session.sessionId, file: redact(session.file, options), workspace: session.workspace, model: session.model, originator: session.originator, cliVersion: session.cliVersion, executionType: session.executionType || 'main', parentSessionKey: session.parentSessionKey || null, agentId: session.agentId || null, gitBranch: session.gitBranch || null, entrypoint: session.entrypoint || null, firstTimestamp: session.firstTimestamp, lastTimestamp: session.lastTimestamp, usage: session.usage, cost: session.cost, pricingStatus: session.pricingStatus, usageSource: session.usageSource, invalidLineCount: session.invalidLineCount, reconciliation: session.reconciliation };
+  return { provider: session.provider, sessionKey: session.sessionKey, sessionId: session.sessionId, file: redact(session.file, options), workspace: session.workspace, model: session.model, models: session.models, usageQuality: session.usageQuality, originator: session.originator, cliVersion: session.cliVersion, executionType: session.executionType || 'main', parentSessionKey: session.parentSessionKey || null, agentId: session.agentId || null, gitBranch: session.gitBranch || null, entrypoint: session.entrypoint || null, firstTimestamp: session.firstTimestamp, lastTimestamp: session.lastTimestamp, usage: session.usage, cost: session.cost, pricingStatus: session.pricingStatus, usageSource: session.usageSource, invalidLineCount: session.invalidLineCount, reconciliation: session.reconciliation };
 }
 function sorted(sessions, sort) {
   const keys = { total: 'totalTokens', input: 'inputTokens', cache: 'cachedInputTokens', output: 'outputTokens' };
@@ -96,26 +104,27 @@ function trend(sessions, range) {
     const point = points.get(time) || { fromMs: time, toMs: nextBucketFor(time, unit, range.timezone), label: new Intl.DateTimeFormat('en-CA', { timeZone: range.timezone, month: unit === 'year' ? undefined : '2-digit', day: unit === 'hour' || unit === 'day' ? '2-digit' : undefined, year: unit === 'month' || unit === 'year' ? 'numeric' : undefined, hour: unit === 'hour' ? '2-digit' : undefined, hourCycle: 'h23' }).format(new Date(time)), tokens: 0, cost: 0, partialCost: false };
     point.tokens += event.usage.totalTokens;
     const itemCost = calculateCost(session.__pricing, [event]);
-    point.cost += itemCost.total; point.partialCost ||= itemCost.unpricedTokens > 0;
+    point.cost += itemCost.total; point.partialCost ||= serialiseCost(itemCost).pricingCoverage.partial;
     points.set(time, point);
   }
   return { points: [...points.values()].sort((left, right) => left.fromMs - right.fromMs), unit, partialCost: [...points.values()].some((point) => point.partialCost) };
 }
 function models(sessions) {
   const map = new Map();
-  for (const session of sessions) {
-    const entry = map.get(session.model || 'unknown') || { model: session.model || 'unknown', tokens: 0, cost: 0, partialCost: false };
-    entry.tokens += session.usage.totalTokens; entry.cost += session.cost.total; entry.partialCost ||= session.cost.pricingCoverage.partial; map.set(entry.model, entry);
+  for (const session of sessions) for (const event of session.usageEvents) {
+    const entry = map.get(event.model || 'unknown') || { model: event.model || 'unknown', tokens: 0, cost: 0, partialCost: false };
+    const cost = serialiseCost(calculateCost(session.__pricing, [event]));
+    entry.tokens += event.usage.totalTokens; entry.cost += cost.total; entry.partialCost ||= cost.pricingCoverage.partial; map.set(entry.model, entry);
   }
   return [...map.values()].sort((left, right) => right.tokens - left.tokens || left.model.localeCompare(right.model));
 }
-function facets(sessions) { const values = (key) => [...new Set(sessions.map((session) => String(session[key] || 'unknown')))].sort(); return { models: values('model'), workspaces: values('workspace'), pricingStatus: values('pricingStatus'), usageSource: values('usageSource'), cliVersion: values('cliVersion'), originator: values('originator'), executionType: values('executionType') }; }
+function facets(sessions) { const values = (key) => [...new Set(sessions.map((session) => String(session[key] || 'unknown')))].sort(); return { models: [...new Set(sessions.flatMap((session) => session.models))].sort(), workspaces: values('workspace'), pricingStatus: values('pricingStatus'), usageSource: values('usageSource'), cliVersion: values('cliVersion'), originator: values('originator'), executionType: values('executionType') }; }
 function context(summary, request, scan, sessions) {
   const events = sessions.flatMap((session) => session.usageEvents);
   const totals = sessions.reduce((sum, session) => addUsage(sum, session.usage), zeroUsage());
   const cost = serialiseCost(calculateCost(summary.pricing, events));
-  const reconciliation = sessions.reduce((sum, session) => { for (const [key, value] of Object.entries(session.reconciliation)) sum[key] = (sum[key] || 0) + value; return sum; }, {});
-  return { provider: summary.provider || 'codex', generatedAt: summary.generatedAt, range: request.range, pricing: { provider: summary.pricing.provider || summary.provider || 'codex', updatedAt: summary.pricing.updatedAt, checkedAt: summary.pricing.checkedAt || null, source: summary.pricing.source, currency: summary.pricing.currency, unitTokens: summary.pricing.unitTokens, rates: summary.pricing.rates, costDisclaimer: summary.pricing.costDisclaimer || null, toolFeesExcluded: summary.pricing.provider === 'claude' }, totals, cost, pricingCoverage: cost.pricingCoverage, quality: { scan: { invalidLines: summary.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0), failedFiles: summary.errors.length, ...scan }, range: { estimatedTimestamps: events.filter((event) => event.timestampEstimated).length, reconciliation, pricingCoverage: cost.pricingCoverage } }, scan, facets: facets(sessions) };
+  const reconciliation = sessions.reduce((sum, session) => { for (const [key, value] of Object.entries(session.reconciliation || {})) sum[key] = (sum[key] || 0) + value; return sum; }, {});
+  return { provider: summary.provider || 'codex', generatedAt: summary.generatedAt, range: request.range, pricing: { provider: summary.pricing.provider || summary.provider || 'codex', updatedAt: summary.pricing.updatedAt, checkedAt: summary.pricing.checkedAt || null, source: summary.pricing.source, currency: summary.pricing.currency, unitTokens: summary.pricing.unitTokens, rates: summary.pricing.rates, costDisclaimer: summary.pricing.costDisclaimer || null, toolFeesExcluded: summary.pricing.provider === 'claude' }, totals, cost, pricingCoverage: cost.pricingCoverage, quality: { scan: { invalidLines: summary.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0), failedFiles: summary.errors.length, ...scan }, range: { estimatedTimestamps: events.filter((event) => event.timestampEstimated).length, reconciliation, usage: usageQuality(reconciliation), pricingCoverage: cost.pricingCoverage } }, scan, facets: facets(sessions) };
 }
 function comparison(summary, request, options) {
   if (request.range.mode === 'all' || request.range.fromMs == null || request.range.toMs == null) return null;
@@ -131,18 +140,19 @@ export function buildDashboardPayload(summary, request, scan, options = {}) {
   const sessions = filteredSessions(summary, request, options).map((session) => ({ ...session, __pricing: summary.pricing }));
   const base = context(summary, request, scan, sessions);
   const currentTotals = base.totals;
-  return { ...base, sessionCount: sessions.length, trend: trend(sessions, request.range), models: models(sessions), comparison: comparison(summary, { ...request, currentTotals }, options), ...page(sessions, request, options) };
+  const modelFacets = facets(filteredSessions(summary, { ...request, filters: { ...request.filters, models: [] } }, options)).models;
+  return { ...base, facets: { ...base.facets, models: modelFacets }, sessionCount: sessions.length, trend: trend(sessions, request.range), models: models(sessions), comparison: comparison(summary, { ...request, currentTotals }, options), ...page(sessions, request, options) };
 }
 export function buildSessionsPayload(summary, request, scan, options = {}) { const sessions = filteredSessions(summary, request, options); return { ...context(summary, request, scan, sessions), ...page(sessions, request, options) }; }
 export function buildSessionDetail(summary, request, sessionKey, options = {}) {
   const session = filteredSessions(summary, request, options).find((item) => item.sessionKey === sessionKey);
   if (!session) return null;
-  return { ...sessionSummary(session, options), observations: session.usageEvents.slice(0, 2_000).map((event) => ({ timestamp: event.timestamp, timestampEstimated: event.timestampEstimated, model: event.model, source: event.source, sequence: event.sequence, usage: event.usage })), observationLimit: 2_000, pricingDiagnostics: session.cost.pricingCoverage };
+  return { ...sessionSummary(session, options), lineCount: session.lineCount, observations: session.usageEvents.slice(0, 2_000).map((event) => ({ timestamp: event.timestamp, timestampEstimated: event.timestampEstimated, model: event.model, source: event.source, sequence: event.sequence, usage: event.usage })), observationLimit: 2_000, pricingDiagnostics: session.cost.pricingCoverage };
 }
 function csv(value) { const safe = /^[=+\-@]/.test(String(value)) ? `'${value}` : String(value ?? ''); return `"${safe.replaceAll('"', '""')}"`; }
 export function buildExport(format, dashboard) {
   if (format === 'json-report') return { contentType: 'application/json; charset=utf-8', extension: 'json', body: JSON.stringify({ provider: dashboard.provider, range: dashboard.range, totals: dashboard.totals, cost: dashboard.cost, models: dashboard.models, quality: dashboard.quality, costDisclaimer: dashboard.pricing?.costDisclaimer || null }, null, 2) };
-  if (format === 'markdown-summary') return { contentType: 'text/markdown; charset=utf-8', extension: 'md', body: `# Local AI Token Dashboard\n\nProvider: ${dashboard.provider}\n\nRange: ${dashboard.range.mode} (${dashboard.range.timezone})\n\nTotal tokens: ${dashboard.totals.totalTokens}\n\nKnown token cost: ${dashboard.cost.total}\n\n${dashboard.pricing?.costDisclaimer || ''}`.trim() };
-  if (format === 'csv-trend') return { contentType: 'text/csv; charset=utf-8', extension: 'csv', body: ['provider,fromMs,toMs,label,timezone,tokens,cost,partialCost', ...dashboard.trend.points.map((point) => [dashboard.provider, point.fromMs, point.toMs, point.label, dashboard.range.timezone, point.tokens, point.cost, point.partialCost].map(csv).join(','))].join('\r\n') };
-  return { contentType: 'text/csv; charset=utf-8', extension: 'csv', body: ['provider,session,executionType,parentSessionKey,model,workspace,totalTokens,cost,pricingStatus,usageSource,invalidLines', ...dashboard.sessions.map((session) => [dashboard.provider, session.sessionId, session.executionType, session.parentSessionKey, session.model, session.workspace, session.usage.totalTokens, session.cost.total, session.pricingStatus, session.usageSource, session.invalidLineCount].map(csv).join(','))].join('\r\n') };
+  if (format === 'markdown-summary') return { contentType: 'text/markdown; charset=utf-8', extension: 'md', body: `# Local AI Token Dashboard\n\nProvider: ${dashboard.provider}\n\nRange: ${dashboard.range.mode} (${dashboard.range.timezone})\n\nTotal tokens: ${dashboard.totals.totalTokens}\n\nKnown token cost: ${dashboard.cost.total}\n\nPartial pricing: ${dashboard.pricingCoverage.partial}\n\nUsage incomplete: ${dashboard.quality.range.usage.incomplete}\n\nPossible duplicate usage: ${dashboard.quality.range.usage.possibleDuplicate}\n\n${dashboard.pricing?.costDisclaimer || ''}`.trim() };
+  if (format === 'csv-trend') return { contentType: 'text/csv; charset=utf-8', extension: 'csv', body: ['provider,fromMs,toMs,label,timezone,tokens,cost,partialCost,usageNotes', ...dashboard.trend.points.map((point) => [dashboard.provider, point.fromMs, point.toMs, point.label, dashboard.range.timezone, point.tokens, point.cost, point.partialCost, dashboard.quality.range.usage.reasons.join(';')].map(csv).join(','))].join('\r\n') };
+  return { contentType: 'text/csv; charset=utf-8', extension: 'csv', body: ['provider,session,executionType,parentSessionKey,model,workspace,totalTokens,cost,pricingStatus,usageSource,invalidLines,selectedModels,partialCost,usageIncomplete,possibleDuplicate,usageNotes', ...dashboard.sessions.map((session) => [dashboard.provider, session.sessionId, session.executionType, session.parentSessionKey, session.model, session.workspace, session.usage.totalTokens, session.cost.total, session.pricingStatus, session.usageSource, session.invalidLineCount, session.models.join(';'), session.cost.pricingCoverage.partial, session.usageQuality.incomplete, session.usageQuality.possibleDuplicate, session.usageQuality.reasons.join(';')].map(csv).join(','))].join('\r\n') };
 }

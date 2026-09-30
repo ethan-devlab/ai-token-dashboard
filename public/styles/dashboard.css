@@ -64,6 +64,7 @@ footer { margin-block-start: var(--space-4); color: var(--color-subtle); font-si
 .budget-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); border-block-start: 1px solid var(--color-border); color: var(--color-muted); font-family: var(--font-mono); font-size: var(--text-xs); padding-block: var(--space-2); }
 .budget-row[data-status="warning"] { color: var(--color-warning); }
 .budget-row[data-status="exceeded"] { color: var(--color-danger); }
+.budget-note { grid-column: 1 / -1; margin: 0; font-family: var(--font-sans); }
 .budget-editor { margin-block-start: var(--space-3); }
 .budget-editor + #budgets { margin-block-start: var(--space-3); }
 .budget-editor summary { cursor: pointer; color: var(--color-text); font-size: var(--text-sm); }

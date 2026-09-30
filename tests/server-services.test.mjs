@@ -352,7 +352,8 @@ test('session index reconciles observations and incrementally reuses an unchange
     ].join('\n'));
     const parsed = await parseSessionFile(file, 'fixture.jsonl');
     assert.equal(parsed.reconciliation.duplicate, 1);
-    assert.equal(parsed.reconciliation.covered, 1);
+    assert.equal(parsed.reconciliation.covered, 0);
+    assert.equal(parsed.reconciliation.mixedSource, 1);
     assert.equal(parsed.usage.totalTokens, 15);
     const index = createSessionIndex({ sessionsDirectory: root, maxFiles: 10, parseConcurrency: 2, pricing: PRICING });
     const first = await index.refresh();
@@ -416,6 +417,7 @@ test('Claude pricing parser and cost calculator preserve cache duration and expl
   assert.equal(explicit.total, 11);
   assert.equal(explicit.unknownModifiers.size, 0);
   const unknown = calculateCost(CLAUDE_PRICING, [{ model: 'claude-opus-5', timestamp: '2026-08-18T00:00:00Z', usage: baseUsage, pricingModifiers: { inferenceGeo: 'not_available', speed: 'standard', serviceTier: 'standard' } }]);
-  assert.equal(unknown.total, 5);
+  assert.equal(unknown.total, 0);
+  assert.equal(unknown.unpricedTokens, 1_000_000);
   assert.deepEqual([...unknown.unknownModifiers], ['claude-opus-5:inferenceGeo=not_available']);
 });

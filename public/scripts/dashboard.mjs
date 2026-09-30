@@ -1,3 +1,4 @@
+import { usageWarnings } from './accounting-status.mjs';
 import { createFilterController } from './filters.mjs';
 import { setButtonBusy, translateButtonLabels } from './button-state.mjs';
 import { formatCompactNumber, formatCost, formatOverviewCost, formatDate, formatIntervalBoundary, zonedDateTimeValue, integerFormat, isoWeekValue, localDateTimeValue, moneyFormat } from './format.mjs';
@@ -50,7 +51,35 @@ function updateRangeControls() { document.querySelectorAll('.range-control').for
 function renderTotals(data) { const usage = aggregate(data); const values = { total: usage.totalTokens, input: usage.inputTokens, output: usage.outputTokens, cache: usage.cachedInputTokens, uncached: usage.uncachedInputTokens, cacheWrite: usage.cacheWriteTokens, reasoning: usage.reasoningOutputTokens }; for (const [id, value] of Object.entries(values)) { $(id).textContent = formatCompactNumber(value, state.view.unit); const exact = document.querySelector(`[data-exact-for="${id}"]`); if (exact) exact.textContent = `${integerFormat.format(value || 0)} ${t(`${id}.tokens`)}`; } const value = cost(data); const coverage = value.coverage || data.pricingCoverage; const partial = coverage?.partial || value.partial || value.minimumKnown; $('cost').textContent = formatOverviewCost(value.total, partial); $('costExact').textContent = formatCost(value.total, partial); $('costDetail').textContent = coverage?.ratio == null ? '' : `${integerFormat.format(coverage.pricedTokens || 0)} / ${integerFormat.format(coverage.billableTokens || 0)} ${t('status.priced')}`; }
 function renderComparison(data) { const comparison = data.comparison; if (!comparison || comparison.available === false) { $('comparison').textContent = t('v2.comparison.none'); return; } const previous = comparison.totals?.totalTokens; const percent = comparison.percentTotalTokens ?? comparison.percent; $('comparison').textContent = `${t('v2.comparison.previous')}: ${previous == null ? '—' : integerFormat.format(previous)} ${t('total.tokens')} · ${percent == null ? t('v2.comparison.new') : `${Number(percent).toFixed(1)}%`}`; }
 function budgetMeasurement(data, budget) { const supplied = data.budgetMeasurements?.[budget.id] ?? data.budgetMeasurements?.[budget.scope]; if (supplied != null) return supplied; if (budget.scope === 'total-tokens') return { value: aggregate(data).totalTokens }; if (budget.scope === 'cost') return { value: cost(data).total }; return null; }
-function renderBudgets(data) { const host = $('budgets'); host.replaceChildren(); if (!state.view.budgets.length) { host.textContent = t('v2.budget.empty'); return; } for (const budget of state.view.budgets) { const measurement = budgetMeasurement(data, budget); const row = document.createElement('div'); row.className = 'budget-row'; const name = document.createElement('strong'); name.textContent = budget.name || budget.scope; const value = document.createElement('span'); if (!measurement || measurement.value == null) value.textContent = t('v2.budget.unsupported'); else { const status = budgetState(budget, measurement); value.textContent = `${budget.scope.includes('token') ? integerFormat.format(status.actual) : formatOverviewCost(status.actual, cost(data).partial || cost(data).minimumKnown || cost(data).coverage?.partial || cost(data).pricingCoverage?.partial || data.pricingCoverage?.partial)} / ${budget.scope.includes('token') ? integerFormat.format(status.limit) : moneyFormat.format(status.limit)}`; row.dataset.status = status.status; } const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'button--remove button--compact'; remove.textContent = '×'; remove.setAttribute('aria-label', t('v2.budget.remove')); remove.addEventListener('click', () => { state.view.budgets = state.view.budgets.filter((item) => item.id !== budget.id); persistBudgets(); renderBudgets(data); }); row.append(name, value, remove); host.append(row); } }
+function renderBudgets(data) {
+  const host = $('budgets');
+  host.replaceChildren();
+  if (!state.view.budgets.length) { host.textContent = t('v2.budget.empty'); return; }
+  const currentCost = cost(data);
+  const partialCost = data.pricingCoverage?.partial || currentCost.pricingCoverage?.partial || currentCost.coverage?.partial || currentCost.partial || currentCost.minimumKnown;
+  for (const budget of state.view.budgets) {
+    const measurement = budgetMeasurement(data, budget);
+    const row = document.createElement('div'); row.className = 'budget-row';
+    const name = document.createElement('strong'); name.textContent = budget.name || budget.scope;
+    const value = document.createElement('span');
+    let note;
+    if (!measurement || measurement.value == null) value.textContent = t('v2.budget.unsupported');
+    else {
+      const status = budgetState(budget, measurement);
+      const tokenBudget = budget.scope.includes('token');
+      value.textContent = `${tokenBudget ? integerFormat.format(status.actual) : formatOverviewCost(status.actual, partialCost)} / ${tokenBudget ? integerFormat.format(status.limit) : moneyFormat.format(status.limit)}`;
+      row.dataset.status = status.status;
+      if (budget.scope === 'cost' && partialCost) {
+        note = document.createElement('p'); note.className = 'budget-note'; note.textContent = t('v2.budget.knownCost');
+      }
+    }
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'button--remove button--compact'; remove.textContent = '×'; remove.setAttribute('aria-label', t('v2.budget.remove'));
+    remove.addEventListener('click', () => { state.view.budgets = state.view.budgets.filter((item) => item.id !== budget.id); persistBudgets(); renderBudgets(data); });
+    row.append(name, value, remove);
+    if (note) row.append(note);
+    host.append(row);
+  }
+}
 const filterController = createFilterController({ getElement: $, onApply: (filters) => { state.query.filters = filters; queryChanged(); } });
 function renderFacets(data) {
   if (state.source.status !== 'ready') return;
@@ -97,7 +126,7 @@ function renderMetadata(data) {
   $('info').textContent = items.join(' · ');
   const watcher = data.watcher || scan.watcher || {}; const status = ['watching', 'starting', 'failed', 'disabled'].includes(watcher.status) ? watcher.status : 'manual'; $('watcherText').textContent = t(`v2.watcher.${status}`, { duration: watcher.debounceMs ?? '—' });
 }
-function renderQuality(data) { const quality = data.quality || {}; const scan = quality.scan || {}; const range = quality.range || {}; const messages = Array.isArray(quality.messages) ? quality.messages : [[scan.failedFiles, t('quality.files', { count: scan.failedFiles })], [scan.invalidLines, t('quality.lines', { count: scan.invalidLines })], [range.estimatedTimestamps, t('quality.estimated', { count: range.estimatedTimestamps })], [range.pricingCoverage?.partial, t('quality.partial')]].filter(([active]) => active).map(([, message]) => message); const host = $('quality'); host.hidden = !messages.length; host.dataset.state = quality.severity === 'error' ? 'error' : 'warning'; host.textContent = messages.join(' · '); }
+function renderQuality(data) { const quality = data.quality || {}; const scan = quality.scan || {}; const range = quality.range || {}; const messages = Array.isArray(quality.messages) ? quality.messages : [[scan.failedFiles, t('quality.files', { count: scan.failedFiles })], [scan.invalidLines, t('quality.lines', { count: scan.invalidLines })], [range.estimatedTimestamps, t('quality.estimated', { count: range.estimatedTimestamps })], [range.pricingCoverage?.partial, t('quality.partial')]].filter(([active]) => active).map(([, message]) => message).concat(usageWarnings(range.reconciliation)); const host = $('quality'); host.hidden = !messages.length; host.dataset.state = quality.severity === 'error' ? 'error' : 'warning'; host.textContent = messages.join(' · '); }
 function renderPricing(data) {
   const pricing = data.pricing || {}; const rates = pricing.rates; const refresh = pricing.refresh || {}; const checkedAt = pricing.checkedAt || refresh.lastSuccessfulAt;
   $('pricingStatus').textContent = checkedAt ? t('pricing.checked', { date: formatDate(checkedAt) }) : t('pricing.bundled', { date: pricing.updatedAt || '—' });

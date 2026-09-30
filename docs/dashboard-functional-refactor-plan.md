@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phase 1 product policies confirmed; ready for implementation review.
+Date: 2026-10-01 (Asia/Taipei). Status: Phase 1 implemented and validated; awaiting the next phase decision.
 
 ## Confirmed scope
 
@@ -22,7 +22,7 @@ Decisions confirmed after audit checkpoint commit `b222703`:
 - For the same explicit usage-event identity, select the latest valid version using reliable timestamp and same-file sequence. If cross-file versions cannot be ordered, flag a conflict and do not add them together or combine per-field maxima. A turn/context ID is not automatically a unique usage-event ID.
 - Main execution and each distinct subagent have separate deduplication scopes, even if they share a Session ID. Keep the existing default inclusion of subagents.
 - Preserve adopted Token totals with explicit incomplete/possible-duplicate reasons. Do not put one lower-bound symbol on all uncertain Token values: possible duplication can also overstate usage.
-- The user answered all Phase 1 policy questions. No production implementation has started. Later-phase policy decisions remain separate gates.
+- The user answered all Phase 1 policy questions and selected full Phase 1 implementation. [phase1-accounting-validation.md](phase1-accounting-validation.md) records the implementation and focused evidence. Later-phase policy decisions remain separate gates.
 
 ## Target invariants
 
