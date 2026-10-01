@@ -80,7 +80,7 @@ No gap above is reported as a newly reproduced defect. Native Service/Tray remai
 
 Manual browser updates are already selected by Q20; automatic watcher-to-browser synchronization needs a new decision. Historical effective-rate pricing, archived-version activation and archive cleanup are separate from the delivered current-basis/read-only/permanent-retention policy. Observation pagination/table is outside Q27's count-and-prompt scope. Deprecated /api/summary retains all-snapshot totals with filtered Session rows for compatibility; changing or retiring that contract needs a separate decision. Q34–Q39 settle credential and settings ownership; pricing ownership and resource targets remain undecided.
 
-R01's selected mitigation and R03's initial measurement are delivered. The selected frontier is R03 improvement scope and resource targets. R02 pricing lifecycle and V04 storage-failure injection remain separate choices. Platform/live rollout remains a separate validation track, not a reason to silently change accounting or compatibility policies.
+R01's selected mitigation and R03's initial measurement are delivered. Q40–Q50 select R03 query/export scope and targets; [the implementation plan](query-export-performance-plan.md) awaits final shared-scope confirmation before development. The selected uncapped native download policy is not yet implemented; current product behavior retains the measured 32 MiB cap. R02 pricing lifecycle and V04 storage-failure injection remain separate choices. Platform/live rollout remains a separate validation track, not a reason to silently change accounting or compatibility policies.
 
 ## Inventory verification
 
