@@ -97,7 +97,7 @@ The next decisions and phase gates are in [dashboard-functional-refactor-plan.md
 
 ## Phase 4 implementation disposition
 
-FA07/FA16/FA17 have focused implementation evidence in [phase4-projection-validation.md](phase4-projection-validation.md). All 251 matched Sessions export once at offset 200. Guarded page/detail/export reject changed snapshot or pricing basis; desktop conflicts reload the full projection and stop download until a new user action. The original audit evidence above remains the historical baseline. Q19/Q20 are confirmed. The user subsequently confirmed Q21: empty CSV now carries a typed metadata record, with blank measurements and complete query/version fields. This supersedes the initial header-only default. Native browser download completion remains unverified.
+FA07/FA16/FA17 have focused implementation evidence in [phase4-projection-validation.md](phase4-projection-validation.md). All 251 matched Sessions export once at offset 200. Guarded page/detail/export reject changed snapshot or pricing basis; desktop conflicts reload the full projection and stop download until a new user action. The original audit evidence above remains the historical baseline. Q19/Q20 are confirmed. The user subsequently confirmed Q21: empty CSV now carries a typed metadata record, with blank measurements and complete query/version fields. This supersedes the initial header-only default. The later [native Safari checkpoint](browser-download-settings-validation.md) confirms four actual downloads with exact pinned API byte comparisons, save cancellation, export conflict and settings leave/reload behavior. Other browser and platform coverage remains unverified.
 
 ## Phase 5 implementation disposition
 

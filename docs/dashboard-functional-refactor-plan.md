@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts and Q28–Q33 pricing archives complete. Remaining scope awaits user decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts, Q28–Q33 pricing archives, and native Safari download/settings-leave acceptance complete. Remaining scope awaits user decision.
 
 ## Confirmed scope
 
@@ -96,7 +96,7 @@ Use a complete projection identity, including provider, normalized query, snapsh
 
 Confirmed compatibility path: omitted version retains today's API behavior; the shipped client supplies the displayed identity; a mismatch returns a specific conflict and causes an explicit complete reload before retry. This avoids an unbounded historical snapshot cache. The confirmed product choices authorize this implementation. Evidence: [phase4-projection-validation.md](phase4-projection-validation.md).
 
-Acceptance: all 251 matched Sessions export once; sorting/filtering do not change coverage; page offset does not truncate export; newer pages never leave old charts/models; snapshot advancement during export is detected; every format identifies exact bounds and qualifiers; an old Provider response cannot alter current-provider data. An actual desktop download check is still required on a browser that exposes file completion.
+Acceptance: all 251 matched Sessions export once; sorting/filtering do not change coverage; page offset does not truncate export; newer pages never leave old charts/models; snapshot advancement during export is detected; every format identifies exact bounds and qualifiers; an old Provider response cannot alter current-provider data. The subsequent native Safari checkpoint confirms actual desktop file completion; other browsers remain unverified.
 
 ### Phase 5 — Quota and settings reliability
 
@@ -135,3 +135,7 @@ Phase completion requires observable behavior, aligned docs, staged intended fil
 ## Pricing archive checkpoint
 
 Q28–Q33 are implemented. Current-basis estimates now have complete provider-separated archives, a shared calculation revision, read-only version routes, complete JSON/Markdown basis metadata and desktop status. New prices activate after archive success. Initial unavailable archives leave Tokens usable and costs unknown; verified former rates remain after a candidate failure. [pricing-archive-validation.md](pricing-archive-validation.md) records 79 focused checks, two isolated HTTP fixtures and root desktop QA. Historical effective-rate inference, version switching, automatic deletion and live certification remain outside this scope.
+
+## Native browser acceptance checkpoint
+
+[browser-download-settings-validation.md](browser-download-settings-validation.md) closes the previously unverified native Safari cases. All four downloaded files matched pinned API bytes; save cancellation created no file; an export conflict reloaded the dashboard without starting a download. App and native settings leave dialogs preserved or discarded edits as selected. Reverting values and successful isolated saves cleared dirty state. No product defect was reproduced by these cases. Other browsers, Windows and interrupted or very large downloads remain separate validation scope.
