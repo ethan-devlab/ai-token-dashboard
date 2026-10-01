@@ -42,6 +42,35 @@ If Q34 selects read-only credentials, the next frontier covers expiry/auth respo
 
 If Q35 selects single-writer settings, the next frontier covers ownership scope, second-instance behavior, crash recovery and manual-editor workflow. No lock-file deletion, stale-lock recovery or server startup failure policy is silently selected here. Locking pricing caches and archives remains R02 scope unless separately included.
 
+## Confirmed ownership decisions
+
+Q34 selects CLI-only Claude credential management. Dashboard requests must not call the OAuth refresh endpoint or write the credential file. Valid access tokens can query usage; expired or rejected credentials require a CLI update and manual recheck. Preserve login-change invalidation, transient stale retention and local JSONL analysis. No dashboard credential copy is introduced.
+
+Q35 selects a single dashboard settings writer for each settings file, with required revisions retained. External edits are supported while the writer is stopped; they cannot be excluded by a dashboard-only ownership mechanism. The selected policy does not include pricing lifecycle ownership.
+
+The current server has a close handler but no explicit SIGINT/SIGTERM shutdown handler. A new ownership lifecycle must cover normal signal exit and listen failure. Q36 selects a usable additional instance with read-only settings. Q37 selects explicit manual recovery; unknown, malformed or unverifiable ownership must not become permission to overwrite.
+
+Q38 fixes ownership at process startup. A read-only instance does not acquire ownership through polling, settings reload or a failed save. It requires restart after ownership becomes available. Q39 selects an explicit unlock command that acts only when the same-host former owner can be confirmed absent. Active, permission-denied, malformed, foreign-host and uncertain owner states are refused. Normal shutdown releases the owned lease; a crash leaves it for explicit recovery.
+
+## Implementation scope and acceptance plan
+
+1. Remove Claude OAuth refresh and shared-file writes from server/account-usage.mjs. Use valid access tokens for the fixed usage endpoint. A known expiry at or before the request clock, or an authentication rejection, returns auth-expired with no windows and clears last success. Tokens still valid near expiry may be used; the former 30-second proactive rotation is removed. Missing expiry can still be checked by the official usage endpoint; invalid credentials retain existing errors. Keep credential digest checks around cache use/publication, Provider isolation, transient stale/reset behavior and secret redaction. Update bilingual CLI refresh/recheck guidance and remove obsolete rotation claims.
+2. Add a narrow server/settings-owner.mjs lifecycle for the settings path. Use exclusive filesystem ownership with a private generation identifier. Resolve the parent identity so normal directory aliases share ownership; unsafe/unverifiable paths must disable writes. Validate the owned generation before saves and release only the same owned generation. Unknown existing state is read-only. Revisions and existing temporary-file serialization remain required. No dashboard-only lock claims to exclude editors or CLI writes.
+3. Integrate ownership at startup in server.mjs. Settings GET adds a bounded write-availability state without owner PID, digest or lock path. A non-owner POST returns a specific conflict before writing; existing loopback, Origin, body limits and revision checks stay intact. Other routes remain available. Normal SIGINT/SIGTERM and listen failure clean up the owned lease after dashboard-owned settings work is finished. Never release another generation or auto-recover a stale lease.
+4. Show stored values with disabled editing/saving and a restart explanation in a non-owner settings page. Read-only state is not busy state and must not block Back. Retain dirty-form conflict/leave behavior if ownership is lost after editing. Reload does not acquire ownership. No layout redesign is included.
+5. Add node server.mjs --unlock-settings as an explicit local recovery mode before pricing initialization, provider scanning or listening. Validate the supported command and current app's settings lock; refuse active or uncertain owners. Verify the exact stale generation and protect recovery from deleting a newly acquired owner, including two competing unlock commands. Do not add force deletion. Document manual external-edit shutdown and restart steps; ignore the local lease artifact in Git.
+6. Replace obsolete rotation expectations after implementation and add focused ownership/service checks. Update the diagnostic's credential branch to report read-only behavior rather than preserve old overwrite expectations. Keep the settings branch explicitly scoped: an uncooperative external edit during an owned save is still possible and violates the selected stop-before-edit workflow.
+
+Required observable cases:
+
+- Valid Claude quota uses one usage request and leaves credential bytes unchanged. Expired credentials cause zero network requests; 401/403 causes no refresh retry. CLI replacement invalidates old quota. Network failure retains same-login stale values; passed reset windows remain unknown.
+- Two actual copied server processes share one .env at distinct ports. Exactly one can save; the other reads the same settings with disabled writes, while query/export still work. Same-process stale revisions still reject. Alias-path ownership cannot yield a second writer.
+- Normal owner shutdown and failed listen do not strand its lease. Existing read-only instances stay read-only; a new process can own it. An abnormal exit leaves a lease that no startup or page reload steals.
+- The explicit command refuses a live, foreign or malformed owner and performs no pricing/network/scan work. It removes only a verified absent same-host owner's lease. Concurrent unlock/acquire cases cannot remove a new owner. Retry then restores one writer.
+- Root desktop QA checks English and Traditional Chinese read-only settings, usable Back/reload, expired Claude guidance and unaffected local analytics on a copied fixture. No production process or real settings/credential file is changed.
+
+Implementation, focused checks, isolated actual HTTP/multi-process scenarios and root desktop QA must finish before the implementation commit and next decision dialog. Windows, power-loss durability, malicious lock replacement, live CLI timing, pricing ownership and release rollout remain separate limits. No dependency or framework is added.
+
 ## Executed validation and limits
 
 The diagnostic ran once and produced the four observations above. Its syntax and git diff --check passed. No product test suite or browser QA was repeated because no product change was made. No real settings/credential write, production request/restart, package installation, live endpoint call, push or release occurred. Live CLI timing, Windows behavior and power-loss durability remain unverified.
