@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented and validated; awaiting the next scope decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected. Remaining scope awaits user decision.
 
 ## Confirmed scope
 
@@ -119,6 +119,8 @@ Ask the first independent decisions together, then ask their dependent frontier 
 Phase 1 accounting, Phase 2 calendars, Phase 3 refresh, Phase 4 displayed exports, and Phase 5 stale quota/settings conflict decisions are confirmed above. Current pricing versus a historical rate ledger and watcher-to-browser synchronization remain separate future decisions. Do not quietly settle those semantics in code.
 
 ## Validation and delivery
+
+The user selected cross-phase acceptance after a73bbe6. [functional-integration-validation.md](functional-integration-validation.md) records the complete fixture run and remaining inventory. FA24 fixes refresh-failure qualifiers lost after an equal-identity page read. This uses the already confirmed rollback/visible-failure policy; it adds no new product policy. Phase 4 page merges preserve data and now also carry the latest refresh attempt qualifiers. Native/Windows/live validation and new detail/pricing/synchronization policies remain separate work.
 
 The audit passed 33 existing client checks and 19 service checks in two non-overlapping groups. Those are baseline checks, not evidence that the findings are fixed. The isolated HTTP probe exercised real routes; the standard contract harness was not rerun because it can invoke automatic pricing fetch and cache writes in the source checkout.
 

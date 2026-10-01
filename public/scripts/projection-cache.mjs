@@ -6,7 +6,10 @@ export function projectionParameters(params, projection) {
 
 export function mergeSessionPage(dashboard, response) {
   if (!dashboard?.projection?.key || dashboard.projection.key !== response?.projection?.key) throw Object.assign(new Error('Projection conflict.'), { code: 'PROJECTION_CONFLICT' });
-  return { ...dashboard, ...Object.fromEntries(['sessions', 'matchedSessionCount', 'offset', 'limit', 'hasPrevious', 'hasNext'].map((key) => [key, response[key]])) };
+  // Refresh attempts can fail without replacing the committed usage snapshot.
+  const refresh = Object.fromEntries(['refreshFailure', 'retainedSnapshot'].filter((key) => Object.hasOwn(response.scan || {}, key)).map((key) => [key, response.scan[key]]));
+  const status = Object.keys(refresh).length ? { scan: { ...dashboard.scan, ...refresh }, quality: { ...dashboard.quality, scan: { ...dashboard.quality?.scan, ...refresh } } } : {};
+  return { ...dashboard, ...Object.fromEntries(['sessions', 'matchedSessionCount', 'offset', 'limit', 'hasPrevious', 'hasNext'].map((key) => [key, response[key]])), ...status };
 }
 
 export function createProjectionCache(limit = 12) {

@@ -45,6 +45,17 @@ test('export selects every matching Session independent of offset and page limit
   assert.equal(filtered.sessions.length, 1); assert.equal(filtered.totals.totalTokens, 1);
 });
 
+test('paging the retained snapshot keeps the latest refresh failure without replacing projection data', () => {
+  const dashboard = buildDashboardPayload(summary, request, { ...scan, complete: true, refreshFailure: null, retainedSnapshot: false });
+  const failure = { code: 'SESSION_REFRESH_FAILED', reason: 'file-parse', failedFiles: 1, checkedAt: '2026-10-01T00:00:00Z' };
+  const response = buildSessionsPayload(summary, { ...request, offset: 200 }, { ...scan, complete: false, refreshFailure: failure, retainedSnapshot: true });
+  const merged = mergeSessionPage(dashboard, response);
+  assert.equal(merged.sessions.length, 51); assert.equal(merged.scan.refreshFailure, failure); assert.equal(merged.quality.scan.refreshFailure, failure); assert.equal(merged.scan.retainedSnapshot, true);
+  assert.equal(merged.scan.complete, true); assert.equal(merged.quality.scan.complete, true);
+  for (const key of ['totals', 'cost', 'trend', 'models', 'facets', 'projection']) assert.equal(merged[key], dashboard[key]);
+  assert.equal(merged.quality.range, dashboard.quality.range); assert.equal(dashboard.scan.refreshFailure, null);
+});
+
 test('all formats include bounds, filters and version; CSV protects appended cells and redacts paths', () => {
   const selected = { ...request, q: '+s', range: { mode: 'custom', timezone: 'UTC', fromMs: Date.parse('2026-09-01'), toMs: Date.parse('2026-09-02') } };
   const malicious = { ...summary, sessions: [{ ...summary.sessions[0], sessionId: '+s', cwd: '/TEST_ONLY/secret/workspace' }] };
