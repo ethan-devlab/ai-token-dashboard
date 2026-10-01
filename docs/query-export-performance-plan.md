@@ -1,6 +1,6 @@
 # Query and streamed export performance plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: decisions Q40–Q50 confirmed; implementation not started. Source baseline: a0ad92c. Measurement checkpoint: 8a488b1 and [performance-baseline.md](performance-baseline.md).
+Date: 2026-10-01 (Asia/Taipei). Status: Q40–Q50 implemented and verified; see [delivery evidence](query-export-performance-validation.md). Source baseline: a0ad92c. Measurement checkpoint: 8a488b1 and [performance-baseline.md](performance-baseline.md).
 
 ## Selected scope and targets
 

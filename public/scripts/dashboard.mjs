@@ -44,7 +44,7 @@ function renderAccountUsage() {
     const used = document.createElement('span'); used.className = 'muted'; used.textContent = t('accountUsage.used', { value: window.usedPercent == null ? '—' : Math.round(Number(window.usedPercent) * 10) / 10 }); card.append(heading, meter, used, reset); host.append(card);
   }
 }
-function apiError(error) { if (error?.code === 'EXPORT_TOO_LARGE') return t('export.tooLarge'); if (error?.code === 'SESSION_REFRESH_FAILED') return error.retainedSnapshot === false ? t('quality.refreshUnavailable') : t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${error.reason || 'refresh-failed'}`), count: error.failedFiles || 0 }); if (error?.code === 'INVALID_RANGE') return t('range.serverInvalid'); if (error?.code === 'INVALID_TIMEZONE') return t('range.invalidTimezone'); return error instanceof Error ? error.message : t('load.error'); }
+function apiError(error) { if (error?.code === 'EXPORT_BUSY') return t('export.busy'); if (error?.code === 'EXPORT_EXPIRED') return t('export.expired'); if (error?.code === 'RANGE_NOT_SUPPORTED') return t('export.range'); if (error?.code === 'SESSION_REFRESH_FAILED') return error.retainedSnapshot === false ? t('quality.refreshUnavailable') : t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${error.reason || 'refresh-failed'}`), count: error.failedFiles || 0 }); if (error?.code === 'INVALID_RANGE') return t('range.serverInvalid'); if (error?.code === 'INVALID_TIMEZONE') return t('range.invalidTimezone'); return error instanceof Error ? error.message : t('load.error'); }
 function aggregate(data) { return data.aggregate?.usage || data.totals || {}; }
 function cost(data) { return data.aggregate?.cost || data.cost || {}; }
 function page(data) { return data.page || data; }
@@ -370,11 +370,12 @@ async function exportData() {
   params.set('format', format);
   setButtonBusy($('exportData'), true, 'action.exporting');
   try {
-    const result = await channels.request('export', `/api/export?${params}`, { responseType: 'blob' });
+    const result = await channels.request('export', `/api/export/prepare?${params}`, { method: 'POST', headers: { Origin: location.origin } });
     if (result.stale || generation !== projectionGeneration || attempt !== exportGeneration) return;
-    const url = URL.createObjectURL(result.payload); const link = document.createElement('a'); link.href = url;
+    if (!/^\/api\/export\/download\/[a-f0-9]{64}$/.test(result.payload?.downloadUrl || '')) throw new Error(t('export.failed'));
+    const link = document.createElement('a'); link.href = result.payload.downloadUrl;
     link.download = `local-ai-token-dashboard-${provider}-${format}.${({ 'csv-sessions': 'csv', 'csv-trend': 'csv', 'json-report': 'json', 'markdown-summary': 'md' })[format]}`;
-    link.click(); URL.revokeObjectURL(url);
+    document.body.append(link); link.click(); link.remove(); showNotice(t('export.handoff'));
   } catch (error) {
     if (error?.name === 'AbortError' || generation !== projectionGeneration) return;
     if (error?.code === 'PROJECTION_CONFLICT') await reloadProjection(); else showNotice(apiError(error));

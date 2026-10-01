@@ -25,9 +25,10 @@ const preload = `import http from 'node:http';
 import {syncBuiltinESMExports} from 'node:module';
 const original=http.createServer;
 http.createServer=function(listener) { return original.call(this,async(req,res)=>{
- const before=process.memoryUsage(), start=performance.now();
+ const before=process.memoryUsage(), start=performance.now(); let atHeaders;
+ const writeHead=res.writeHead; res.writeHead=function(...args){atHeaders=process.memoryUsage();return writeHead.apply(this,args);};
  try { await listener(req,res); }
- finally { process.send?.({type:'metric',url:req.url,serverMs:performance.now()-start,before,after:process.memoryUsage()}); }
+ finally { process.send?.({type:'metric',url:req.url,serverMs:performance.now()-start,before,atHeaders,after:process.memoryUsage()}); }
 }); };
 syncBuiltinESMExports();
 globalThis.fetch=async()=>{process.send?.({type:'blocked'});return Response.json({}, {status:503});};
@@ -57,7 +58,7 @@ async function start() {
   }
   throw new Error('Fixture readiness timed out.');
 }
-async function request(workload, operation, route, expectedStatus = 200) {
+async function request(workload, operation, route, expectedStatus = 200, init = {}) {
   const url = route + (route.includes('?') ? '&' : '?') + `benchmarkSample=${++generation}`;
   let sampling = true; let rssMaxBytes = 0; let rssSamples = 0;
   const pid = child.pid;
@@ -71,14 +72,19 @@ async function request(workload, operation, route, expectedStatus = 200) {
   })();
   const started = performance.now(); let response; let body; let elapsedMs;
   try {
-    response = await fetch(base + url, { signal: AbortSignal.timeout(180000) });
-    body = Buffer.from(await response.arrayBuffer()); elapsedMs = performance.now() - started;
+    response = await fetch(base + url, { ...init, signal: AbortSignal.timeout(180000) });
+    if (init.readDelay) {
+      const chunks = []; const reader = response.body.getReader();
+      for (;;) { const part = await reader.read(); if (part.done) break; chunks.push(Buffer.from(part.value)); await delay(init.readDelay); }
+      body = Buffer.concat(chunks);
+    } else body = Buffer.from(await response.arrayBuffer());
+    elapsedMs = performance.now() - started;
   } finally { sampling = false; await sampler; }
   assert.equal(response.status, expectedStatus, `${workload}: ${operation}`);
   for (let i = 0; !metrics.has(url) && i < 100; i++) await delay(10);
   const metric = metrics.get(url); assert.ok(metric, 'Server completion metric missing.'); metrics.delete(url);
   results.samples.push({ workload, operation, elapsedMs, responseBytes: body.length, status: response.status,
-    serverMs: metric.serverMs, before: metric.before, after: metric.after, sampledRssMaxBytes: rssMaxBytes, rssSamples });
+    serverMs: metric.serverMs, before: metric.before, atHeaders: metric.atHeaders, after: metric.after, sampledRssMaxBytes: rssMaxBytes, rssSamples });
   console.log(`${workload} ${operation}: ${elapsedMs.toFixed(1)} ms, ${body.length} bytes, sampled RSS ${(rssMaxBytes / 1048576).toFixed(1)} MiB`);
   return { body, response, json: () => JSON.parse(body.toString()) };
 }
@@ -97,12 +103,19 @@ async function logs(sessions, perSession, idPadding = 0) {
   return bytes;
 }
 function pinned(dashboard) { return `mode=all&timezone=UTC&projectionAt=${dashboard.projection.at}&projection=${dashboard.projection.key}`; }
+async function exportRequest(workload, format, dashboard, downloadOptions = {}, operation = format) {
+  const prepare = await request(workload, `${format}-prepare`, `/api/export/prepare?format=${format}&${pinned(dashboard)}`, 200, { method: 'POST', headers: { Origin: base } });
+  const result = prepare.json(); assert.match(result.downloadUrl, /^\/api\/export\/download\/[a-f0-9]{64}$/);
+  const download = await request(workload, operation, result.downloadUrl, 200, downloadOptions);
+  assert.equal(download.body.length, result.byteLength); assert.equal(Number(download.response.headers.get('Content-Length')), result.byteLength);
+  return download;
+}
 try {
   await Promise.all(['server', 'public'].map((name) => cp(path.join(source, name), path.join(root, name), { recursive: true })));
   await Promise.all(['server.mjs', 'package.json'].map((name) => cp(path.join(source, name), path.join(root, name))));
   await mkdir(path.join(root, 'claude')); await writeFile(path.join(root, 'offline.mjs'), preload);
   await writeFile(path.join(root, '.env'), `CODEX_SESSIONS_DIR=${path.join(root, 'codex')}\nCLAUDE_SESSIONS_DIR=${path.join(root, 'claude')}\nAUTO_REFRESH=0\nMAX_FILES=10000\nPARSE_CONCURRENCY=2\n`);
-  for (const sessions of [100, 500, 1500]) {
+  for (const sessions of process.env.PERFORMANCE_LARGE_ONLY ? [] : [100, 500, 1500]) {
     const name = `${sessions * 100}-observations`; const inputBytes = await logs(sessions, 100);
     const startupMs = await start();
     const dashboard = (await request(name, 'first-dashboard', '/api/dashboard?mode=all&timezone=UTC')).json();
@@ -122,13 +135,13 @@ try {
     assert.equal(filtered.totals.totalTokens, dashboard.totals.totalTokens / 2);
     const detail = (await request(name, 'session-detail', `/api/sessions/${dashboard.sessions[0].sessionKey}?${pinned(dashboard)}`)).json();
     assert.equal(detail.observationCount, 100); assert.equal(detail.usage.totalTokens, 1200);
-    const csv = await request(name, 'csv-sessions', '/api/export?format=csv-sessions&' + pinned(dashboard));
+    const csv = await exportRequest(name, 'csv-sessions', dashboard);
     assert.equal(csv.body.toString().split('\r\n').length, sessions + 1);
-    const report = (await request(name, 'json-report', '/api/export?format=json-report&' + pinned(dashboard))).json();
+    const report = (await exportRequest(name, 'json-report', dashboard)).json();
     assert.equal(report.totals.totalTokens, dashboard.totals.totalTokens); assert.equal(report.metadata.exportedSessionCount, sessions);
-    const trend = await request(name, 'csv-trend', '/api/export?format=csv-trend&' + pinned(dashboard));
+    const trend = await exportRequest(name, 'csv-trend', dashboard);
     assert.equal(trend.body.toString().split('\r\n').length, dashboard.trend.points.length + 1);
-    const markdown = await request(name, 'markdown-summary', '/api/export?format=markdown-summary&' + pinned(dashboard));
+    const markdown = await exportRequest(name, 'markdown-summary', dashboard);
     assert.ok(markdown.body.toString().includes(`Total tokens: ${dashboard.totals.totalTokens}`));
     await stop();
   }
@@ -136,15 +149,17 @@ try {
   const dashboard = (await request(name, 'first-dashboard', '/api/dashboard?mode=all&timezone=UTC')).json();
   assert.equal(dashboard.totals.totalTokens, 6000); assert.equal(dashboard.matchedSessionCount, 500);
   results.workloads.push({ name, sessions: 500, observations: 500, sessionIdPadding: 70000, inputBytes, startupMs });
-  const rejected = (await request(name, 'csv-sessions-rejected', '/api/export?format=csv-sessions&' + pinned(dashboard), 413)).json();
-  assert.equal(rejected.error.code, 'EXPORT_TOO_LARGE');
-  const after = (await request(name, 'providers-after-rejection', '/api/providers')).json(); assert.equal(after.providers.length, 2);
+  const large = await exportRequest(name, 'csv-sessions', dashboard);
+  assert.ok(large.body.length > 32 * 1048576); assert.equal(large.body.toString().split('\r\n').length, 501);
+  const slow = await exportRequest(name, 'csv-sessions', dashboard, { readDelay: 20 }, 'csv-sessions-slow');
+  assert.deepEqual(slow.body, large.body);
+  const after = (await request(name, 'providers-after-large-export', '/api/providers')).json(); assert.equal(after.providers.length, 2);
   await stop();
 
   await logs(1, 1); await start();
   const archiveDirectory = path.join(root, '.pricing-archive', 'codex');
   const baselineRevision = pricingRevision(PRICING); let archived = 1;
-  for (const count of [1, 100, 1000, 10000]) {
+  for (const count of process.env.PERFORMANCE_LARGE_ONLY ? [] : [1, 100, 1000, 10000]) {
     while (archived < count) {
       const basis = pricingBasis(PRICING); basis.rules[0].rates.input = 1000 + archived;
       const pricing = createPricing(basis); const revision = pricingRevision(pricing);
@@ -161,11 +176,25 @@ try {
     }
   }
   await stop(); results.blockedExternalFetches = blockedFetches;
+  const maximumRss = (sample) => Math.max(sample.before.rss, sample.atHeaders?.rss || 0, sample.after.rss, sample.sampledRssMaxBytes);
+  const normal = results.samples.filter(sample => sample.workload === '150000-observations');
+  for (const sample of normal) {
+    const limit = sample.operation === 'first-dashboard' ? 1500 : sample.operation.includes('dashboard') ? 250 : ['last-session-page', 'session-detail'].includes(sample.operation) ? 100 : null;
+    if (limit) assert.ok(sample.elapsedMs <= limit, `${sample.operation} exceeds local target ${limit} ms`);
+    assert.ok(maximumRss(sample) <= 512 * 1048576, 'Normal sequence exceeds local 512 MiB RSS target');
+  }
+  for (const format of ['csv-sessions', 'json-report', 'csv-trend', 'markdown-summary']) {
+    const parts = normal.filter(sample => [format, `${format}-prepare`].includes(sample.operation));
+    if (parts.length) assert.ok(parts.reduce((sum, sample) => sum + sample.elapsedMs, 0) <= 500, `${format} exceeds local 500 ms total target`);
+  }
+  for (const sample of results.samples.filter(sample => sample.operation.startsWith('csv-sessions') && !sample.operation.endsWith('-prepare'))) {
+    assert.ok(maximumRss(sample) - sample.before.rss <= 16 * 1048576, 'Transfer exceeds local 16 MiB additional RSS target');
+  }
   results.method = { rss: 'External ps RSS in KiB converted to bytes; nominal 100 ms interval plus process cost. In-flight sample can complete after response. Sampled maximum, not exact peak.',
-    serverMemory: 'process.memoryUsage before and after the HTTP handler, bytes; retained process, no forced GC.',
+    serverMemory: 'process.memoryUsage before, at response headers and after the HTTP handler, bytes; retained process, no forced GC.',
     elapsed: 'Parent fetch through complete body consumption; excludes assertions and sampler shutdown.',
     isolation: 'Copied app, synthetic logs and valid archives, all child fetch calls blocked, sequential requests, fresh server for each log workload.',
-    limits: 'Two warm repeats; no p95, concurrent load, true cold disk cache, browser render/download, live logs, or Windows claims.' };
+    limits: 'Two warm repeats; no p95, concurrent load, true cold disk cache, browser render/download, live logs, or Windows claims. Large CSV also has a consumer delayed 20 ms per read.' };
   await writeFile(path.resolve(output), JSON.stringify(results, null, 2) + '\n');
-  console.log('PASS: workload counts, selected model totals, full CSV rows, detail counts, pinned reports, 413 rejection, post-rejection service, and verified archive pages.');
+  console.log('PASS: workload counts, selected model totals, full CSV rows, detail counts, pinned native reports, uncapped large export, service survival, and verified archive pages.');
 } finally { await stop(); await rm(root, { recursive: true, force: true }); }

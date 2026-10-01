@@ -52,7 +52,9 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 | `GET /api/sessions` | Filtered and paged session summaries. |
 | `GET /api/sessions/:sessionKey` | Lazy redacted detail with bounded accepted observations. |
 | `POST /api/refresh` | The only rescan route; requires same-origin `Origin` and atomically retains the prior snapshot on failure. |
-| `GET /api/export` | `csv-sessions`, `csv-trend`, `json-report`, or `markdown-summary`. |
+| `GET /api/export` | Stream `csv-sessions`, `csv-trend`, `json-report`, or `markdown-summary`. |
+| `POST /api/export/prepare` | Same-origin, guarded preparation for the displayed projection. |
+| `GET /api/export/download/:ticket` | One-use native download of the prepared projection. |
 | `GET /api/diagnostics` | Redacted process/index information; disabled in remote mode. |
 | `GET /api/summary` | Deprecated v1 compatibility response. |
 | `GET /api/update` | User-triggered GitHub latest stable release check. |
@@ -65,6 +67,12 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 All dashboard, session, refresh, pricing, export, diagnostics, and deprecated summary requests accept `provider=codex|claude`; omission remains Codex-compatible. The URL provider takes precedence over the saved dropdown selection. Other query fields include `mode`, `period`, `start`, `end`, `timezone`, `q`, `sort`, `offset`, `limit`, and repeated filters, including `executionType=main|subagent`. Errors use `{ "error": { "code", "message", "requestId" } }`. List payloads never contain raw JSONL, conversation content, or full event streams.
 
 Each provider scans lazily on first use. Range, search, filter, pagination, export, detail, and provider switching reuse the latest successful memory snapshot. **Reparse JSONL** refreshes only the selected provider and replaces that snapshot only after a successful incremental parse. Claude subagents are separate child sessions and are included by default; use the execution-type filter to exclude them.
+
+## Downloads
+
+Download verifies the displayed projection, then hands the file to the browser download manager. Use the browser to save or cancel. The UI does not confirm disk completion. If the data version changed, the full dashboard reloads; review it and press Download again. A transfer that already started keeps its original query, snapshot and pricing basis through later refresh or Provider changes.
+
+Exports cover every matching Session and have no fixed 32 MiB cap. One prepared or active export is allowed per process; another request reports busy. An unused preparation expires after two minutes. The server stops transfers after 60 seconds without transport progress or 30 minutes total. Interrupted downloads restart from the Dashboard; partial files remain under browser control and Range resume is unsupported. See [the API contract](docs/api-v2.md) and [isolated performance/desktop evidence](docs/query-export-performance-validation.md).
 
 ## Privacy and pricing
 

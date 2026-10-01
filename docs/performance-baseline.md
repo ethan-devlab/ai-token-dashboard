@@ -60,3 +60,7 @@ The final command passed exact matched Session/Token/price counts, complete scan
 This baseline measures backend HTTP work. It does not certify browser render time, native downloads, another Node version, Windows, Claude's larger cache/modifier payloads, calendar comparison/DST queries, long histories, concentrated observations in one Session, query-cache hit rates, interrupted requests or multiple users. Those workloads require separate selected checks.
 
 The decision frontier is implementation priority and accepted workload scale. Recommended first scope is query/projection reuse plus export generation and bounded size rejection. Keep the 10000-version list as a regression boundary until data establishes a problem. After the user selects scope and scale, decide numeric latency/memory targets, projection-cache ownership/invalidation limits if needed, and export rejection/delivery semantics. Do not silently select a database, worker architecture, streaming API, new dependency or a higher export cap from this baseline.
+
+## Historical checkpoint
+
+This record and raw evidence remain the capped-export baseline. The original harness is available at commit 8a488b1. The current runnable tests/performance-baseline.mjs now verifies Q40–Q50 uncapped preparation/transfer and a slow consumer, with the selected local numeric targets. See [the subsequent implementation evidence](query-export-performance-validation.md); historical 413 results above do not describe current product behavior.

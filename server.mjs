@@ -4,7 +4,9 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath, URL } from 'node:url';
 import { createRequire } from 'node:module';
-import { buildDashboardPayload, buildExport, buildSessionDetail, buildSessionsPayload } from './server/dashboard-data.mjs';
+import { buildDashboardPayload, buildExportPayload, buildSessionDetail, buildSessionsPayload } from './server/dashboard-data.mjs';
+import { createExportPlan } from './server/export-format.mjs';
+import { createExportService } from './server/export-service.mjs';
 import { createAccountUsageService } from './server/account-usage.mjs';
 import { createClaudePricingRefreshService } from './server/claude-pricing-refresh.mjs';
 import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.mjs';
@@ -44,6 +46,7 @@ await Promise.all(Object.values(pricingServices).map((service) => service.initia
 const providerRegistry = createProviderRegistry({ config: CONFIG, pricingServices });
 const updateChecker = createUpdateChecker({ repository: CONFIG.updateRepository, currentVersion: CURRENT_VERSION });
 const accountUsageService = createAccountUsageService();
+const exportService = createExportService();
 const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const API_CSP = "default-src 'none'; frame-ancestors 'none'";
 const STATIC_TYPES = Object.freeze({ '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' });
@@ -79,6 +82,11 @@ function requestContext(requestUrl) {
 }
 function headers(contentType, length, csp, id, attachment = null) { return { 'Content-Type': contentType, 'Content-Length': length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': csp, 'X-Request-Id': id, ...(attachment ? { 'Content-Disposition': attachment } : {}) }; }
 function json(res, status, value, id) { const body = JSON.stringify(value); res.writeHead(status, headers('application/json; charset=utf-8', Buffer.byteLength(body), API_CSP, id)); res.end(body); }
+function exportHeaders(res, plan, id) {
+  const metadata = plan.metadata;
+  res.writeHead(200, { ...headers(plan.contentType, plan.byteLength, API_CSP, id, `attachment; filename="${plan.fileName}"`),
+    'X-Export-Scope': encodeURIComponent(JSON.stringify({ projection: metadata.projection.key, snapshotVersion: metadata.projection.snapshotVersion, pricingRevision: metadata.projection.pricingRevision, range: metadata.range, matchedSessionCount: metadata.matchedSessionCount, scope: metadata.scope })) });
+}
 function error(res, failure, id) { json(res, failure.status || 500, { error: { code: failure.code || 'INTERNAL_ERROR', message: failure.status ? failure.message : 'Internal server error.', requestId: id, ...(failure.refreshStatus ? { reason: failure.refreshStatus.reason, failedFiles: failure.refreshStatus.failedFiles, retainedSnapshot: failure.refreshStatus.retainedSnapshot } : {}) } }, id); }
 function allowedHost(host) {
   const configured = `${CONFIG.host.includes(':') && !CONFIG.host.startsWith('[') ? `[${CONFIG.host}]` : CONFIG.host}:${CONFIG.port}`.toLowerCase();
@@ -156,6 +164,7 @@ function startPricingRefresh(provider) {
 }
 const settingsOwner = isLoopbackHost(CONFIG.host) ? await acquireSettingsOwner(ENV_PATH) : null;
 const server = http.createServer(async (req, res) => {
+  if (req.aborted || res.destroyed) return;
   const id = requestId(); const started = Date.now();
   try {
     if (!allowedHost(req.headers.host)) throw new ApiError(400, 'INVALID_HOST', 'Invalid Host header.');
@@ -180,27 +189,52 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/sessions/')) { const sessionKey = requestUrl.pathname.slice('/api/sessions/'.length); if (!/^[A-Za-z0-9_-]{1,512}$/.test(sessionKey)) throw new ApiError(400, 'INVALID_SESSION_KEY', 'Invalid session key.'); const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); const { summary, context, projection } = projectedRequest(provider, cached, requestUrl); const detail = buildSessionDetail(summary, context, sessionKey, options()); if (!detail) throw new ApiError(404, 'SESSION_NOT_FOUND', 'Session not found.'); json(res, 200, { ...detail, projection, provider: provider.id, scan: { provider: provider.id, ...cached.metadata } }, id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/refresh') { verifyPost(req); const provider = await requireProvider(requestUrl); const snapshot = await provider.cache.refresh(); json(res, 200, dashboardPayload(provider, snapshot, requestContext(requestUrl), provider.cache.status()), id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/pricing/refresh') { verifyPost(req); const provider = await requireProvider(requestUrl); let result; try { result = await provider.pricingService.refresh({ manual: true }); } catch { throw new ApiError(502, 'PRICING_REFRESH_FAILED', 'Pricing refresh failed; existing prices were retained.'); } const cached = await provider.cache.get(); json(res, 200, { ...dashboardPayload(provider, cached, requestContext(requestUrl)), pricingUpdate: { changedModels: result.changedModels || [] } }, id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/export') { const format = requestUrl.searchParams.get('format') || 'csv-sessions'; if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.'); const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); const { summary, context } = projectedRequest(provider, cached, requestUrl); const output = buildExport(format, buildDashboardPayload(summary, context, { provider: provider.id, ...cached.metadata }, { ...options(), exportAllSessions: true })); if (Buffer.byteLength(output.body) > 32 * 1024 * 1024) throw new ApiError(413, 'EXPORT_TOO_LARGE', 'Export exceeds 32 MiB. Narrow the query and try again.'); const fileName = `local-ai-token-dashboard-${provider.id}-${format}.${output.extension}`; res.writeHead(200, { ...headers(output.contentType, Buffer.byteLength(output.body), API_CSP, id, `attachment; filename="${fileName}"`), 'X-Export-Scope': encodeURIComponent(JSON.stringify({ projection: output.metadata.projection.key, snapshotVersion: output.metadata.projection.snapshotVersion, pricingRevision: output.metadata.projection.pricingRevision, range: output.metadata.range, matchedSessionCount: output.metadata.matchedSessionCount, scope: output.metadata.scope })) }); res.end(output.body); return; }
+    if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/export/download/')) {
+      if (req.headers.range) throw new ApiError(416, 'RANGE_NOT_SUPPORTED', 'Resume is not supported. Start a new download.');
+      const lease = exportService.claim(requestUrl.pathname.slice('/api/export/download/'.length));
+      await exportService.send(lease, res, (plan) => exportHeaders(res, plan, id)); return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/export' || req.method === 'POST' && requestUrl.pathname === '/api/export/prepare') {
+      const preparing = req.method === 'POST';
+      if (preparing) { verifyPost(req); if (!requestUrl.searchParams.has('projection') || !requestUrl.searchParams.has('projectionAt')) throw new ApiError(400, 'INVALID_QUERY', 'A displayed projection is required.'); }
+      if (req.headers.range) throw new ApiError(416, 'RANGE_NOT_SUPPORTED', 'Resume is not supported. Start a new download.');
+      const format = requestUrl.searchParams.get('format') || 'csv-sessions';
+      if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.');
+      const lease = exportService.reserve();
+      const abandoned = () => { if (!res.writableFinished) exportService.release(lease); };
+      res.once('close', abandoned);
+      try {
+        const provider = await requireProvider(requestUrl); const cached = await provider.cache.get();
+        const { summary, context } = projectedRequest(provider, cached, requestUrl);
+        const plan = { ...createExportPlan(format, buildExportPayload(summary, context, { provider: provider.id, ...cached.metadata }, format, options())),
+          fileName: `local-ai-token-dashboard-${provider.id}-${format}.${({ 'csv-sessions': 'csv', 'csv-trend': 'csv', 'json-report': 'json', 'markdown-summary': 'md' })[format]}` };
+        const ready = exportService.prepare(lease, plan);
+        if (preparing) json(res, 200, ready, id);
+        else await exportService.send(lease, res, (output) => exportHeaders(res, output, id));
+      } catch (failure) { exportService.release(lease); throw failure; }
+      finally { if (!preparing) res.removeListener('close', abandoned); }
+      return;
+    }
     if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const selectedProvider = providerId(requestUrl); json(res, 200, { version: CURRENT_VERSION, provider: selectedProvider, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, providers: await providerRegistry.diagnostics(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, { ...await readSettings(ENV_PATH, CONFIG), ...await settingsOwner.check() }, id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); const input = await readJsonBody(req, 16 * 1024); await settingsOwner.assertWritable(); const saved = await saveSettings(ENV_PATH, input, { revision: /^"([a-f0-9]{64})"$/.exec(req.headers['if-match'] || '')?.[1], beforeWrite: settingsOwner.assertWritable }); json(res, 200, { ...settingsPayload(saved.localConfig, CONFIG, saved.revision), ...settingsOwner.status() }, id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/update') { json(res, 200, await updateChecker.check(), id); return; }
     if (req.method === 'GET' && await serveStatic(requestUrl.pathname, res, id)) return;
     throw new ApiError(404, 'NOT_FOUND', 'Not found.');
-  } catch (failure) { error(res, failure, id); }
+  } catch (failure) { if (res.headersSent || res.destroyed) res.destroy(); else error(res, failure, id); }
 });
 let cleanupPromise;
 function cleanup() {
   if (!cleanupPromise) {
     for (const timer of pricingTimers.values()) clearTimeout(timer);
-    providerRegistry.close();
+    exportService.close(); providerRegistry.close();
     cleanupPromise = settingsOwner?.release().catch(() => { console.error('Settings ownership cleanup failed; explicit recovery may be required.'); }) || Promise.resolve();
   }
   return cleanupPromise;
 }
 server.on('close', () => { void cleanup(); });
 server.on('error', () => { process.exitCode = 1; void cleanup(); console.error('Dashboard could not listen. Check the configured host and port.'); });
-for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { server.close(); server.closeIdleConnections?.(); });
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { exportService.close(); server.close(); server.closeIdleConnections?.(); });
 try {
   server.listen(CONFIG.port, CONFIG.host, () => {
     providerRegistry.startWatchers().catch(() => undefined);
