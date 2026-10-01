@@ -1,6 +1,8 @@
 # Dashboard functional audit
 
-Phase 1 disposition (2026-10-01): FA04–FA06 and the selected FA10/FA18/FA22/FA23 policies are implemented. See [phase1-accounting-validation.md](phase1-accounting-validation.md) for current evidence. The findings and original probe JSON below remain the audit baseline; later-phase findings are still open.
+Current disposition: [functional-status-inventory.md](functional-status-inventory.md) reconciles FA01–FA24, later checkpoints, known boundaries and validation gaps at source checkpoint c520717. All 17 original reproduced defects have correction evidence. The baseline tables below describe the original triggers, not current behavior.
+
+Phase 1 disposition (2026-10-01): FA04–FA06 and the selected FA10/FA18/FA22/FA23 policies are implemented. See [phase1-accounting-validation.md](phase1-accounting-validation.md). The findings and original probe JSON below remain the audit baseline; later dispositions are recorded below and in the current inventory.
 
 Phase 2 disposition (2026-10-01): FA01–FA03 and FA21 are implemented. The selected calendar/progress comparison, IANA/DST, and strict local-input policies are also implemented. See [phase2-calendar-validation.md](phase2-calendar-validation.md). Original findings below retain their baseline evidence.
 
@@ -8,7 +10,7 @@ Phase 3 disposition (2026-10-01): FA08/FA09/FA11/FA14/FA19 are implemented. The 
 
 Date: 2026-10-01 (Asia/Taipei). Baseline: `665af57` on `main`.
 
-The user accepted the UI result and selected a complete functional review before implementation decisions. This review covers both provider parsers, token/cost calculations, ranges, projections, pagination, refresh/watchers, quotas, exports, settings, pricing, and update checks. Production code and data have not changed.
+The user accepted the UI result and selected a complete functional review before implementation decisions. The baseline review covered both provider parsers, token/cost calculations, ranges, projections, pagination, refresh/watchers, quotas, exports, settings, pricing, and update checks. At that baseline pass, product code and production data had not changed. Later checkpoints changed source code with isolated validation; they did not certify a production rollout.
 
 ## Method and evidence
 
@@ -29,7 +31,7 @@ The HTTP probe uses Node's `--import` preload and needs Node 18.19 or later. Thi
 
 P1 means incorrect data, incomplete exports, lost valid results, or a broken core query. P2 means validation, recovery, or reporting defects with a narrower trigger. Severity assumes the stated trigger; it does not claim the user's current real files contain that trigger. There are 17 reproduced findings: 12 P1 and five P2.
 
-| ID | Priority | Trigger and current result | Source and evidence |
+| ID | Priority | Trigger and baseline result | Source and evidence |
 | --- | --- | --- | --- |
 | FA01 | P1 | Select `2026-W01`. The pure resolver returns September 14 with a fixed September clock; the HTTP server returns September 28 with its execution clock. Both ignore the requested December 29, 2025 start. | `server/timezone.mjs:85`, FA01 / HTTP02. The browser does send `period`. |
 | FA02 | P2 | `2026-02-31T00:00` becomes March 3 and HTTP 200. Month `2026-13` silently becomes the current month, also HTTP 200. | `server/timezone.mjs:55`, `server/timezone.mjs:65`, `server.mjs:53`; FA02 / HTTP03 / HTTP04. |
@@ -51,11 +53,11 @@ P1 means incorrect data, incomplete exports, lost valid results, or a broken cor
 
 Claude's official [prompt-caching documentation](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#tracking-cache-performance) defines total input as uncached input plus cache reads plus cache writes. This supports FA04's token count. When a log omits the TTL breakdown, the duration and exact cache-write price are still unknown; retaining the tokens does not justify guessing their price.
 
-## Behaviors that require policy decisions
+## Baseline behaviors that required policy decisions
 
-These are reproduced behaviors with unresolved intended semantics, not additional confirmed defects.
+These were reproduced behaviors with unresolved intended semantics at the original audit, not additional confirmed defects. The user subsequently selected policies; the current inventory records their implementation.
 
-| ID | Current behavior | Recommended decision to evaluate |
+| ID | Baseline behavior | Original recommendation to evaluate |
 | --- | --- | --- |
 | FA10 | An earlier model-A cumulative delta of 110 numerically covers and discards a later model-B turn of six. Coverage ignores turn identity, model, and time relation. Partial counter resets also reset the entire previous usage vector. | Define supported log variants and an identity/time-bounded reconciliation policy. Keep ambiguous observations and explicit quality evidence without blindly adding or discarding both sources. Do not claim the correct total is 116 without deciding whether the sources describe separate usage. |
 | FA13 | After a successful 75%-remaining quota read, a service failure removes all windows and caches the unavailable result for 60 seconds. | Retain last good quota with explicit check time, stale status, and failure reason. Never show stale quota as current, or reset stale data to zero/100%. |
@@ -63,17 +65,17 @@ These are reproduced behaviors with unresolved intended semantics, not additiona
 | FA22 | A partial cost lower bound of USD 10 against a USD 100 budget is classified `ok`. The amount has a lower-bound label, but classification ignores uncertainty. | Use an indeterminate status below thresholds when cost is partial; a known subtotal already above a threshold still proves warning/exceeded. |
 | FA23 | Input remains 100 while Output falls from ten to five. Whole-vector reset produces accepted Input 200 and Total 215, with a partial-reset count but no ambiguity count. | Skip the uncertain increment, update the baseline, and report incomplete usage. This was subsequently selected by the user. |
 
-Decisions after the initial audit: retain FA22's known-cost classification with visible partial-pricing context, rather than the proposed indeterminate state. Use cumulative priority per model for FA10; do not describe unmatched turns as proven covered. FA18 deduplication needs identical file content or explicit event identity within the selected execution scope; Session ID alone is insufficient. These decisions are recorded in the refactor plan; the initial findings are not yet fixed.
+Decisions after the initial audit: retain FA22's known-cost classification with visible partial-pricing context, rather than the proposed indeterminate state. Use cumulative priority per model for FA10; do not describe unmatched turns as proven covered. FA18 deduplication needs identical file content or explicit event identity within the selected execution scope; Session ID alone is insufficient. These decisions are implemented and recorded in the refactor plan and phase validation reports.
 
 The original dependent decisions included model filtering, calendar comparisons, export snapshot identity, browser synchronization and current prices versus a historical ledger. The staged decisions now define observation filtering, calendar alignment, displayed projection exports and manual browser updates. Q28–Q33 retain current-basis estimation with complete read-only archives; a historical effective-rate ledger remains separate scope. See [pricing-archive-validation.md](pricing-archive-validation.md). The initial pricing/comparison behavior alone did not establish bugs.
 
 ## Candidate risks and verification gaps
 
 - FA15: the original HTTP-status path was corrected in Phase 4. The later [request-race checkpoint](request-race-validation.md) reproduced and fixed late fetch/body exceptions that bypassed stale detection, plus update/diagnostic busy ownership after Provider changes. Controlled promises deliberately ignore cancellation; a separate browser case verifies native abort. This does not claim normal fetch routinely ignores its signal.
-- Watcher events during an in-flight scan join the same cache refresh. There is no dirty-generation follow-up queue. A scan/write timing reproduction is required before assigning severity.
-- JSONL files can change while discovery fingerprints and parser reads occur. Content identity checks, unchanged-size/mtime replacement, symlinks, file deletion during discovery, partial appended lines, empty first scan, and worker interruption need focused fixtures before a reliability redesign.
+- Phase 3 adds dirty-generation follow-up passes before publication, bounded to three candidate passes. Scan/write mismatch and failed follow-up rollback have focused evidence. This is a stable admitted pass, not an atomic filesystem snapshot. See [phase3-reliability-validation.md](phase3-reliability-validation.md).
+- Phase 3 validates fingerprint checks, same-size restored-mtime replacement, in-flight writes, active worker termination and root recovery. Actual watcher errors, worker exit without a message, symlink-swap/deletion timing, partial append and empty-directory edge cases still need focused fixtures; see V05 in the current inventory.
 - The initial detail fixture showed total 2001 and 2000 returned without an explicit truncation flag. Q27 is now complete: exact selected count, returned count, limit, and truncation prompt, with full Token/cost totals. See [detail-completeness-validation.md](detail-completeness-validation.md). Pagination and an observation table are outside this scope.
-- Native browser download completion, unload warnings, Windows filesystem/recursive-watch behavior, forced colors, assistive technology, and Node 18/22/24 remain unverified. The old UI screenshots and client geometry tests do not validate backend repeated-hour grouping.
+- The later [native Safari checkpoint](browser-download-settings-validation.md) verifies actual download bytes, cancellation and unload warnings. Other browsers, interrupted/very large downloads, Windows filesystem/recursive-watch behavior, forced colors, assistive technology and Node 18/22/24 remain unverified. Phase 2 separately validates backend repeated-hour grouping.
 - Upstream live pricing-document format, live quota endpoints, real OAuth rotation conflicts with a running CLI, and subscription semantics were not exercised. Existing service tests use fake responses. No prices or real credential files were changed.
 - `/api/summary` deliberately retains legacy all-snapshot totals with filtered rows. Do not change that deprecated contract without a separate compatibility decision.
 
@@ -81,19 +83,19 @@ The original dependent decisions included model filtering, calendar comparisons,
 
 | Surface | Evidence and current disposition |
 | --- | --- |
-| Parsers and token/cost accounting | FA04–FA06, FA10, FA18; existing Codex/Claude parser and pricing checks pass. Generic cache, model changes, reconciliation, and duplicate provenance need work. |
-| Calendar, DST, custom range | FA01–FA03 plus HTTP02–HTTP04; the existing timezone check passes but omits historical week selection and the repeated-hour grouping case. |
-| Incremental refresh and watcher | FA09/FA11/FA14/FA19, CHECK02/04; unchanged-file reuse and whole-refresh rollback work. Per-file failure and cap/recovery contracts need work. |
-| Provider isolation and pagination | HTTP boundary probes pass; FA05/FA16/FA21 identify attribution, version, and validation problems. |
-| Quota | FA12/FA13; fixed-endpoint credential privacy and fake OAuth rotation checks pass. Null values and stale recovery need work. |
-| Export | FA07/FA16/FA17; all four builders were read and CSV/JSON/Markdown paths probed. Real browser file creation was not tested. |
-| Settings | CHECK01, HTTP settings checks; validation and preservation of unrelated lines work. FA20 requires safe save serialization and temporary-file identity. |
-| Pricing and update checks | Eight targeted existing checks cover rate matching, parsers, cadence, failure retention, config, and stable-release checks. No live endpoint or current-price certification. |
-| Client state and recovery | 33 existing client checks pass. Version-safe page merging, export provenance, stale-error races, and uncertain budget classification are not covered. |
+| Parsers and token/cost accounting | [Phase 1](phase1-accounting-validation.md) resolves generic cache, model attribution, partial cost and selected reconciliation policies. Real log variants remain a validation gap. |
+| Calendar, DST, custom range | [Phase 2](phase2-calendar-validation.md) validates historical week, strict inputs, repeated hours and selected comparison rules. |
+| Incremental refresh and watcher | [Phase 3](phase3-reliability-validation.md) validates full rollback, stable publication, cap reporting and root recovery. Remaining scan/watch paths are V05. |
+| Provider isolation and pagination | [Phase 4](phase4-projection-validation.md) and [request races](request-race-validation.md) validate projection guards and request ownership. |
+| Quota | [Phase 5](phase5-reliability-validation.md) validates unknown values, stale/reset behavior and detected credential changes with synthetic credentials. Live endpoints remain unverified. |
+| Export | [Phase 4](phase4-projection-validation.md) validates full matched coverage and provenance; [native Safari](browser-download-settings-validation.md) verifies saved bytes in all four formats. Large/interrupted downloads remain unverified. |
+| Settings | [Phase 5](phase5-reliability-validation.md) validates exclusive writes, same-process serialization and required revisions; [native Safari](browser-download-settings-validation.md) validates leave prompts. Final external-writer race remains R01. |
+| Pricing and update checks | [Pricing archives](pricing-archive-validation.md) validates current-basis sealing and failure retention. Mock update checks cover stable-release handling; live endpoint certification remains V02. |
+| Client state and recovery | [Cross-phase acceptance](functional-integration-validation.md) fixes FA24; [request races](request-race-validation.md) closes FA15 within the tested scope. Budget policy remains the user's selected known-cost classification. |
 
-Service checks ran in two non-overlapping groups: 11 core checks and eight pricing/update/config checks, 19 passed in total. Client checks: 33 passed. This did not rerun the existing contract harness because it starts the source checkout's server with its pricing-cache paths and automatic external refresh. The isolated HTTP probe exercised actual routes without those side effects. No mobile/tablet work, production browser mutations, configuration save, quota refresh, JSONL rescan, push, release, or deployment was performed.
+At the baseline audit, service checks ran in two non-overlapping groups: 11 core checks and eight pricing/update/config checks, 19 passed in total. Client checks: 33 passed. This did not rerun the existing contract harness because it starts the source checkout's server with its pricing-cache paths and automatic external refresh. The isolated HTTP probe exercised actual routes without those side effects. No mobile/tablet work, production browser mutations, configuration save, quota refresh, JSONL rescan, push, release, or deployment was performed in that baseline pass. Later isolated checks are recorded in their own reports; their counts overlap.
 
-The next decisions and phase gates are in [dashboard-functional-refactor-plan.md](dashboard-functional-refactor-plan.md). This audit is complete as a bounded first pass, not an exhaustive certification. All findings are open at this checkpoint.
+The decisions and phase gates are in [dashboard-functional-refactor-plan.md](dashboard-functional-refactor-plan.md). This audit was a bounded first pass, not an exhaustive certification. All findings were open at the original baseline; [functional-status-inventory.md](functional-status-inventory.md) is the current disposition.
 
 ## Phase 4 implementation disposition
 
@@ -105,4 +107,4 @@ FA12/FA13/FA20 have focused evidence in [phase5-reliability-validation.md](phase
 
 ## Cross-phase acceptance disposition
 
-[functional-integration-validation.md](functional-integration-validation.md) records 115 passing baseline checks, all five isolated phase HTTP fixtures, and same-server accounting/calendar/rollback/export/quota/settings behavior. Root desktop QA found FA24 (P2): a successful page read after failed refresh hid the unresolved refresh warning, because its qualifiers were not merged. Equal-identity pages now merge only refreshFailure and retainedSnapshot in addition to pagination fields. The warning persists; snapshot data remains intact; watcher repair triggers full conflict reload. Ten projection and 33 client checks passed after the fix. Remaining platform, live-contract, native-download, bounded-detail, pricing-history, and cross-process limits are inventoried in that record.
+[functional-integration-validation.md](functional-integration-validation.md) records 115 passing baseline checks, all five isolated phase HTTP fixtures, and same-server accounting/calendar/rollback/export/quota/settings behavior. Root desktop QA found FA24 (P2): a successful page read after failed refresh hid the unresolved refresh warning, because its qualifiers were not merged. Equal-identity pages now merge only refreshFailure and retainedSnapshot in addition to pagination fields. The warning persists; snapshot data remains intact; watcher repair triggers full conflict reload. Ten projection and 33 client checks passed after the fix. Subsequent checkpoints close detail-count, pricing-archive, native Safari and FA15 gaps; the current inventory separates remaining scope from completed work.

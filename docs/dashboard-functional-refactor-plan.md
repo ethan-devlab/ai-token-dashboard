@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts, Q28–Q33 pricing archives, and native Safari download/settings-leave acceptance complete. Remaining scope awaits user decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts, Q28–Q33 pricing archives, native Safari download/settings-leave acceptance and FA15 request ownership complete. [functional-status-inventory.md](functional-status-inventory.md) records the current remaining scope for user decision.
 
 ## Confirmed scope
 
@@ -116,11 +116,11 @@ Ask the first independent decisions together, then ask their dependent frontier 
 - Failed changed file: whole-pass rollback selected. Healthy partial updates with retained failed files are not selected.
 - Mixed-model filter: matching observations selected. Session totals must use the same filtered observations; preserve existing metadata/API compatibility with explicit projection fields if needed.
 
-Phase 1 accounting, Phase 2 calendars, Phase 3 refresh, Phase 4 displayed exports, and Phase 5 stale quota/settings conflict decisions are confirmed above. Current pricing versus a historical rate ledger and watcher-to-browser synchronization remain separate future decisions. Do not quietly settle those semantics in code.
+Phase 1 accounting, Phase 2 calendars, Phase 3 refresh, Phase 4 displayed exports, and Phase 5 stale quota/settings conflict decisions are confirmed above. Q28–Q33 subsequently select current-basis recalculation with archived rules and read-only tracing. A historical effective-rate ledger remains separate scope. Q20 selects manual browser updates; adding watcher-to-browser synchronization needs a new decision. Do not quietly change those semantics in code.
 
 ## Validation and delivery
 
-The user selected cross-phase acceptance after a73bbe6. [functional-integration-validation.md](functional-integration-validation.md) records the complete fixture run and remaining inventory. FA24 fixes refresh-failure qualifiers lost after an equal-identity page read. This uses the already confirmed rollback/visible-failure policy; it adds no new product policy. Phase 4 page merges preserve data and now also carry the latest refresh attempt qualifiers. Native/Windows/live validation and pricing/synchronization policies remain separate work.
+The user selected cross-phase acceptance after a73bbe6. [functional-integration-validation.md](functional-integration-validation.md) records the complete fixture run and remaining inventory. FA24 fixes refresh-failure qualifiers lost after an equal-identity page read. This uses the already confirmed rollback/visible-failure policy; it adds no new product policy. Phase 4 page merges preserve data and now also carry the latest refresh attempt qualifiers. Subsequent checkpoints close native Safari and pricing-archive scope. Other browsers, Windows, live contracts, historical effective rates and automatic browser synchronization remain separate work.
 
 ## Detail completeness checkpoint
 
@@ -130,7 +130,7 @@ The audit passed 33 existing client checks and 19 service checks in two non-over
 
 For each implementation, turn only relevant audit cases into regression expectations after the change. Do not keep probe exit-zero as a correctness gate. Avoid repeated broad suites; run shared parser/projection coverage when cross-module risk requires it. Use a fully isolated fixture HTTP server for stateful failures and external fake responses. Perform supported desktop runtime checks directly. Maintain a clear Windows-local reproduction command when a platform check cannot run here.
 
-Phase completion requires observable behavior, aligned docs, staged intended files, successful commit, and clean unrelated-change handling. Windows runtime, Node 18/22/24, real populated provider-log variants, browser download/unload UI, live upstream integration, and release validation remain explicit follow-ups. No push or release is authorized by this plan.
+Phase completion requires observable behavior, aligned docs, staged intended files, successful commit, and clean unrelated-change handling. Windows runtime, Node 18/22/24, real populated provider-log variants, other browsers, interrupted/very large downloads, live upstream integration and release validation remain explicit follow-ups. Native Safari download/unload UI has separate completed evidence below. No push or release is authorized by this plan.
 
 ## Pricing archive checkpoint
 
@@ -143,3 +143,7 @@ Q28–Q33 are implemented. Current-basis estimates now have complete provider-se
 ## Request race checkpoint
 
 [request-race-validation.md](request-race-validation.md) resolves the remaining FA15 fetch/body failure path. Superseded exceptions are stale; only the current update/diagnostic attempt can publish results or end busy state. Provider changes invalidate those actions and release their buttons. Fifty focused checks passed. Root desktop QA covers controlled late failures/successes across Provider changes and an actual native-fetch abort. The normal HTTP-status case remains covered by Phase 4. No synchronization, quota or server-operation rollback policy changed.
+
+## Remaining functional inventory checkpoint
+
+[functional-status-inventory.md](functional-status-inventory.md) reconciles all 24 issue IDs and completed follow-up checkpoints at source c520717. This documentation-only pass corrects stale disposition text; it does not repeat prior tests or change product behavior. The remaining boundaries include final external-writer races, pricing metadata/cache ownership, buffered export resource limits, non-atomic filesystem scans and uncertified rollout. Validation gaps and optional product scope are listed separately. The next choice is cross-process write policy, isolated storage-failure validation or large-data measurement; no mitigation is selected by this inventory.

@@ -42,6 +42,8 @@ Proof: integration-retained-page-fixed-960.png shows retained 289 input Tokens, 
 
 ## Remaining inventory
 
+The table below retains this checkpoint's scope with later dispositions. [functional-status-inventory.md](functional-status-inventory.md) is the complete current register at source checkpoint c520717, including storage, resource and platform gaps.
+
 | Item | Current evidence and boundary | Next decision or check |
 | --- | --- | --- |
 | Cross-process file race | Settings and credential digests catch observed external changes before rename. They cannot exclude a writer in the final check-to-rename interval. | Decide whether a further lifecycle change is needed; do not claim a shared CLI lock. |
