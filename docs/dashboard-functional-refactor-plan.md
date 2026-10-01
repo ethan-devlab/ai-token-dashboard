@@ -165,3 +165,7 @@ Subsequent Q40–Q50 decisions select query/export optimization with aggressive 
 ## Query and native streamed export delivery
 
 Q40–Q50 are implemented. [The validation record](query-export-performance-validation.md) covers selective query work, bounded snapshot selection reuse, native prepared downloads, one active slot, transport deadlines, exact saved bytes and the selected local latency/RSS targets. The historical 32 MiB rejection and frontend Blob workflow are replaced. Pricing lifecycle ownership R02, storage failure V04, real logs and platform/rollout validation remain separate.
+
+## Pricing ownership and recovery decisions
+
+Q51–Q60 now select an independent shared pricing writer, manual latest publication load, archive-plus-publication activation, active-basis revalidation for each cost response, separate check-metadata warnings, controlled first initialization, startup-fixed ownership/manual recovery, process-interruption scope and restricted explicit archive repair. [The complete plan](pricing-ownership-recovery-plan.md) defines owned files, API/UI boundaries and focused acceptance. These policies are a planning checkpoint; product implementation is not yet delivered.

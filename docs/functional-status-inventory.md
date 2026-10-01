@@ -82,6 +82,8 @@ Manual browser updates are already selected by Q20; automatic watcher-to-browser
 
 R01's selected mitigation and R03's Q40–Q50 implementation are delivered. [Stream validation](query-export-performance-validation.md) establishes the selected local workload targets and native lifecycle checks. R02 pricing lifecycle and V04 storage-failure injection remain separate choices. Platform/live rollout remains a separate validation track.
 
+Subsequent R02 decision checkpoint: [pricing ownership and recovery](pricing-ownership-recovery-plan.md) records Q51–Q60, the reproduced stale-cache/active-archive boundaries and concrete acceptance. One independent pricing writer, manual latest load, publish-before-activation, cost-response revalidation and restricted manual repair are selected. Product behavior remains unchanged until the implementation phase; this planning record does not close R02.
+
 ## Inventory verification
 
 This pass read the current summary-cache generation loop, watcher invalidation/retry, file fingerprint and parser guards, settings and credential check/rename sequences, export limit and legacy-summary route. It cross-checked the relevant focused test cases and each phase's saved report. Documentation links and unique FA01–FA24 coverage were checked; git diff --check passed. No tests, browser QA, production requests or state mutations were repeated for this documentation-only inventory.
