@@ -155,3 +155,7 @@ The user selected R01 after 83ba020. [cross-process-write-review.md](cross-proce
 ## Settings and credential ownership implementation
 
 Q34–Q39 are selected and delivered. [settings-ownership-validation.md](settings-ownership-validation.md) records read-only Claude credentials, one startup settings writer, read-only additional instances, guarded normal release, conservative explicit recovery and restart-only acquisition. Twenty-three distinct focused cases ran in bounded groups, plus copied multi-process HTTP and root desktop QA. Independent editors must stop the writer before changes; pricing lifecycle, Windows, storage/power-loss failure and rollout remain separate scope.
+
+## Large-data measurement checkpoint
+
+After a0ad92c, the user selected isolated query/export/pricing-list timing and memory measurements before choosing improvement targets. [performance-baseline.md](performance-baseline.md) and its raw evidence record 10000/50000/150000 observations, all four exports, the actual buffered 32 MiB rejection and 1–10000 verified archive versions. Product code is unchanged. Warm full projection and all-format export work dominate the measured latency; the archive list remains fast at the tested scale. The next user decisions are scope and accepted workload, followed by numeric resource targets and any required cache/export semantics. No optimization, resource SLA, new dependency or architecture is selected by this measurement checkpoint.
