@@ -139,3 +139,7 @@ Q28–Q33 are implemented. Current-basis estimates now have complete provider-se
 ## Native browser acceptance checkpoint
 
 [browser-download-settings-validation.md](browser-download-settings-validation.md) closes the previously unverified native Safari cases. All four downloaded files matched pinned API bytes; save cancellation created no file; an export conflict reloaded the dashboard without starting a download. App and native settings leave dialogs preserved or discarded edits as selected. Reverting values and successful isolated saves cleared dirty state. No product defect was reproduced by these cases. Other browsers, Windows and interrupted or very large downloads remain separate validation scope.
+
+## Request race checkpoint
+
+[request-race-validation.md](request-race-validation.md) resolves the remaining FA15 fetch/body failure path. Superseded exceptions are stale; only the current update/diagnostic attempt can publish results or end busy state. Provider changes invalidate those actions and release their buttons. Fifty focused checks passed. Root desktop QA covers controlled late failures/successes across Provider changes and an actual native-fetch abort. The normal HTTP-status case remains covered by Phase 4. No synchronization, quota or server-operation rollback policy changed.

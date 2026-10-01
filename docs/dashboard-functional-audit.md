@@ -69,7 +69,7 @@ The original dependent decisions included model filtering, calendar comparisons,
 
 ## Candidate risks and verification gaps
 
-- FA15: a superseded failed request can still throw a generic error from the channel helper because stale detection follows `response.ok`. Main projection loads have a generation guard, but quota/update/diagnostics callers need a targeted race review. The fake-fetch reproduction ignores cancellation; no real browser stale-error overwrite is claimed.
+- FA15: the original HTTP-status path was corrected in Phase 4. The later [request-race checkpoint](request-race-validation.md) reproduced and fixed late fetch/body exceptions that bypassed stale detection, plus update/diagnostic busy ownership after Provider changes. Controlled promises deliberately ignore cancellation; a separate browser case verifies native abort. This does not claim normal fetch routinely ignores its signal.
 - Watcher events during an in-flight scan join the same cache refresh. There is no dirty-generation follow-up queue. A scan/write timing reproduction is required before assigning severity.
 - JSONL files can change while discovery fingerprints and parser reads occur. Content identity checks, unchanged-size/mtime replacement, symlinks, file deletion during discovery, partial appended lines, empty first scan, and worker interruption need focused fixtures before a reliability redesign.
 - The initial detail fixture showed total 2001 and 2000 returned without an explicit truncation flag. Q27 is now complete: exact selected count, returned count, limit, and truncation prompt, with full Token/cost totals. See [detail-completeness-validation.md](detail-completeness-validation.md). Pagination and an observation table are outside this scope.
