@@ -55,7 +55,8 @@ globalThis.fetch = async (url) => {
   const report = await json(`/api/export?${query}&format=json-report&${pin}`); assert.equal(report.metadata.projection.key, before.projection.key); assert.equal(report.metadata.exportedSessionCount, 251);
   const markdown = await fetch(`${base}/api/export?${query}&format=markdown-summary&${pin}`); assert.match(await markdown.text(), /Snapshot: 1/);
   assert.equal((await fetch(`${base}/api/export?${query}&format=csv-trend&${pin}`)).status, 200);
-  const empty = await fetch(`${base}/api/export?mode=all&timezone=UTC&q=no-matches&format=csv-sessions`); assert.equal(empty.status, 200); assert.equal((await empty.text()).split('\r\n').length, 1);
+  const empty = await fetch(`${base}/api/export?mode=all&timezone=UTC&q=no-matches&format=csv-sessions`); assert.equal(empty.status, 200); const emptyRows = (await empty.text()).split('\r\n'); assert.equal(emptyRows.length, 2); assert.match(emptyRows[0], /recordType$/); assert.match(emptyRows[1], /,"metadata"$/);
+  const emptyTrend = await fetch(`${base}/api/export?mode=all&timezone=UTC&q=no-matches&format=csv-trend`); assert.equal(emptyTrend.status, 200); const emptyTrendRows = (await emptyTrend.text()).split('\r\n'); assert.equal(emptyTrendRows.length, 2); assert.match(emptyTrendRows[1], /,"metadata"$/);
   const clockQuery = 'mode=last24h&timezone=UTC&projectionAt=' + Date.parse('2026-09-01T12:00:00Z');
   const relative = await json(`/api/dashboard?${clockQuery}`); const relativePage = await json(`/api/sessions?${clockQuery}&projection=${relative.projection.key}`); assert.equal(relativePage.totals.totalTokens, 251);
   const refresh = () => fetch(`${base}/api/refresh?${query}`, { method: 'POST', headers: { Origin: base } });

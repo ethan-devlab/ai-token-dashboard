@@ -1,6 +1,6 @@
 # Phase 4 projection and export validation
 
-Date: 2026-10-01 (Asia/Taipei). Environment: macOS, Node v26.0.0. Phase 3 was committed as `f0fab22` before implementation. Q19 selects displayed data: a conflict stops download, reloads the complete dashboard, and requires another download action. Q20 keeps manual browser updates. Q21 received no response from the waiting dialog. Implementation assumption: preserve the existing header-only empty CSV format; the UI recommends JSON/Markdown for full empty-result scope. This default can be changed in a follow-up.
+Date: 2026-10-01 (Asia/Taipei). Environment: macOS, Node v26.0.0. Phase 3 was committed as `f0fab22` before implementation. Q19 selects displayed data: a conflict stops download, reloads the complete dashboard, and requires another download action. Q20 keeps manual browser updates. The original edbbf6f commit used a header-only empty CSV compatibility default. The user subsequently confirmed Q21: add an empty-result metadata record. The follow-up below replaces that default.
 
 ## Changes
 
@@ -30,3 +30,15 @@ The in-app browser's `waitForEvent('download', { timeoutMs: 10000 })` timed out.
 The 32 MiB rejection was inspected, not fault-injected with an oversized export. Windows, other Node versions, live pricing/current prices, real provider-log variants, production rollout, and Phase 5 quota/settings remain unverified. The standard source contract harness was skipped because it can request upstream prices and write source caches. No real Session rescan, production restart, configuration save, push, release, or deployment occurred. The temporary viewport was reset; the test tab and all fixture servers/temp files were removed.
 
 Windows-local validation: run the three focused Node commands above and `node tests/phase4-http.mjs`. Use `node tests/phase4-http.mjs --serve` for a disposable desktop surface; type `advance` to publish a changed fixture, then use page/detail/export. Stop with Ctrl+C to remove temporary files. The HTTP harness requires Node 18.19+ for --import; production stays Node >=18.
+
+## Q21 follow-up: typed empty CSV metadata
+
+The user selected metadata records after edbbf6f. Both CSV formats append recordType; normal rows are data, while a file with no data rows contains one metadata record. The metadata row retains provider, exact query bounds/timezone, search/filters/sort, projection key, snapshot/pricing revision, captured clock, matching count and pricing basis. It leaves Session/bucket identifiers, Token measurements and cost cells blank. Common scope qualifiers also include scanComplete, queryUsageIncomplete, queryPossibleDuplicate and queryPartialPricing. Unknown scan completeness remains blank, not false or zero.
+
+Compatibility effect: an empty CSV now contains a header and one record instead of a header only. CSV consumers must filter recordType=data before counting data rows or adding measurements. All earlier data columns remain in the same order; new columns are appended. JSON/Markdown output is unchanged.
+
+Changed files: server/dashboard-data.mjs, public/scripts/i18n.mjs, the two Phase 4 checks, and the four existing functional/API documents. No CSS or dependency change.
+
+Executed follow-up checks: node --test tests/phase4-projection.test.mjs (9 passed); node tests/phase4-http.mjs --serve (passed, including metadata records in both empty CSV routes and the existing 251-row export/version cases); syntax and diff checks. The unit check reads escaped CSV cells, verifies exact scope/filter/version fields and blank measurements, and confirms formula protection for search text with quotes and commas. A capped-scan qualifier remains false even when the query matches zero Sessions. A matched but incomplete Session with no adopted trend buckets exports trend metadata without fabricated measurements; unknown scan completeness stays blank.
+
+Root desktop QA: English 1280px and Traditional Chinese 960px show the new empty-result explanation. The 960px scroll width is 960px; no console errors were captured. Screenshot phase4-empty-metadata-960.png is the current empty-export proof; phase4-empty-export-960.png records the superseded default. Temporary tab/viewport/server/files were cleaned up. Native browser download completion remains unverified for the same in-app event timeout recorded above; it was not repeated. Production was not restarted and real Session/configuration/credential data was not changed. No broad suites were repeated for this bounded CSV follow-up. The existing Windows-local Phase 4 commands above exercise the new cases.

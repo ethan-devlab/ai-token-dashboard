@@ -39,6 +39,7 @@ test('export selects every matching Session independent of offset and page limit
   const dashboard = buildDashboardPayload(summary, { ...request, offset: 200, limit: 1 }, scan, { exportAllSessions: true });
   const csv = buildExport('csv-sessions', dashboard);
   assert.equal(csv.body.split('\r\n').length, 252); assert.equal(csv.metadata.exportedSessionCount, 251);
+  assert.ok(csv.body.split('\r\n').slice(1).every((row) => row.endsWith(',"data"')));
   assert.equal(new Set(dashboard.sessions.map((s) => s.sessionKey)).size, 251);
   const filtered = buildDashboardPayload(summary, { ...request, q: 's250', sort: 'total', offset: 200 }, scan, { exportAllSessions: true });
   assert.equal(filtered.sessions.length, 1); assert.equal(filtered.totals.totalTokens, 1);
@@ -85,11 +86,35 @@ test('superseded errors cannot affect current state and JSON exports are downloa
   pending[2](new Response('{}', { headers: { 'content-type': 'application/json' } })); assert.equal((await aborted).stale, true);
 });
 
-test('empty CSV preserves header-only compatibility while reports retain complete query scope', () => {
-  const query = { ...request, q: 'no-matches' };
-  const dashboard = buildDashboardPayload(summary, query, scan, { exportAllSessions: true });
-  for (const format of ['csv-sessions', 'csv-trend']) assert.equal(buildExport(format, dashboard).body.split('\r\n').length, 1);
+test('empty CSV has one typed metadata record with scope, versions and blank measurements', () => {
+  const query = { ...request, q: '=no-matches,"scope"', range: { mode: 'custom', timezone: 'UTC', fromMs: Date.parse('2026-09-01'), toMs: Date.parse('2026-09-02') }, filters: { ...request.filters, models: ['gpt-5.5'] } };
+  const dashboard = buildDashboardPayload(summary, query, { ...scan, complete: false }, { exportAllSessions: true });
+  for (const format of ['csv-sessions', 'csv-trend']) {
+    const [header, body, extra] = buildExport(format, dashboard).body.split('\r\n');
+    assert.equal(extra, undefined);
+    const cells = [...body.matchAll(/"((?:[^"]|"")*)"(?:,|$)/g)].map((match) => match[1].replaceAll('""', '"'));
+    const columns = header.split(','); assert.equal(cells.length, columns.length);
+    const row = Object.fromEntries(columns.map((key, index) => [key, cells[index]]));
+    assert.equal(row.recordType, 'metadata'); assert.equal(row.provider, 'codex'); assert.equal(row.matchedSessionCount, '0');
+    assert.equal(row.querySearch, `'${query.q}`); assert.deepEqual(JSON.parse(row.queryFilters), dashboard.projection.query.filters);
+    assert.equal(row.queryFromMs, String(query.range.fromMs)); assert.equal(row.queryToMs, String(query.range.toMs)); assert.equal(row.queryTimezone, 'UTC');
+    assert.equal(row.snapshotVersion, '1'); assert.equal(row.projectionKey, dashboard.projection.key); assert.equal(row.pricingRevision, dashboard.projection.pricingRevision);
+    assert.equal(row.pricingCurrency, dashboard.pricing.currency); assert.equal(row.scanComplete, 'false'); assert.equal(row.queryPartialPricing, 'false');
+    for (const field of format === 'csv-sessions' ? ['session', 'totalTokens', 'cost', 'invalidLines'] : ['fromMs', 'toMs', 'tokens', 'cost']) assert.equal(row[field], '');
+  }
   const report = JSON.parse(buildExport('json-report', dashboard).body);
-  assert.equal(report.metadata.matchedSessionCount, 0); assert.equal(report.metadata.projection.query.q, 'no-matches');
+  assert.equal(report.metadata.matchedSessionCount, 0); assert.equal(report.metadata.projection.query.q, query.q);
   assert.match(buildExport('markdown-summary', dashboard).body, /no-matches/);
+});
+
+test('a trend metadata record can describe a matched Session with no adopted buckets', () => {
+  const session = { ...summary.sessions[0], usageObservations: summary.sessions[0].usageEvents, usageEvents: [], reconciliation: { incomplete: 1 } };
+  const dashboard = buildDashboardPayload({ ...summary, sessions: [session] }, request, scan, { exportAllSessions: true });
+  assert.equal(dashboard.matchedSessionCount, 1); assert.equal(dashboard.trend.points.length, 0);
+  const [header, body] = buildExport('csv-trend', dashboard).body.split('\r\n');
+  const cells = [...body.matchAll(/"((?:[^"]|"")*)"(?:,|$)/g)].map((match) => match[1].replaceAll('""', '"'));
+  const row = Object.fromEntries(header.split(',').map((key, index) => [key, cells[index]]));
+  assert.equal(row.recordType, 'metadata'); assert.equal(row.matchedSessionCount, '1');
+  assert.equal(row.tokens, ''); assert.equal(row.queryUsageIncomplete, 'true'); assert.equal(row.scanComplete, '');
+  assert.match(buildExport('csv-sessions', dashboard).body, /,"data"$/);
 });
