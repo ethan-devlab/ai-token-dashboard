@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected. Remaining scope awaits user decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts and truncation prompts complete. Remaining scope awaits user decision.
 
 ## Confirmed scope
 
@@ -120,7 +120,11 @@ Phase 1 accounting, Phase 2 calendars, Phase 3 refresh, Phase 4 displayed export
 
 ## Validation and delivery
 
-The user selected cross-phase acceptance after a73bbe6. [functional-integration-validation.md](functional-integration-validation.md) records the complete fixture run and remaining inventory. FA24 fixes refresh-failure qualifiers lost after an equal-identity page read. This uses the already confirmed rollback/visible-failure policy; it adds no new product policy. Phase 4 page merges preserve data and now also carry the latest refresh attempt qualifiers. Native/Windows/live validation and new detail/pricing/synchronization policies remain separate work.
+The user selected cross-phase acceptance after a73bbe6. [functional-integration-validation.md](functional-integration-validation.md) records the complete fixture run and remaining inventory. FA24 fixes refresh-failure qualifiers lost after an equal-identity page read. This uses the already confirmed rollback/visible-failure policy; it adds no new product policy. Phase 4 page merges preserve data and now also carry the latest refresh attempt qualifiers. Native/Windows/live validation and pricing/synchronization policies remain separate work.
+
+## Detail completeness checkpoint
+
+Q27 selects count and truncation prompts, without an observation table or pagination. Detail adds observationCount, returnedObservationCount, and observationsTruncated after the active filters; observationLimit remains 2000. Full Token/cost totals and response order remain unchanged. [detail-completeness-validation.md](detail-completeness-validation.md) records 17 focused checks, isolated HTTP parser/route checks, and root desktop QA for 2001, exactly 2000, and zero adopted observations. Missing totals stay unknown.
 
 The audit passed 33 existing client checks and 19 service checks in two non-overlapping groups. Those are baseline checks, not evidence that the findings are fixed. The isolated HTTP probe exercised real routes; the standard contract harness was not rerun because it can invoke automatic pricing fetch and cache writes in the source checkout.
 

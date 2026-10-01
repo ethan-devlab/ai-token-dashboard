@@ -45,7 +45,7 @@ Proof: integration-retained-page-fixed-960.png shows retained 289 input Tokens, 
 | Item | Current evidence and boundary | Next decision or check |
 | --- | --- | --- |
 | Cross-process file race | Settings and credential digests catch observed external changes before rename. They cannot exclude a writer in the final check-to-rename interval. | Decide whether a further lifecycle change is needed; do not claim a shared CLI lock. |
-| Bounded Session detail | Current detail keeps at most 2000 accepted observations and returns observationLimit. The original audit identified no explicit total/truncation flag. | Decide whether to add count/truncation only or paginated observations. Keep response bounds. |
+| Bounded Session detail | Q27 is complete in the subsequent [detail checkpoint](detail-completeness-validation.md): exact selected count, returned count, limit, and truncation status. Full Token/cost totals remain intact. | Observation pagination and a table are outside the confirmed count/prompt scope. |
 | Historical pricing | Current calculations use the current selected pricing basis, with revision guards and partial-cost labels. This is intentional existing behavior. | Decide whether a historical rate ledger is needed. |
 | Browser synchronization | Watcher updates server snapshots. Browser data stays manual; page/detail/export conflicts reload a complete projection. | A future automatic sync policy needs a separate decision. |
 | Native file download/unload | The prior in-app download completion event timed out; current export body/headers/Blob flow are covered. Unload-warning UI was not verified. | Check on a browser that exposes native completion. Do not repeat the unchanged in-app failure. |

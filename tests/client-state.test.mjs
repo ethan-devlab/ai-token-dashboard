@@ -381,7 +381,7 @@ test('drawer diagnostics retain unknown counts and distinguish explicit measured
   const missing = renderSessionDrawer({ detail: {}, status: 'ready', timezone: 'UTC' });
   assert.match(missing, /JSONL lines —/);
   assert.match(missing, /— accepted observations/);
-  const measured = renderSessionDrawer({ detail: { diagnostics: { lineCount: 0, invalidLines: 0, resets: 0 }, observations: [] }, status: 'ready', timezone: 'UTC' });
+  const measured = renderSessionDrawer({ detail: { diagnostics: { lineCount: 0, invalidLines: 0, resets: 0 }, observations: [], observationCount: 0, returnedObservationCount: 0, observationLimit: 2000, observationsTruncated: false }, status: 'ready', timezone: 'UTC' });
   assert.match(measured, /JSONL lines 0/);
   assert.match(measured, /0 accepted observations/);
 });

@@ -148,7 +148,10 @@ export function buildSessionsPayload(summary, request, scan, options = {}) { con
 export function buildSessionDetail(summary, request, sessionKey, options = {}) {
   const session = filteredSessions(summary, request, options).find((item) => item.sessionKey === sessionKey);
   if (!session) return null;
-  return { ...sessionSummary(session, options), lineCount: session.lineCount, observations: session.usageEvents.slice(0, 2_000).map((event) => ({ timestamp: event.timestamp, timestampEstimated: event.timestampEstimated, model: event.model, source: event.source, sequence: event.sequence, usage: event.usage })), observationLimit: 2_000, pricingDiagnostics: session.cost.pricingCoverage };
+  const observationLimit = 2_000;
+  const observationCount = session.usageEvents.length;
+  const observations = session.usageEvents.slice(0, observationLimit).map((event) => ({ timestamp: event.timestamp, timestampEstimated: event.timestampEstimated, model: event.model, source: event.source, sequence: event.sequence, usage: event.usage }));
+  return { ...sessionSummary(session, options), lineCount: session.lineCount, observations, observationLimit, observationCount, returnedObservationCount: observations.length, observationsTruncated: observations.length < observationCount, pricingDiagnostics: session.cost.pricingCoverage };
 }
 function csv(value) { const safe = /^[=+\-@]/.test(String(value)) ? `'${value}` : String(value ?? ''); return `"${safe.replaceAll('"', '""')}"`; }
 export function buildExport(format, dashboard) {
