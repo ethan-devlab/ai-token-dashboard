@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts, Q28–Q33 pricing archives, native Safari download/settings-leave acceptance, FA15 request ownership and Q34–Q39 settings/credential ownership complete. [functional-status-inventory.md](functional-status-inventory.md) records the current remaining scope for user decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5, cross-phase FA24 correction, Q27 detail counts, Q28–Q33 archives, native Safari/settings-leave acceptance, FA15 request ownership, Q34–Q39 settings/credentials, Q40–Q50 query/native streaming and Q51–Q60 pricing ownership/recovery are delivered. [functional-status-inventory.md](functional-status-inventory.md) records remaining scope at source checkpoint 59e30b6 for user decision.
 
 ## Confirmed scope
 
@@ -146,7 +146,7 @@ Q28–Q33 are implemented. Current-basis estimates now have complete provider-se
 
 ## Remaining functional inventory checkpoint
 
-[functional-status-inventory.md](functional-status-inventory.md) reconciles all 24 issue IDs and completed follow-up checkpoints at source c520717. This documentation-only pass corrects stale disposition text; it does not repeat prior tests or change product behavior. The remaining boundaries include final external-writer races, pricing metadata/cache ownership, buffered export resource limits, non-atomic filesystem scans and uncertified rollout. Validation gaps and optional product scope are listed separately. The next choice is cross-process write policy, isolated storage-failure validation or large-data measurement; no mitigation is selected by this inventory.
+The first inventory at c520717 was committed as 83ba020. The user subsequently selected and completed settings, query/export and pricing ownership work. The current [inventory](functional-status-inventory.md) is reconciled through 59e30b6. It separates completed policies from non-atomic scan boundaries, remaining storage/live/platform validation and optional product changes. This documentation-only update does not rerun saved checks or authorize another implementation.
 
 ## Cross-process write decision checkpoint
 
@@ -160,11 +160,11 @@ Q34–Q39 are selected and delivered. [settings-ownership-validation.md](setting
 
 After a0ad92c, the user selected isolated query/export/pricing-list timing and memory measurements before choosing improvement targets. [performance-baseline.md](performance-baseline.md) and its raw evidence record 10000/50000/150000 observations, all four exports, the actual buffered 32 MiB rejection and 1–10000 verified archive versions. Product code is unchanged. Warm full projection and all-format export work dominate the measured latency; the archive list remains fast at the tested scale. The next user decisions are scope and accepted workload, followed by numeric resource targets and any required cache/export semantics. No optimization, resource SLA, new dependency or architecture is selected by this measurement checkpoint.
 
-Subsequent Q40–Q50 decisions select query/export optimization with aggressive local latency targets, normal RSS at most 512 MiB, uncapped native streamed downloads, one active slot, restart-from-start and bounded deadlines. [query-export-performance-plan.md](query-export-performance-plan.md) records complete implementation boundaries and focused acceptance. It supersedes the old 32 MiB rejection policy for the upcoming implementation; current product code remains capped until that phase is delivered. The baseline is historical, not silently reclassified as the new behavior.
+Subsequent Q40–Q50 decisions select query/export optimization with aggressive local latency targets, normal RSS at most 512 MiB, uncapped native streamed downloads, one active slot, restart-from-start and bounded deadlines. [query-export-performance-plan.md](query-export-performance-plan.md) records implementation boundaries and acceptance. The delivery below supersedes the old 32 MiB rejection policy; the baseline remains historical evidence.
 
 ## Query and native streamed export delivery
 
-Q40–Q50 are implemented. [The validation record](query-export-performance-validation.md) covers selective query work, bounded snapshot selection reuse, native prepared downloads, one active slot, transport deadlines, exact saved bytes and the selected local latency/RSS targets. The historical 32 MiB rejection and frontend Blob workflow are replaced. Pricing lifecycle ownership R02, storage failure V04, real logs and platform/rollout validation remain separate.
+Q40–Q50 are implemented. [The validation record](query-export-performance-validation.md) covers selective query work, bounded snapshot selection reuse, native prepared downloads, one active slot, transport deadlines, exact saved bytes and the selected local latency/RSS targets. The historical 32 MiB rejection and frontend Blob workflow are replaced. Subsequent Q51–Q60 delivery below closes R02 within the selected process scope. Storage failure V04, real logs and platform/rollout validation remain separate.
 
 ## Pricing ownership and recovery decisions
 
