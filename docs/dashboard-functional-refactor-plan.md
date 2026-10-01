@@ -147,3 +147,7 @@ Q28–Q33 are implemented. Current-basis estimates now have complete provider-se
 ## Remaining functional inventory checkpoint
 
 [functional-status-inventory.md](functional-status-inventory.md) reconciles all 24 issue IDs and completed follow-up checkpoints at source c520717. This documentation-only pass corrects stale disposition text; it does not repeat prior tests or change product behavior. The remaining boundaries include final external-writer races, pricing metadata/cache ownership, buffered export resource limits, non-atomic filesystem scans and uncertified rollout. Validation gaps and optional product scope are listed separately. The next choice is cross-process write policy, isolated storage-failure validation or large-data measurement; no mitigation is selected by this inventory.
+
+## Cross-process write decision checkpoint
+
+The user selected R01 after 83ba020. [cross-process-write-review.md](cross-process-write-review.md) records actual shipped write paths with a controlled child-process interleaving. External changes before the final read are preserved; changes after it are overwritten for settings and Claude credentials. This is a diagnostic baseline, not a passing correctness gate. Q34 credential ownership and Q35 settings ownership require separate decisions before product changes. Pricing lifecycle, production restart and live CLI interaction are outside this checkpoint.
