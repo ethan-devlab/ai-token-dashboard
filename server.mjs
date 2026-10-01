@@ -24,8 +24,8 @@ const CONFIG = readRuntimeConfig({ localConfig });
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
 const pricingServices = Object.freeze({
-  codex: createPricingRefreshService({ baseline: PRICING, cachePath: path.join(APP_DIR, '.pricing-cache.json') }),
-  claude: createClaudePricingRefreshService({ baseline: CLAUDE_PRICING, cachePath: path.join(APP_DIR, '.claude-pricing-cache.json') }),
+  codex: createPricingRefreshService({ baseline: PRICING, cachePath: path.join(APP_DIR, '.pricing-cache.json'), archiveDirectory: path.join(APP_DIR, '.pricing-archive', 'codex') }),
+  claude: createClaudePricingRefreshService({ baseline: CLAUDE_PRICING, cachePath: path.join(APP_DIR, '.claude-pricing-cache.json'), archiveDirectory: path.join(APP_DIR, '.pricing-archive', 'claude') }),
 });
 await Promise.all(Object.values(pricingServices).map((service) => service.initialize()));
 const providerRegistry = createProviderRegistry({ config: CONFIG, pricingServices });
@@ -148,6 +148,16 @@ const server = http.createServer(async (req, res) => {
     if (!['GET', 'POST'].includes(req.method || '')) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
     const requestUrl = new URL(req.url || '/', `http://${CONFIG.host}:${CONFIG.port}`);
     if (req.method === 'GET' && requestUrl.pathname === '/api/providers') { json(res, 200, await providerRegistry.list(), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/pricing/versions') {
+      const service = pricingServices[providerId(requestUrl)];
+      const offset = parseInteger(requestUrl.searchParams.get('offset'), 'offset', 0, 1_000_000);
+      const limit = parseInteger(requestUrl.searchParams.get('limit'), 'limit', 100, 100, 1);
+      json(res, 200, { ...await service.archive.list({ offset, limit }), current: service.status().archive }, id); return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname.startsWith('/api/pricing/versions/')) {
+      const service = pricingServices[providerId(requestUrl)];
+      json(res, 200, await service.archive.get(requestUrl.pathname.slice('/api/pricing/versions/'.length)), id); return;
+    }
     if (req.method === 'GET' && requestUrl.pathname === '/api/account-usage') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'ACCOUNT_USAGE_DISABLED', 'Account usage is disabled in remote mode.'); json(res, 200, await accountUsageService.get(providerId(requestUrl)), id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/account-usage/refresh') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'ACCOUNT_USAGE_DISABLED', 'Account usage is disabled in remote mode.'); verifyPost(req); json(res, 200, await accountUsageService.get(providerId(requestUrl), { refresh: true }), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/summary') { const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); json(res, 200, v1Summary(provider, cached.summary, cached.metadata, requestContext(requestUrl)), id); return; }

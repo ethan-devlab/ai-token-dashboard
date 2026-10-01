@@ -3,6 +3,13 @@ export const LOCALE_PREFERENCE_KEY = 'codex-token-dashboard:locale:v1';
 
 const dictionaries = {
   en: {
+    'pricing.currentBasis': 'Estimate with the current retained basis; not historical billing',
+    'pricing.revision': 'Basis {revision}',
+    'pricing.archive.view': 'View archived basis',
+    'pricing.archive.created': 'First archived {date}',
+    'pricing.archive.unknown': 'Archive unavailable. Costs are unknown; Token analysis remains available. Retry the price update after storage recovers.',
+    'pricing.archive.retained': 'Archive write failed. The former archived rates remain in use.',
+    'status.unknown': 'Cost unknown',
     'v2.detail.selectedObservations': '{count} accepted observations in the selected range and filters',
     'v2.detail.returnedObservations': 'Detail response contains {count} observations (limit {limit})',
     'v2.detail.truncatedObservations': 'The observation response is truncated. Token and cost totals include every accepted observation in the selected range and filters.',
@@ -53,6 +60,13 @@ const dictionaries = {
     'price.unavailable': 'Unavailable', 'update.disabled': 'Update checks are disabled. Set UPDATE_REPOSITORY to owner/repo to enable them.', 'update.checking': 'Checking GitHub Releases…', 'update.current': 'You are using the current release ({version}).', 'update.available': 'Version {version} is available. Download it manually, verify SHA-256, then replace the local files after closing this dashboard.', 'update.unavailable.network': 'Could not reach GitHub Releases. The dashboard remains local and usable.', 'update.unavailable.not-found': 'The configured GitHub release repository was not found.', 'update.unavailable.rate-limit': 'GitHub rate limit reached. Try again later.', 'update.unavailable.invalid-release': 'GitHub returned an invalid stable release.', 'update.unavailable.invalid-version': 'Could not compare the release version safely.', 'update.download': 'Download {name}', 'update.verify': 'Verify SHA-256: {sha256}',
   },
   'zh-Hant': {
+    'pricing.currentBasis': '依目前保留的計價依據估算；不是歷史帳單',
+    'pricing.revision': '計價版本 {revision}',
+    'pricing.archive.view': '查看封存依據',
+    'pricing.archive.created': '首次封存：{date}',
+    'pricing.archive.unknown': '封存無法使用，費用未知；Token 分析仍可用。儲存恢復後，請重試更新價格。',
+    'pricing.archive.retained': '封存寫入失敗；仍使用先前已封存費率。',
+    'status.unknown': '費用未知',
     'v2.detail.selectedObservations': '所選範圍與篩選條件內共 {count} 筆已採納觀測值',
     'v2.detail.returnedObservations': '詳細回應包含 {count} 筆觀測值（上限 {limit}）',
     'v2.detail.truncatedObservations': '觀測值回應已截斷；Token 與費用仍涵蓋所選範圍及篩選條件內的全部已採納觀測值。',

@@ -65,7 +65,7 @@ These are reproduced behaviors with unresolved intended semantics, not additiona
 
 Decisions after the initial audit: retain FA22's known-cost classification with visible partial-pricing context, rather than the proposed indeterminate state. Use cumulative priority per model for FA10; do not describe unmatched turns as proven covered. FA18 deduplication needs identical file content or explicit event identity within the selected execution scope; Session ID alone is insufficient. These decisions are recorded in the refactor plan; the initial findings are not yet fixed.
 
-Further dependent decisions: model filtering by matching observations versus complete Sessions; prior calendar period versus equal-duration comparison; exports matching displayed snapshot versus explicitly exporting latest; automatic watcher-to-browser synchronization; and pricing using current published rates versus a historical rate ledger. Current comparisons use equal elapsed duration. Current pricing refresh replaces rates rather than retaining a rate history. These facts alone do not establish bugs.
+The original dependent decisions included model filtering, calendar comparisons, export snapshot identity, browser synchronization and current prices versus a historical ledger. The staged decisions now define observation filtering, calendar alignment, displayed projection exports and manual browser updates. Q28–Q33 retain current-basis estimation with complete read-only archives; a historical effective-rate ledger remains separate scope. See [pricing-archive-validation.md](pricing-archive-validation.md). The initial pricing/comparison behavior alone did not establish bugs.
 
 ## Candidate risks and verification gaps
 

@@ -57,6 +57,8 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 | `GET /api/summary` | Deprecated v1 compatibility response. |
 | `GET /api/update` | User-triggered GitHub latest stable release check. |
 | `POST /api/pricing/refresh` | Same-origin manual refresh for the selected provider; not limited by the daily automatic cadence. |
+| `GET /api/pricing/versions` | Provider-scoped read-only archive list; limit 1–100 and offset 0–1,000,000. |
+| `GET /api/pricing/versions/:revision` | Verified complete pricing basis and observation metadata for one revision. |
 | `GET /api/settings` | Loopback-only current `.env` values and revision for the settings page. |
 | `POST /api/settings` | Loopback-only, same-origin, bounded JSON save with quoted `If-Match` revision; missing version returns 428, stale version returns 409; restart required. |
 
@@ -71,6 +73,8 @@ Snapshots and the incremental file index are memory-only. Paths are redacted ser
 The **Login plan usage** panel is available only on a loopback bind. The local server reads the existing Codex or Claude CLI credential file and sends only the provider-required authorization and account context to that provider's fixed official usage endpoint. Tokens, account identifiers, email addresses, and credential paths never enter browser responses, diagnostics, or logs. Results are cached for 60 seconds; **Check again** bypasses that cache. Claude OAuth credentials are refreshed and atomically rotated when required. This is a best-effort service response: unsupported or unavailable provider responses do not affect local JSONL analytics.
 
 Codex and Claude keep independent public-price caches and refresh state. On first use, each provider checks its official pricing Markdown at most once per UTC day; **Update model prices** can refresh the selected provider at any time. A failed or invalid fetch keeps the previous valid prices. The ignored `.pricing-cache.json` and `.claude-pricing-cache.json` contain only public prices and refresh timestamps.
+
+Costs use the current retained basis, including for historical events. Each distinct complete basis is kept under ignored `.pricing-archive/<provider>/`, without automatic deletion or an old-version switcher. JSON/Markdown exports include its rules, rates, multipliers and revision; CSV references that revision and reports archive availability. The price area links to the current verified archive and states its actual first archive time. Existing cache/bundled rates are archived on enablement; earlier unsaved versions cannot be reconstructed. New rates activate only after archive success. If the first archive fails, Token analysis remains available and cost is unknown until a valid basis can be archived. Updating prices can recover the retained basis even if the upstream request fails. This archive records estimation inputs, not official historical bills.
 
 Claude costs are Anthropic API-equivalent token estimates, not Claude Pro or Max subscription charges. The estimate includes base input, cache read, 5-minute and 1-hour cache writes, and output when an official rule matches. It excludes web search, code execution, and other non-token tool fees. Unknown models or modifiers remain visible as partial coverage. Neither provider sends prompts, responses, tool results, CWD, or usage data to OpenAI or Anthropic.
 

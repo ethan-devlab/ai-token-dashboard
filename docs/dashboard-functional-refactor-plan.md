@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts and truncation prompts complete. Remaining scope awaits user decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts and Q28–Q33 pricing archives complete. Remaining scope awaits user decision.
 
 ## Confirmed scope
 
@@ -131,3 +131,7 @@ The audit passed 33 existing client checks and 19 service checks in two non-over
 For each implementation, turn only relevant audit cases into regression expectations after the change. Do not keep probe exit-zero as a correctness gate. Avoid repeated broad suites; run shared parser/projection coverage when cross-module risk requires it. Use a fully isolated fixture HTTP server for stateful failures and external fake responses. Perform supported desktop runtime checks directly. Maintain a clear Windows-local reproduction command when a platform check cannot run here.
 
 Phase completion requires observable behavior, aligned docs, staged intended files, successful commit, and clean unrelated-change handling. Windows runtime, Node 18/22/24, real populated provider-log variants, browser download/unload UI, live upstream integration, and release validation remain explicit follow-ups. No push or release is authorized by this plan.
+
+## Pricing archive checkpoint
+
+Q28–Q33 are implemented. Current-basis estimates now have complete provider-separated archives, a shared calculation revision, read-only version routes, complete JSON/Markdown basis metadata and desktop status. New prices activate after archive success. Initial unavailable archives leave Tokens usable and costs unknown; verified former rates remain after a candidate failure. [pricing-archive-validation.md](pricing-archive-validation.md) records 79 focused checks, two isolated HTTP fixtures and root desktop QA. Historical effective-rate inference, version switching, automatic deletion and live certification remain outside this scope.

@@ -3,7 +3,7 @@ import { t } from './i18n.mjs';
 
 function usageFor(session) { return session.usage || session.filteredUsage || {}; }
 function costFor(session) { return session.cost || session.filteredCost || {}; }
-function statusFor(session) { const status = session.usageQuality?.incomplete || session.usageQuality?.possibleDuplicate || session.usageQuality?.cacheWriteInconsistent ? 'quality' : session.pricingStatus || session.status || (costFor(session).partial ? 'partial' : 'complete'); return { label: t(`status.${status}`), kind: ['unpriced', 'partial', 'quality'].includes(status) ? 'warning' : 'good' }; }
+function statusFor(session) { const status = session.usageQuality?.incomplete || session.usageQuality?.possibleDuplicate || session.usageQuality?.cacheWriteInconsistent ? 'quality' : session.pricingStatus || session.status || (costFor(session).partial ? 'partial' : 'complete'); return { label: t(`status.${status}`), kind: ['unpriced', 'partial', 'quality', 'unknown'].includes(status) ? 'warning' : 'good' }; }
 function costText(cost) { return formatCost(cost.total, cost.partial || cost.minimumKnown || cost.pricingCoverage?.partial); }
 
 function tokenCell(value, unit) {

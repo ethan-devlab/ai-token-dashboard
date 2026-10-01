@@ -1,5 +1,8 @@
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createPricing } from './pricing.mjs';
+import { createPricingArchive } from './pricing-archive.mjs';
+import { pricingRevision } from './pricing-basis.mjs';
+import { randomUUID } from 'node:crypto';
 
 export const PRICING_DOCUMENT_URL = 'https://developers.openai.com/api/docs/pricing.md';
 const PRICING_PAGE_URL = 'https://developers.openai.com/api/docs/pricing';
@@ -106,8 +109,13 @@ function errorCode(error) {
   return 'network';
 }
 
-export function createPricingRefreshService({ baseline, cachePath, fetchImpl = fetch, now = () => new Date(), timeoutMs = 10_000, documentUrl = PRICING_DOCUMENT_URL, sourceUrl = PRICING_PAGE_URL, parseDocument = parseStandardPricingMarkdown, userAgent = 'codex-token-dashboard/2.0' }) {
+export function createPricingRefreshService({ baseline, cachePath, archiveDirectory = `${cachePath}.archive`, archiveStore, fetchImpl = fetch, now = () => new Date(), timeoutMs = 10_000, documentUrl = PRICING_DOCUMENT_URL, sourceUrl = PRICING_PAGE_URL, parseDocument = parseStandardPricingMarkdown, userAgent = 'codex-token-dashboard/2.0' }) {
   let pricing = baseline;
+  const archive = archiveStore || createPricingArchive({ directory: archiveDirectory, provider: baseline.provider || 'codex', now });
+  let archived = null;
+  let archiveError = null;
+  let pricingOrigin = 'bundled';
+  let currentView; let viewPricing; let viewArchive;
   let initialized = false;
   let initializePromise = null;
   let refreshPromise = null;
@@ -118,7 +126,7 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
   let persistenceError = false;
 
   async function persist() {
-    const temporary = `${cachePath}.${process.pid}.tmp`;
+    const temporary = `${cachePath}.${randomUUID()}.tmp`;
     const body = JSON.stringify({
       version: 1,
       pricing: serialisablePricing(pricing),
@@ -128,7 +136,7 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
       lastError,
     }, null, 2);
     try {
-      await writeFile(temporary, `${body}\n`, { encoding: 'utf8', mode: 0o600 });
+      await writeFile(temporary, `${body}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
       await rename(temporary, cachePath);
       persistenceError = false;
     } catch {
@@ -145,8 +153,9 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
         const stored = JSON.parse(await readFile(cachePath, 'utf8'));
         if (stored?.version !== 1 || !stored.pricing) throw new Error('Unsupported pricing cache.');
         const cached = createPricing(stored.pricing);
-        if (cached.source !== sourceUrl) throw new Error('Unexpected pricing source.');
+        if (cached.source !== sourceUrl || (cached.provider || 'codex') !== (baseline.provider || 'codex')) throw new Error('Unexpected pricing source.');
         pricing = cached;
+        pricingOrigin = 'cache';
         lastAutomaticAttemptDate = typeof stored.lastAutomaticAttemptDate === 'string' ? stored.lastAutomaticAttemptDate : null;
         lastCheckedAt = typeof stored.lastCheckedAt === 'string' ? stored.lastCheckedAt : cached.checkedAt || null;
         lastSuccessfulAt = typeof stored.lastSuccessfulAt === 'string' ? stored.lastSuccessfulAt : cached.checkedAt || null;
@@ -154,6 +163,8 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
       } catch (error) {
         if (error?.code !== 'ENOENT') persistenceError = true;
       }
+      try { archived = await archive.save(pricing, { origin: pricingOrigin, checkedAt: pricing.checkedAt || null }); archiveError = null; }
+      catch { archiveError = 'archive'; try { archived = await archive.get(pricingRevision(pricing)); } catch { archived = null; } }
       initialized = true;
     })();
     try { await initializePromise; } finally { initializePromise = null; }
@@ -169,6 +180,7 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
       lastSuccessfulAt,
       lastError,
       persistenceError,
+      archive: { available: Boolean(archived), revision: pricingRevision(pricing), firstArchivedAt: archived?.firstArchivedAt || null, lastCheckedAt: archived?.lastCheckedAt || null, origin: archived?.origin || null, error: archiveError },
     };
   }
 
@@ -187,6 +199,11 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
+        // Storage recovery for the retained basis does not need a successful upstream request.
+        if (!archived) {
+          try { archived = await archive.save(pricing, { origin: pricingOrigin, checkedAt: pricing.checkedAt || null }); archiveError = null; }
+          catch { archiveError = 'archive'; }
+        }
         const response = await fetchImpl(documentUrl, {
           headers: { Accept: 'text/markdown', 'User-Agent': userAgent },
           signal: controller.signal,
@@ -200,7 +217,13 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
         const fetchedRates = parseDocument(markdown);
         const next = refreshedPricing(pricing, fetchedRates, checkedAt, sourceUrl);
         const changedModels = Object.keys(fetchedRates).filter((id) => JSON.stringify(pricing.rates[id]) !== JSON.stringify(next.rates[id])).sort();
+        let nextArchive;
+        try { nextArchive = await archive.save(next, { origin: 'refresh', checkedAt }); }
+        catch { archiveError = 'archive'; throw new PricingRefreshError('archive', 'Pricing archive failed; existing rates were retained.'); }
         pricing = next;
+        pricingOrigin = 'refresh';
+        archived = nextArchive;
+        archiveError = null;
         lastSuccessfulAt = checkedAt;
         lastError = null;
         await persist();
@@ -220,7 +243,12 @@ export function createPricingRefreshService({ baseline, cachePath, fetchImpl = f
 
   return Object.freeze({
     initialize,
-    current: () => pricing,
+    current: () => {
+      const info = status().archive; const state = JSON.stringify(info);
+      if (viewPricing !== pricing || viewArchive !== state) { currentView = { ...pricing, revision: pricingRevision(pricing), archive: info }; viewPricing = pricing; viewArchive = state; }
+      return currentView;
+    },
+    archive,
     refresh,
     status,
   });

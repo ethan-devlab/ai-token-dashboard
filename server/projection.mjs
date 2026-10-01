@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { pricingRevision as basisRevision } from './pricing-basis.mjs';
 
 const epoch = randomUUID();
 
@@ -10,9 +11,9 @@ export function projectionIdentity(summary, request, scan) {
   const pricing = summary.pricing;
   const query = { range: request.range, q: request.q, sort: request.sort, filters: Object.fromEntries(Object.entries(request.filters).sort(([a], [b]) => a.localeCompare(b)).map(([key, values]) => [key, [...values].sort()])) };
   // A check-only pricing refresh does not change the calculation basis.
-  const pricingRevision = digest({ provider: pricing.provider, updatedAt: pricing.updatedAt, source: pricing.source, currency: pricing.currency, unitTokens: pricing.unitTokens, rates: pricing.rates, rules: pricing.rules, modifiers: pricing.modifiers, costDisclaimer: pricing.costDisclaimer });
+  const pricingRevision = basisRevision(pricing);
   // Versions restart at one after a server restart. The epoch prevents false matches.
-  const identity = { epoch, provider: summary.provider || 'codex', snapshotVersion: scan.snapshotVersion, pricingRevision, query, at: request.nowMs };
+  const identity = { epoch, provider: summary.provider || 'codex', snapshotVersion: scan.snapshotVersion, pricingRevision, pricingAvailable: pricing.archive?.available !== false, query, at: request.nowMs };
   return { ...identity, key: digest(identity) };
 }
 

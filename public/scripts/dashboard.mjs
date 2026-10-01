@@ -79,7 +79,7 @@ function renderBudgets(data) {
     const name = document.createElement('strong'); name.textContent = budget.name || budget.scope;
     const value = document.createElement('span');
     let note;
-    if (!measurement || measurement.value == null) value.textContent = t('v2.budget.unsupported');
+    if (!measurement || measurement.value == null) value.textContent = t(budget.scope === 'cost' && currentCost.available === false ? 'status.unknown' : 'v2.budget.unsupported');
     else {
       const status = budgetState(budget, measurement);
       const tokenBudget = budget.scope.includes('token');
@@ -142,10 +142,20 @@ function renderMetadata(data) {
   $('info').textContent = items.join(' · ');
   const watcher = data.watcher || scan.watcher || {}; const status = ['watching', 'starting', 'failed', 'unavailable', 'disabled', 'closed'].includes(watcher.status) ? watcher.status : 'manual'; $('watcherText').textContent = t(`v2.watcher.${status}`, { duration: watcher.debounceMs ?? '—' });
 }
-function renderQuality(data) { const quality = data.quality || {}; const scan = quality.scan || {}; const range = quality.range || {}; const messages = Array.isArray(quality.messages) ? quality.messages : [[scan.failedFiles, t('quality.files', { count: scan.failedFiles })], [scan.truncated, t('quality.truncated', { count: scan.maxFiles })], [scan.refreshFailure, t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${scan.refreshFailure?.reason || 'refresh-failed'}`), count: scan.refreshFailure?.failedFiles || 0 })], [scan.invalidLines, t('quality.lines', { count: scan.invalidLines })], [range.estimatedTimestamps, t('quality.estimated', { count: range.estimatedTimestamps })], [range.pricingCoverage?.partial, t('quality.partial')]].filter(([active]) => active).map(([, message]) => message).concat(usageWarnings(range.reconciliation)); const host = $('quality'); host.hidden = !messages.length; host.dataset.state = quality.severity === 'error' ? 'error' : 'warning'; host.textContent = messages.join(' · '); }
+function renderQuality(data) { const quality = data.quality || {}; const scan = quality.scan || {}; const range = quality.range || {}; const messages = Array.isArray(quality.messages) ? quality.messages : [[scan.failedFiles, t('quality.files', { count: scan.failedFiles })], [scan.truncated, t('quality.truncated', { count: scan.maxFiles })], [scan.refreshFailure, t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${scan.refreshFailure?.reason || 'refresh-failed'}`), count: scan.refreshFailure?.failedFiles || 0 })], [scan.invalidLines, t('quality.lines', { count: scan.invalidLines })], [range.estimatedTimestamps, t('quality.estimated', { count: range.estimatedTimestamps })], [data.pricing?.archive?.available === false, t('pricing.archive.unknown')], [range.pricingCoverage?.partial && range.pricingCoverage?.available !== false, t('quality.partial')]].filter(([active]) => active).map(([, message]) => message).concat(usageWarnings(range.reconciliation)); const host = $('quality'); host.hidden = !messages.length; host.dataset.state = quality.severity === 'error' ? 'error' : 'warning'; host.textContent = messages.join(' · '); }
 function renderPricing(data) {
   const pricing = data.pricing || {}; const rates = pricing.rates; const refresh = pricing.refresh || {}; const checkedAt = pricing.checkedAt || refresh.lastSuccessfulAt;
   $('pricingStatus').textContent = checkedAt ? t('pricing.checked', { date: formatDate(checkedAt) }) : t('pricing.bundled', { date: pricing.updatedAt || '—' });
+  $('pricingStatus').append(document.createTextNode(` · ${t('pricing.currentBasis')}`));
+  if (/^[a-f0-9]{64}$/.test(pricing.revision || '')) {
+    $('pricingStatus').append(document.createTextNode(` · ${t('pricing.revision', { revision: pricing.revision.slice(0, 12) })}`));
+    if (pricing.archive?.available) {
+      const link = document.createElement('a'); link.href = `/api/pricing/versions/${pricing.revision}?provider=${state.provider}`; link.textContent = t('pricing.archive.view'); link.title = pricing.revision;
+      $('pricingStatus').append(document.createTextNode(' · '), link, document.createTextNode(` · ${t('pricing.archive.created', { date: formatDate(pricing.archive.firstArchivedAt) })}`));
+    }
+  }
+  if (pricing.archive?.available === false) $('pricingStatus').append(document.createTextNode(` · ${t('pricing.archive.unknown')}`));
+  else if (pricing.archive?.error) $('pricingStatus').append(document.createTextNode(` · ${t('pricing.archive.retained')}`));
   const claude = state.provider === 'claude'; $('pricingSource').href = claude ? 'https://platform.claude.com/docs/en/about-claude/pricing' : 'https://developers.openai.com/api/docs/pricing'; $('pricingSource').textContent = t(claude ? 'pricing.source.claude' : 'pricing.source'); $('pricingDisclaimer').hidden = !claude; $('pricingDisclaimer').textContent = claude ? t('provider.claude.disclaimer') : '';
   const host = $('pricingGrid'); if (!rates || !Object.keys(rates).length) { host.textContent = t('price.unavailable'); return; }
   host.replaceChildren(...Object.entries(rates).map(([model, rate]) => {
@@ -332,7 +342,13 @@ async function refreshPricing() {
     state.source.displayedQuery = structuredClone(state.query);
     const changed = result.payload.pricingUpdate?.changedModels?.length || 0;
     showNotice(changed ? t('pricing.updated', { count: integerFormat.format(changed) }) : t('pricing.unchanged'));
-  } catch (error) { if (error?.name !== 'AbortError' && generation === projectionGeneration) showNotice(t('pricing.update.failed')); }
+  } catch (error) {
+    if (error?.name !== 'AbortError' && generation === projectionGeneration) {
+      state.source.status = 'ready'; setButtonBusy($('refreshPricing'), false, 'action.refreshing');
+      const reloadGeneration = projectionGeneration + 1; await load();
+      if (projectionGeneration === reloadGeneration) showNotice(t('pricing.update.failed'));
+    }
+  }
   finally { if (generation === projectionGeneration) { state.source.status = 'ready'; setButtonBusy($('refreshPricing'), false, 'action.refreshing'); render(); } }
 }
 async function exportData() {

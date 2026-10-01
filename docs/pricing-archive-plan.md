@@ -1,6 +1,6 @@
 # Pricing basis archive plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Q28–Q33 confirmed; implementation has not started.
+Date: 2026-10-01 (Asia/Taipei). Status: Q28–Q33 implemented and validated. See [pricing-archive-validation.md](pricing-archive-validation.md).
 
 ## Decisions
 
@@ -15,7 +15,7 @@ Date: 2026-10-01 (Asia/Taipei). Status: Q28–Q33 confirmed; implementation has 
 
 Archive the current basis on first enablement, whether it came from bundled rates or a valid existing cache. Record actual first archive time and origin. Do not backdate archive creation to a model effective date or a previous check. Versions that were not previously saved cannot be reconstructed as trustworthy history.
 
-## Current evidence
+## Baseline evidence at 3d08be6
 
 - server/pricing-refresh.mjs replaces same-model rates, preserves old rule effectiveFrom values, assigns an observation date to newly discovered models, and keeps one version-1 cache. Cached serialization includes rules and modifiers.
 - server/pricing.mjs matches rules against event timestamps. Existing effectiveFrom values are not proof of a complete official historical rate ledger.

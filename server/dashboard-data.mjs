@@ -3,6 +3,7 @@ import { bucketFor, comparisonRanges, nextBucketFor } from './timezone.mjs';
 import { matchPricingRule } from './pricing.mjs';
 import { addUsage, USAGE_KEYS, zeroUsage } from './usage.mjs';
 import { projectionIdentity } from './projection.mjs';
+import { pricingBasis, pricingRevision } from './pricing-basis.mjs';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -22,12 +23,14 @@ function modifierState(pricing, event) {
 
 export function calculateCost(pricing, events) {
   const cost = { total: 0, input: 0, cached: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, pricedTokens: 0, billableTokens: 0, unpricedTokens: 0, unknownModels: new Set(), unavailableComponents: new Set(), unknownModifiers: new Set() };
+  cost.available = pricing.archive?.available !== false;
   for (const event of events) {
     const eventUsage = event.usage || zeroUsage();
     const detailedCacheWrite = (eventUsage.cacheWrite5mTokens || 0) + (eventUsage.cacheWrite1hTokens || 0);
     const genericCacheWrite = Math.max(0, (eventUsage.cacheWriteTokens || 0) - detailedCacheWrite);
     const billable = eventUsage.uncachedInputTokens + eventUsage.cachedInputTokens + genericCacheWrite + detailedCacheWrite + eventUsage.outputTokens;
     cost.billableTokens += billable;
+    if (!cost.available) { cost.unpricedTokens += billable; continue; }
     const matched = matchPricingRule(pricing, event.model, event.timestamp);
     if (!matched) { cost.unpricedTokens += billable; cost.unknownModels.add(event.model || 'unknown'); continue; }
     const rate = matched.rates;
@@ -43,13 +46,14 @@ export function calculateCost(pricing, events) {
       if (name === 'cacheWrite5m' || name === 'cacheWrite1h') cost.cacheWrite += amount;
     }
   }
+  if (!cost.available) for (const key of ['total', 'input', 'cached', 'cacheWrite', 'cacheWrite5m', 'cacheWrite1h', 'output']) cost[key] = null;
   return cost;
 }
 function serialiseCost(cost) {
   const unknownModels = [...cost.unknownModels].sort();
   const unavailableComponents = [...cost.unavailableComponents].sort();
   const unknownModifiers = [...cost.unknownModifiers].sort();
-  return { ...cost, unknownModels, unavailableComponents, unknownModifiers, pricingCoverage: { billableTokens: cost.billableTokens, pricedTokens: cost.pricedTokens, unpricedTokens: cost.unpricedTokens, ratio: cost.billableTokens ? cost.pricedTokens / cost.billableTokens : 1, unknownModels, unavailableComponents, unknownModifiers, partial: cost.unpricedTokens > 0 || unknownModifiers.length > 0 } };
+  return { ...cost, unknownModels, unavailableComponents, unknownModifiers, pricingCoverage: { available: cost.available, billableTokens: cost.billableTokens, pricedTokens: cost.pricedTokens, unpricedTokens: cost.unpricedTokens, ratio: cost.available ? cost.billableTokens ? cost.pricedTokens / cost.billableTokens : 1 : null, unknownModels, unavailableComponents, unknownModifiers, partial: !cost.available || cost.unpricedTokens > 0 || unknownModifiers.length > 0 } };
 }
 function inRange(event, range) {
   const value = Date.parse(event.timestamp);
@@ -77,7 +81,7 @@ function filteredSessions(summary, request, options) {
     const lastTimestamp = usageEvents.reduce((latest, event) => !latest || Date.parse(event.timestamp) > Date.parse(latest) ? event.timestamp : latest, null);
     const models = [...new Set(usageEvents.map((event) => event.model || 'unknown'))].sort();
     const hasRelevantObservation = (session.usageObservations || session.usageEvents).some((event) => inRange(event, request.range) && valuesMatch(request.filters.models, event.model));
-    return { ...session, usageEvents, usage, cost, models, hasRelevantObservation, usageQuality: usageQuality(session.reconciliation), lastTimestamp, pricingStatus: cost.pricingCoverage.partial ? 'partial' : 'priced', workspace: redact(session.cwd, options) };
+    return { ...session, usageEvents, usage, cost, models, hasRelevantObservation, usageQuality: usageQuality(session.reconciliation), lastTimestamp, pricingStatus: !cost.available ? 'unknown' : cost.pricingCoverage.partial ? 'partial' : 'priced', workspace: redact(session.cwd, options) };
   }).filter((session) => session.hasRelevantObservation).filter((session) => {
     const filters = request.filters;
     const text = [session.sessionId, session.model, ...session.models, session.workspace, session.originator, session.cliVersion, session.executionType].map(normalise).join(' ');
@@ -107,7 +111,7 @@ function trend(sessions, range) {
     const point = points.get(time) || { fromMs: time, toMs: nextBucketFor(time, unit, range.timezone), label: new Intl.DateTimeFormat('en-CA', { timeZone: range.timezone, month: unit === 'year' ? undefined : '2-digit', day: unit === 'hour' || unit === 'day' ? '2-digit' : undefined, year: unit === 'month' || unit === 'year' ? 'numeric' : undefined, hour: unit === 'hour' ? '2-digit' : undefined, hourCycle: 'h23', timeZoneName: unit === 'hour' ? 'shortOffset' : undefined }).format(new Date(time)), tokens: 0, cost: 0, partialCost: false };
     point.tokens += event.usage.totalTokens;
     const itemCost = calculateCost(session.__pricing, [event]);
-    point.cost += itemCost.total; point.partialCost ||= serialiseCost(itemCost).pricingCoverage.partial;
+    point.cost = itemCost.total == null || point.cost == null ? null : point.cost + itemCost.total; point.partialCost ||= serialiseCost(itemCost).pricingCoverage.partial;
     points.set(time, point);
   }
   return { points: [...points.values()].sort((left, right) => left.fromMs - right.fromMs), unit, partialCost: [...points.values()].some((point) => point.partialCost) };
@@ -117,7 +121,7 @@ function models(sessions) {
   for (const session of sessions) for (const event of session.usageEvents) {
     const entry = map.get(event.model || 'unknown') || { model: event.model || 'unknown', tokens: 0, cost: 0, partialCost: false };
     const cost = serialiseCost(calculateCost(session.__pricing, [event]));
-    entry.tokens += event.usage.totalTokens; entry.cost += cost.total; entry.partialCost ||= cost.pricingCoverage.partial; map.set(entry.model, entry);
+    entry.tokens += event.usage.totalTokens; entry.cost = cost.total == null || entry.cost == null ? null : entry.cost + cost.total; entry.partialCost ||= cost.pricingCoverage.partial; map.set(entry.model, entry);
   }
   return [...map.values()].sort((left, right) => right.tokens - left.tokens || left.model.localeCompare(right.model));
 }
@@ -127,7 +131,7 @@ function context(summary, request, scan, sessions) {
   const totals = sessions.reduce((sum, session) => addUsage(sum, session.usage), zeroUsage());
   const cost = serialiseCost(calculateCost(summary.pricing, events));
   const reconciliation = sessions.reduce((sum, session) => { for (const [key, value] of Object.entries(session.reconciliation || {})) sum[key] = (sum[key] || 0) + value; return sum; }, {});
-  return { provider: summary.provider || 'codex', generatedAt: summary.generatedAt, range: request.range, pricing: { provider: summary.pricing.provider || summary.provider || 'codex', updatedAt: summary.pricing.updatedAt, checkedAt: summary.pricing.checkedAt || null, source: summary.pricing.source, currency: summary.pricing.currency, unitTokens: summary.pricing.unitTokens, rates: summary.pricing.rates, costDisclaimer: summary.pricing.costDisclaimer || null, toolFeesExcluded: summary.pricing.provider === 'claude' }, totals, cost, pricingCoverage: cost.pricingCoverage, quality: { scan: { invalidLines: summary.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0), failedFiles: summary.errors.length, ...scan }, range: { estimatedTimestamps: events.filter((event) => event.timestampEstimated).length, reconciliation, usage: usageQuality(reconciliation), pricingCoverage: cost.pricingCoverage } }, scan, facets: facets(sessions) };
+  return { provider: summary.provider || 'codex', generatedAt: summary.generatedAt, range: request.range, pricing: { provider: summary.pricing.provider || summary.provider || 'codex', updatedAt: summary.pricing.updatedAt, checkedAt: summary.pricing.checkedAt || null, source: summary.pricing.source, currency: summary.pricing.currency, unitTokens: summary.pricing.unitTokens, rates: summary.pricing.rates, basis: pricingBasis(summary.pricing), revision: pricingRevision(summary.pricing), archive: summary.pricing.archive || null, policy: 'current-basis', costDisclaimer: summary.pricing.costDisclaimer || null, toolFeesExcluded: summary.pricing.provider === 'claude' }, totals, cost, pricingCoverage: cost.pricingCoverage, quality: { scan: { invalidLines: summary.sessions.reduce((sum, session) => sum + session.invalidLineCount, 0), failedFiles: summary.errors.length, ...scan }, range: { estimatedTimestamps: events.filter((event) => event.timestampEstimated).length, reconciliation, usage: usageQuality(reconciliation), pricingCoverage: cost.pricingCoverage } }, scan, facets: facets(sessions) };
 }
 function comparison(summary, request, options) {
   const periods = comparisonRanges(request.range, request.nowMs);
@@ -156,8 +160,8 @@ export function buildSessionDetail(summary, request, sessionKey, options = {}) {
 function csv(value) { const safe = /^[=+\-@]/.test(String(value)) ? `'${value}` : String(value ?? ''); return `"${safe.replaceAll('"', '""')}"`; }
 export function buildExport(format, dashboard) {
   const metadata = { projection: dashboard.projection, provider: dashboard.provider, range: dashboard.range, matchedSessionCount: dashboard.matchedSessionCount, exportedSessionCount: dashboard.sessions.length, scope: 'all-matched-sessions', pricing: dashboard.pricing, generatedAt: dashboard.generatedAt };
-  const scopeColumns = ['queryMode', 'querySort', 'projectionKey', 'queryFromMs', 'queryToMs', 'queryTimezone', 'querySearch', 'queryFilters', 'snapshotVersion', 'pricingRevision', 'projectionAt', 'matchedSessionCount', 'exportScope', 'pricingSource', 'pricingUpdatedAt', 'pricingCurrency', 'pricingUnitTokens', 'scanComplete', 'queryUsageIncomplete', 'queryPossibleDuplicate', 'queryPartialPricing'];
-  const scopeValues = [dashboard.range.mode, dashboard.projection?.query.sort, dashboard.projection?.key, dashboard.range.fromMs, dashboard.range.toMs, dashboard.range.timezone, dashboard.projection?.query.q || '', JSON.stringify(dashboard.projection?.query.filters || {}), dashboard.projection?.snapshotVersion, dashboard.projection?.pricingRevision, dashboard.projection?.at, dashboard.matchedSessionCount, metadata.scope, dashboard.pricing.source, dashboard.pricing.updatedAt, dashboard.pricing.currency, dashboard.pricing.unitTokens, dashboard.quality.scan.complete, dashboard.quality.range.usage.incomplete, dashboard.quality.range.usage.possibleDuplicate, dashboard.pricingCoverage.partial];
+  const scopeColumns = ['queryMode', 'querySort', 'projectionKey', 'queryFromMs', 'queryToMs', 'queryTimezone', 'querySearch', 'queryFilters', 'snapshotVersion', 'pricingRevision', 'projectionAt', 'matchedSessionCount', 'exportScope', 'pricingSource', 'pricingUpdatedAt', 'pricingCurrency', 'pricingUnitTokens', 'scanComplete', 'queryUsageIncomplete', 'queryPossibleDuplicate', 'queryPartialPricing', 'pricingArchived'];
+  const scopeValues = [dashboard.range.mode, dashboard.projection?.query.sort, dashboard.projection?.key, dashboard.range.fromMs, dashboard.range.toMs, dashboard.range.timezone, dashboard.projection?.query.q || '', JSON.stringify(dashboard.projection?.query.filters || {}), dashboard.projection?.snapshotVersion, dashboard.projection?.pricingRevision, dashboard.projection?.at, dashboard.matchedSessionCount, metadata.scope, dashboard.pricing.source, dashboard.pricing.updatedAt, dashboard.pricing.currency, dashboard.pricing.unitTokens, dashboard.quality.scan.complete, dashboard.quality.range.usage.incomplete, dashboard.quality.range.usage.possibleDuplicate, dashboard.pricingCoverage.partial, dashboard.pricing.archive?.available ?? null];
   const csvBody = (columns, rows) => {
     const records = rows.length
       ? rows.map((row) => [...row, ...scopeValues, 'data'])
@@ -166,7 +170,7 @@ export function buildExport(format, dashboard) {
   };
   const result = (value) => ({ ...value, metadata });
   if (format === 'json-report') return result({ contentType: 'application/json; charset=utf-8', extension: 'json', body: JSON.stringify({ metadata, provider: dashboard.provider, range: dashboard.range, totals: dashboard.totals, cost: dashboard.cost, models: dashboard.models, quality: dashboard.quality, costDisclaimer: dashboard.pricing?.costDisclaimer || null }, null, 2) });
-  if (format === 'markdown-summary') return result({ contentType: 'text/markdown; charset=utf-8', extension: 'md', body: `# Local AI Token Dashboard\n\nProvider: ${dashboard.provider}\n\nRange: ${dashboard.range.mode} (${dashboard.range.timezone})\n\nUTC bounds (start inclusive, end exclusive): ${dashboard.range.fromMs ?? 'unbounded'} to ${dashboard.range.toMs ?? 'unbounded'}\n\nQuery: ${JSON.stringify(dashboard.projection?.query || {})}\n\nSnapshot: ${dashboard.projection?.snapshotVersion}\n\nPricing revision: ${dashboard.projection?.pricingRevision}\n\nProjection time: ${dashboard.projection?.at}\n\nExport scope: ${metadata.scope} (${dashboard.matchedSessionCount} Sessions)\n\nPricing basis: ${JSON.stringify(dashboard.pricing)}\n\nTotal tokens: ${dashboard.totals.totalTokens}\n\nKnown token cost: ${dashboard.cost.total}\n\nPartial pricing: ${dashboard.pricingCoverage.partial}\n\nUsage incomplete: ${dashboard.quality.range.usage.incomplete}\n\nPossible duplicate usage: ${dashboard.quality.range.usage.possibleDuplicate}\n\n${dashboard.pricing?.costDisclaimer || ''}`.trim() });
+  if (format === 'markdown-summary') return result({ contentType: 'text/markdown; charset=utf-8', extension: 'md', body: `# Local AI Token Dashboard\n\nProvider: ${dashboard.provider}\n\nRange: ${dashboard.range.mode} (${dashboard.range.timezone})\n\nUTC bounds (start inclusive, end exclusive): ${dashboard.range.fromMs ?? 'unbounded'} to ${dashboard.range.toMs ?? 'unbounded'}\n\nQuery: ${JSON.stringify(dashboard.projection?.query || {})}\n\nSnapshot: ${dashboard.projection?.snapshotVersion}\n\nPricing revision: ${dashboard.projection?.pricingRevision}\n\nProjection time: ${dashboard.projection?.at}\n\nExport scope: ${metadata.scope} (${dashboard.matchedSessionCount} Sessions)\n\nPricing basis: ${JSON.stringify(dashboard.pricing)}\n\nTotal tokens: ${dashboard.totals.totalTokens}\n\nKnown token cost: ${dashboard.cost.total ?? 'unknown'}\n\nPartial pricing: ${dashboard.pricingCoverage.partial}\n\nUsage incomplete: ${dashboard.quality.range.usage.incomplete}\n\nPossible duplicate usage: ${dashboard.quality.range.usage.possibleDuplicate}\n\n${dashboard.pricing?.costDisclaimer || ''}`.trim() });
   if (format === 'csv-trend') return result({ contentType: 'text/csv; charset=utf-8', extension: 'csv', body: csvBody('provider,fromMs,toMs,label,timezone,tokens,cost,partialCost,usageNotes'.split(','), dashboard.trend.points.map((point) => [dashboard.provider, point.fromMs, point.toMs, point.label, dashboard.range.timezone, point.tokens, point.cost, point.partialCost, dashboard.quality.range.usage.reasons.join(';')])) });
   return result({ contentType: 'text/csv; charset=utf-8', extension: 'csv', body: csvBody('provider,session,executionType,parentSessionKey,model,workspace,totalTokens,cost,pricingStatus,usageSource,invalidLines,selectedModels,partialCost,usageIncomplete,possibleDuplicate,usageNotes'.split(','), dashboard.sessions.map((session) => [dashboard.provider, session.sessionId, session.executionType, session.parentSessionKey, session.model, session.workspace, session.usage.totalTokens, session.cost.total, session.pricingStatus, session.usageSource, session.invalidLineCount, session.models.join(';'), session.cost.pricingCoverage.partial, session.usageQuality.incomplete, session.usageQuality.possibleDuplicate, session.usageQuality.reasons.join(';')])) });
 }

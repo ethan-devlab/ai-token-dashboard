@@ -2,6 +2,9 @@
 .env
 .pricing-cache.json
 .claude-pricing-cache.json
+.pricing-archive/
+.pricing-cache.json.archive/
+.claude-pricing-cache.json.archive/
 
 # Local orchestration and code-index artifacts
 .omo/
