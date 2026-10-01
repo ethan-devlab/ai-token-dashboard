@@ -145,9 +145,12 @@ function renderMetadata(data) {
 }
 function renderQuality(data) { const quality = data.quality || {}; const scan = quality.scan || {}; const range = quality.range || {}; const messages = Array.isArray(quality.messages) ? quality.messages : [[scan.failedFiles, t('quality.files', { count: scan.failedFiles })], [scan.truncated, t('quality.truncated', { count: scan.maxFiles })], [scan.refreshFailure, t('quality.refreshFailedReason', { reason: t(`quality.refreshReason.${scan.refreshFailure?.reason || 'refresh-failed'}`), count: scan.refreshFailure?.failedFiles || 0 })], [scan.invalidLines, t('quality.lines', { count: scan.invalidLines })], [range.estimatedTimestamps, t('quality.estimated', { count: range.estimatedTimestamps })], [data.pricing?.archive?.available === false, t('pricing.archive.unknown')], [range.pricingCoverage?.partial && range.pricingCoverage?.available !== false, t('quality.partial')]].filter(([active]) => active).map(([, message]) => message).concat(usageWarnings(range.reconciliation)); const host = $('quality'); host.hidden = !messages.length; host.dataset.state = quality.severity === 'error' ? 'error' : 'warning'; host.textContent = messages.join(' · '); }
 function renderPricing(data) {
-  const pricing = data.pricing || {}; const rates = pricing.rates; const refresh = pricing.refresh || {}; const checkedAt = pricing.checkedAt || refresh.lastSuccessfulAt;
-  $('pricingStatus').textContent = checkedAt ? t('pricing.checked', { date: formatDate(checkedAt) }) : t('pricing.bundled', { date: pricing.updatedAt || '—' });
-  $('pricingStatus').append(document.createTextNode(` · ${t('pricing.currentBasis')}`));
+  const pricing = data.pricing || {}; const rates = pricing.rates; const refresh = pricing.refresh || {}; const checkedAt = refresh.lastCheckedAt;
+  $('pricingStatus').textContent = checkedAt ? t('pricing.check.archived', { date: formatDate(checkedAt) }) : t('pricing.check.unknown');
+  $('pricingStatus').append(document.createTextNode(` · ${t('pricing.currentBasis')} · ${t(refresh.writable ? 'pricing.writer' : 'pricing.reader')}`));
+  if (refresh.publicationError) $('pricingStatus').append(document.createTextNode(` · ${t('pricing.publication.failed')}`));
+  if (refresh.metadataError) $('pricingStatus').append(document.createTextNode(` · ${t('pricing.metadata.failed')}`));
+  if (refresh.lastError) { const reason = ['network', 'http', 'invalid-source', 'timeout', 'archive', 'publication', 'read-only'].includes(refresh.lastError) ? refresh.lastError : 'other'; $('pricingStatus').append(document.createTextNode(` · ${t(`pricing.failure.${reason}`)}`)); }
   if (/^[a-f0-9]{64}$/.test(pricing.revision || '')) {
     $('pricingStatus').append(document.createTextNode(` · ${t('pricing.revision', { revision: pricing.revision.slice(0, 12) })}`));
     if (pricing.archive?.available) {
@@ -206,7 +209,11 @@ function render() {
   for (const id of ['summary', 'usageInsight', 'sessionExplorer']) $(id).setAttribute('aria-busy', String(busy));
   $('exportScope').textContent = data ? t('export.scope', { count: integerFormat.format(data.matchedSessionCount ?? data.sessionCount ?? 0), timezone: data.range.timezone }) + (data.matchedSessionCount === 0 ? ` ${t('export.empty')}` : '') : t('v2.projection.wait');
   $('exportData').disabled = state.source.status !== 'ready' || !data || Boolean(state.source.projectionStale) || $('exportData').getAttribute('aria-busy') === 'true';
-  $('refreshPricing').disabled = state.source.status !== 'ready' || Boolean(state.source.projectionStale) || $('refreshPricing').getAttribute('aria-busy') === 'true';
+  for (const id of ['refreshPricing', 'loadPricing', 'repairPricing']) {
+    $(id).disabled = state.source.status !== 'ready' || Boolean(state.source.projectionStale) || $(id).getAttribute('aria-busy') === 'true'
+      || (id !== 'loadPricing' && !data?.pricing?.refresh?.writable)
+      || (id === 'repairPricing' && data?.pricing?.archive?.available && !data?.pricing?.refresh?.publicationError && !data?.pricing?.refresh?.metadataError);
+  }
   $('footer').textContent = t(state.provider === 'claude' ? 'provider.claude.footer' : 'footer');
   renderAccountUsage(); renderFilterState(); renderViewPreferences(); renderCustomRangeError(); renderProjectionStatus(); renderTrend(data);
   if (!data) {
@@ -224,7 +231,7 @@ async function load({ sessionsOnly = false, refresh = false } = {}) {
   lastLoadOptions = { sessionsOnly, refresh };
   const generation = ++projectionGeneration;
   for (const name of ['dashboard', 'sessions', 'refresh', 'export', 'detail', 'pricing']) channels.abort(name);
-  exportGeneration += 1; setButtonBusy($('refresh'), false, 'action.refreshing'); setButtonBusy($('exportData'), false, 'action.exporting'); setButtonBusy($('refreshPricing'), false, 'action.refreshing');
+  exportGeneration += 1; setButtonBusy($('refresh'), false, 'action.refreshing'); setButtonBusy($('exportData'), false, 'action.exporting'); for (const id of ['refreshPricing', 'loadPricing', 'repairPricing']) setButtonBusy($(id), false, 'action.refreshing');
   drawerController.close();
   syncState();
   const requestedQuery = structuredClone(state.query);
@@ -339,28 +346,30 @@ async function checkUpdates() {
     if (attempt === updateGeneration) setButtonBusy($('checkUpdates'), false, 'action.checking');
   }
 }
-async function refreshPricing() {
+async function updatePricing(action = 'refresh') {
+  const button = $(({ refresh: 'refreshPricing', load: 'loadPricing', repair: 'repairPricing' })[action]);
+  if (button.disabled) return;
   if (state.source.status !== 'ready' || state.source.projectionStale) return;
   const generation = ++projectionGeneration; exportGeneration += 1;
   for (const name of ['dashboard', 'sessions', 'refresh', 'export', 'detail']) channels.abort(name);
   drawerController.close(); setButtonBusy($('exportData'), false, 'action.exporting');
-  state.source.status = 'refreshing'; setButtonBusy($('refreshPricing'), true, 'action.refreshing'); render();
+  state.source.status = 'refreshing'; setButtonBusy(button, true, 'action.refreshing'); render();
   try {
-    const result = await channels.request('pricing', requestUrl('/api/pricing/refresh'), { method: 'POST' });
+    const result = await channels.request('pricing', requestUrl(`/api/pricing/${action}`), { method: 'POST' });
     if (result.stale || generation !== projectionGeneration) return;
     state.source.data = result.payload; state.source.projectionStale = false; projectionCache.clear();
     state.source.queryScope = `${queryStateToSearch({ ...state.query, sort: 'recent' }, state.provider)}|${result.payload.projection.key}`;
     state.source.displayedQuery = structuredClone(state.query);
     const changed = result.payload.pricingUpdate?.changedModels?.length || 0;
-    showNotice(changed ? t('pricing.updated', { count: integerFormat.format(changed) }) : t('pricing.unchanged'));
+    showNotice(action !== 'refresh' ? t(`pricing.${action}.done`) : changed ? t('pricing.updated', { count: integerFormat.format(changed) }) : t('pricing.unchanged'));
   } catch (error) {
     if (error?.name !== 'AbortError' && generation === projectionGeneration) {
-      state.source.status = 'ready'; setButtonBusy($('refreshPricing'), false, 'action.refreshing');
+      state.source.status = 'ready'; for (const id of ['refreshPricing', 'loadPricing', 'repairPricing']) setButtonBusy($(id), false, 'action.refreshing');
       const reloadGeneration = projectionGeneration + 1; await load();
-      if (projectionGeneration === reloadGeneration) showNotice(t('pricing.update.failed'));
+      if (projectionGeneration === reloadGeneration) showNotice(t(action === 'refresh' ? 'pricing.update.failed' : `pricing.${action}.failed`));
     }
   }
-  finally { if (generation === projectionGeneration) { state.source.status = 'ready'; setButtonBusy($('refreshPricing'), false, 'action.refreshing'); render(); } }
+  finally { if (generation === projectionGeneration) { state.source.status = 'ready'; for (const id of ['refreshPricing', 'loadPricing', 'repairPricing']) setButtonBusy($(id), false, 'action.refreshing'); render(); } }
 }
 async function exportData() {
   if (state.source.status !== 'ready' || state.source.projectionStale) { showNotice(t('v2.projection.wait')); return; }
@@ -405,11 +414,11 @@ function providerChanged(restoredQuery = null) {
 }
 for (const control of [controls.weekInput, controls.monthInput, controls.yearInput, controls.customStart, controls.customEnd, controls.sort, controls.timezone, controls.rangeMode]) control.addEventListener('change', () => { updateRangeControls(); queryChanged(); });
 controls.search.addEventListener('input', () => queryChanged({ defer: true })); for (const control of [controls.unit, controls.showExact, controls.showDetails, controls.trendMetric, controls.trendMode, controls.trendMark, controls.columnLastUsed, controls.columnModel, controls.columnInput, controls.columnOutput, controls.columnCost]) control.addEventListener('change', viewChanged); controls.density.addEventListener('change', densityChanged);
-controls.provider.addEventListener('change', providerChanged); controls.locale.addEventListener('change', setLocaleFromControl); $('clearSearch').addEventListener('click', () => { controls.search.value = ''; queryChanged(); controls.search.focus(); }); $('refresh').addEventListener('click', () => { state.page.offset = 0; load({ refresh: true }); }); $('refreshAccountUsage').addEventListener('click', () => loadAccountUsage({ refresh: true })); $('refreshPricing').addEventListener('click', refreshPricing); $('checkUpdates').addEventListener('click', checkUpdates); $('exportData').addEventListener('click', exportData); $('loadDiagnostics').addEventListener('click', diagnostics); $('budgetForm').addEventListener('submit', addBudget); $('cancelBudget').addEventListener('click', () => { $('budgetForm').reset(); $('budgetEditor').open = false; setBudgetFormMessage(); });
+controls.provider.addEventListener('change', providerChanged); controls.locale.addEventListener('change', setLocaleFromControl); $('clearSearch').addEventListener('click', () => { controls.search.value = ''; queryChanged(); controls.search.focus(); }); $('refresh').addEventListener('click', () => { state.page.offset = 0; load({ refresh: true }); }); $('refreshAccountUsage').addEventListener('click', () => loadAccountUsage({ refresh: true })); $('refreshPricing').addEventListener('click', () => updatePricing()); $('loadPricing').addEventListener('click', () => updatePricing('load')); $('repairPricing').addEventListener('click', () => updatePricing('repair')); $('checkUpdates').addEventListener('click', checkUpdates); $('exportData').addEventListener('click', exportData); $('loadDiagnostics').addEventListener('click', diagnostics); $('budgetForm').addEventListener('submit', addBudget); $('cancelBudget').addEventListener('click', () => { $('budgetForm').reset(); $('budgetEditor').open = false; setBudgetFormMessage(); });
 $('retryProjection').addEventListener('click', async () => { const hadFocus = document.activeElement === $('retryProjection'); await load(lastLoadOptions); if (hadFocus && document.activeElement === document.body) controls.rangeMode.focus(); }); $('restoreProjection').addEventListener('click', restoreDisplayedQuery);
 $('pagePrevious').addEventListener('click', () => { state.page.offset = Math.max(0, state.page.offset - state.page.limit); load({ sessionsOnly: true }); }); $('pageNext').addEventListener('click', () => { state.page.offset += state.page.limit; load({ sessionsOnly: true }); }); $('rows').addEventListener('click', (event) => { const button = event.target.closest('button.expand-session'); if (!button) return; const session = (page(state.source.data || {}).sessions || []).find((item) => String(item.sessionKey || item.id || item.sessionId) === button.dataset.sessionKey); if (session) drawerController.open(session, button); });
 
 window.addEventListener('popstate', () => { priorChartQueries.length = 0; const next = providerFromSearch(window.location.search, state.provider); if (next !== state.provider) { controls.provider.value = next; providerChanged(queryStateFromSearch(defaultQuery, window.location.search)); return; } state.query = queryStateFromSearch(defaultQuery, window.location.search); applyQueryStateToControls(controls, state.query); filterController.reset(state.query.filters); state.page.offset = 0; syncState(); updateRangeControls(); load(); }); window.addEventListener('beforeunload', () => { window.clearInterval(countdownTimer); channels.destroy(); drawerController.destroy(); trendController.destroy(); }); document.addEventListener('keydown', (event) => { if (event.key !== 'Escape') return; if (state.drawer.sessionKey) { event.preventDefault(); drawerController.close(); return; } if ($('viewMenu').open) { event.preventDefault(); $('viewMenu').open = false; $('viewMenu').querySelector('summary').focus(); return; } if (controls.search.value) { event.preventDefault(); controls.search.value = ''; queryChanged(); } });
 drawerController.bind(); initialise();
-for (const [id, key] of [['refresh', 'action.refreshing'], ['refreshPricing', 'action.refreshing'], ['refreshAccountUsage', 'action.checking'], ['checkUpdates', 'action.checking'], ['exportData', 'action.exporting'], ['loadDiagnostics', 'action.loading']]) setButtonBusy($(id), false, key);
+for (const [id, key] of [['refresh', 'action.refreshing'], ['refreshPricing', 'action.refreshing'], ['loadPricing', 'action.refreshing'], ['repairPricing', 'action.refreshing'], ['refreshAccountUsage', 'action.checking'], ['checkUpdates', 'action.checking'], ['exportData', 'action.exporting'], ['loadDiagnostics', 'action.loading']]) setButtonBusy($(id), false, key);
 countdownTimer = window.setInterval(updateAccountUsageCountdowns, 1_000); loadProviders().finally(() => { load(); loadAccountUsage(); });

@@ -1,6 +1,6 @@
 # Pricing ownership and recovery plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Q51–Q60 confirmed; implementation awaits shared-scope selection. Source checkpoint: 348a8ba. This phase addresses R02 from [the functional inventory](functional-status-inventory.md). Existing Q28–Q33 current-basis, archive-before-activation, read-only history and permanent retention remain. Q40–Q50 query/export behavior and targets remain.
+Date: 2026-10-01 (Asia/Taipei). Status: implemented after user authorization; see [delivery validation](pricing-ownership-recovery-validation.md). Q51–Q60 remain the selected policy. Source checkpoint: 348a8ba. This phase addresses R02 from [the functional inventory](functional-status-inventory.md). Existing Q28–Q33 current-basis, archive-before-activation, read-only history and permanent retention remain. Q40–Q50 query/export behavior and targets remain.
 
 ## Confirmed decisions
 
@@ -29,7 +29,7 @@ An isolated in-process reproduction used two independent pricing-service instanc
 
 Work directly in the repository; no agents, production requests/restart, real pricing/settings/credential writes, live upstream calls, installs, push or release. Use copied apps, disposable roots and synthetic documents for validation. Desktop QA remains root-owned. Settings and CLI credential policies remain unchanged. Do not auto-select a historical archive merely because its filename or timestamp sorts last. Preserve direct export access, pinned transfer semantics, exact cost qualifiers and existing local security.
 
-Commit this complete policy/acceptance checkpoint, then ask the user to select implementation. No implementation or production rollout is claimed by this plan.
+The policy checkpoint was committed as 38e6d2d. The user then selected complete implementation. The delivery record establishes the implemented scope; production rollout remains unverified.
 
 ## Implementation boundaries for confirmed policies
 

@@ -4,6 +4,14 @@
 .env.settings-lock.retired-*/
 .pricing-cache.json
 .claude-pricing-cache.json
+.pricing.writer-lock/
+.pricing.writer-lock.retired-*/
+.pricing-cache.json.*.tmp
+.claude-pricing-cache.json.*.tmp
+.pricing-cache.json.quarantine-*
+.claude-pricing-cache.json.quarantine-*
+.pricing-cache.json.repairing*
+.claude-pricing-cache.json.repairing*
 .pricing-archive/
 .pricing-cache.json.archive/
 .claude-pricing-cache.json.archive/

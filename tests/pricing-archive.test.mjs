@@ -71,8 +71,12 @@ test('storage recovery archives the retained basis even if the upstream request 
   await assert.rejects(service.refresh({ manual: true }), { code: 'network' }); assert.equal(service.current().archive.available, true); assert.equal(buildDashboardPayload(summary(service.current()), request, {}).cost.total, 0.00005);
 });
 
-test('an existing verified archive stays usable when initialization cannot update check metadata', async (t) => {
-  const directory = await root(t); const store = createPricingArchive({ directory: path.join(directory, 'archive'), provider: 'codex' }); const first = await store.save(PRICING, { origin: 'bundled' });
-  const service = createPricingRefreshService({ baseline: PRICING, cachePath: path.join(directory, 'cache'), archiveStore: { ...store, save: () => { throw new Error('TEST ONLY write denied'); } } });
-  await service.initialize(); assert.equal(service.current().archive.available, true); assert.equal(service.current().revision, first.revision); assert.equal(service.current().archive.error, 'archive');
+test('a verified published basis loads without metadata writes', async (t) => {
+  const directory = await root(t); const store = createPricingArchive({ directory: path.join(directory, 'archive'), provider: 'codex' });
+  const cachePath = path.join(directory, 'cache');
+  const first = createPricingRefreshService({ baseline: PRICING, cachePath, archiveStore: store }); await first.initialize();
+  await writeFile(path.join(directory, 'archive', first.current().revision + '.check.json'), 'TEST ONLY invalid metadata');
+  const service = createPricingRefreshService({ baseline: PRICING, cachePath, archiveStore: { ...store, save: () => { throw new Error('TEST ONLY no writes'); } } });
+  await service.initialize(); assert.equal(service.current().archive.available, true); assert.equal(service.current().revision, first.current().revision);
+  assert.equal(service.status().metadataError, 'metadata'); assert.equal(service.status().lastCheckedAt, null);
 });
