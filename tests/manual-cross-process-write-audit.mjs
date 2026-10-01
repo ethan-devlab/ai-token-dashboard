@@ -8,7 +8,7 @@ import { readRuntimeConfig } from '../server/config.mjs';
 import { readSettings, saveSettings } from '../server/settings.mjs';
 import { createAccountUsageService } from '../server/account-usage.mjs';
 
-// Diagnostic baseline, not a correctness gate. Only disposable synthetic files are used.
+// Diagnostic report, not a correctness gate. The raw settings writer still permits an uncooperative external edit.
 const native = { writeFile: fs.writeFile, rename: fs.rename };
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'ctd-cross-process-audit-'));
 const results = [];
@@ -74,45 +74,47 @@ async function settingsProbe(boundary) {
   results.push({ surface: 'settings', boundary, outcome, externalFilePreserved: preserved, temporaryFilesRemain: false });
 }
 
-async function credentialProbe(boundary) {
-  const directory = path.join(root, `credentials-${boundary}`);
+async function credentialProbe(scenario) {
+  const directory = path.join(root, `credentials-${scenario}`);
   await fs.mkdir(directory);
   const file = path.join(directory, 'TEST_ONLY-credentials.json');
   const now = Date.UTC(2026, 9, 1);
-  await fs.writeFile(file, JSON.stringify({ claudeAiOauth: {
-    accessToken: 'TEST_ONLY-original', refreshToken: 'TEST_ONLY-refresh', expiresAt: now - 1,
-  }, unrelated: 'original' }));
+  const initial = JSON.stringify({ claudeAiOauth: {
+    accessToken: 'TEST_ONLY-original', refreshToken: 'TEST_ONLY-refresh', expiresAt: now + (scenario === 'expired' ? -1 : 3600000),
+  }, unrelated: 'original' });
+  await fs.writeFile(file, initial);
   const replacement = JSON.stringify({ claudeAiOauth: {
     accessToken: 'TEST_ONLY-cli-new-login', refreshToken: 'TEST_ONLY-cli-refresh', expiresAt: now + 3600000,
   }, unrelated: 'external' });
   let usageRequests = 0;
   const service = createAccountUsageService({ claudeCredentialsPath: file, now: () => now, fetchImpl: async (url) => {
-    if (url.endsWith('/v1/oauth/token')) return Response.json({ access_token: 'TEST_ONLY-old-login-rotation', expires_in: 3600 });
     assert.equal(url, 'https://api.anthropic.com/api/oauth/usage');
     usageRequests++;
+    await externalWrite(file, replacement);
     return Response.json({ five_hour: { utilization: 25, resets_at: new Date(now + 18000000).toISOString() } });
   } });
-  const response = await interleave(file, replacement, boundary, () => service.get('claude'));
-  const preserved = await fs.readFile(file, 'utf8') === replacement;
-  assert.equal(response.status, boundary === 'before-final-check' ? 'unavailable' : 'available');
-  assert.equal(response.reason || null, boundary === 'before-final-check' ? 'credentials-changed' : null);
-  assert.equal(preserved, boundary === 'before-final-check');
-  assert.equal(usageRequests, boundary === 'before-final-check' ? 0 : 1);
+  const response = await service.get('claude');
+  const preserved = await fs.readFile(file, 'utf8') === (scenario === 'expired' ? initial : replacement);
+  assert.equal(response.status, 'unavailable');
+  assert.equal(response.reason, scenario === 'expired' ? 'auth-expired' : 'credentials-changed');
+  assert.equal(preserved, true);
+  assert.equal(usageRequests, scenario === 'expired' ? 0 : 1);
   assert.deepEqual(await fs.readdir(directory), ['TEST_ONLY-credentials.json']);
   assert.equal(JSON.stringify(response).includes('TEST_ONLY'), false);
-  results.push({ surface: 'claude-credentials', boundary, outcome: response.reason || response.status,
-    externalFilePreserved: preserved, usageRequests, temporaryFilesRemain: false });
+  results.push({ surface: 'claude-credentials', scenario, outcome: response.reason,
+    credentialFilePreserved: preserved, usageRequests, temporaryFilesRemain: false });
 }
 
 try {
   for (const boundary of ['before-final-check', 'after-final-check']) {
     await settingsProbe(boundary);
-    await credentialProbe(boundary);
   }
+  await credentialProbe('expired');
+  await credentialProbe('cli-change-during-usage');
 } finally {
   fs.writeFile = native.writeFile;
   fs.rename = native.rename;
   syncBuiltinESMExports();
   await fs.rm(root, { recursive: true, force: true });
 }
-console.log(JSON.stringify({ diagnosticBaseline: true, externalRequests: 0, cleanedUp: true, results }, null, 2));
+console.log(JSON.stringify({ diagnosticReport: true, externalRequests: 0, cleanedUp: true, results }, null, 2));

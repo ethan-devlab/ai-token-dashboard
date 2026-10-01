@@ -126,13 +126,15 @@ function requireRevision(expected, actual) {
   }
 }
 
-async function writeSettings(envPath, values, revision) {
+async function writeSettings(envPath, values, revision, beforeWrite) {
+  await beforeWrite?.();
   const existing = await envText(envPath);
   requireRevision(revision, revisionFor(existing));
   const next = mergeEnvText(existing, values);
   const temporaryPath = path.join(path.dirname(envPath), `.${path.basename(envPath)}.${randomUUID()}.tmp`);
   try {
     await writeFile(temporaryPath, next, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    await beforeWrite?.();
     requireRevision(revision, revisionFor(await envText(envPath)));
     await rename(temporaryPath, envPath);
   } catch (error) {
@@ -142,11 +144,11 @@ async function writeSettings(envPath, values, revision) {
   return { localConfig: parseEnv(next), revision: revisionFor(next) };
 }
 
-export function saveSettings(envPath, input, { revision } = {}) {
+export function saveSettings(envPath, input, { revision, beforeWrite } = {}) {
   const values = normalizeSettings(input);
   const key = path.resolve(envPath);
   const previous = saves.get(key) || Promise.resolve();
-  const pending = previous.catch(() => undefined).then(() => writeSettings(key, values, revision));
+  const pending = previous.catch(() => undefined).then(() => writeSettings(key, values, revision, beforeWrite));
   saves.set(key, pending);
   pending.finally(() => { if (saves.get(key) === pending) saves.delete(key); }).catch(() => undefined);
   return pending;

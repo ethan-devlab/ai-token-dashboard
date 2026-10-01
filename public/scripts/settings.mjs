@@ -16,6 +16,7 @@ let ready = false;
 let dirty = false;
 let revision = null;
 let conflict = false;
+let writable = false;
 
 function setNotice(message, state = 'info') {
   notice.textContent = message;
@@ -25,7 +26,7 @@ function setNotice(message, state = 'info') {
 }
 
 function setDisabled(disabled) {
-  for (const element of form.querySelectorAll('input, button')) element.disabled = disabled;
+  for (const element of form.querySelectorAll('input, button')) element.disabled = disabled || !writable;
   form.setAttribute('aria-busy', String(disabled));
   back.setAttribute('aria-disabled', String(disabled && ready));
   if (!disabled && conflict) document.getElementById('settingsSave').disabled = true;
@@ -61,7 +62,8 @@ function payload() {
 
 function updateDirty() {
   dirty = settingsChanged(baseline, payload());
-  dirtyStatus.textContent = ready ? t(dirty ? 'settings.dirty' : 'settings.clean') : '';
+  const message = dirty ? writable ? 'settings.dirty' : 'settings.dirtyReadOnly' : 'settings.clean';
+  dirtyStatus.textContent = ready ? t(message) : '';
   dirtyStatus.dataset.state = dirty ? 'dirty' : 'clean';
 }
 
@@ -102,9 +104,11 @@ async function loadSettings() {
     if (!response.ok) throw responseError(data, t('settings.loadError'));
     if (!/^[a-f0-9]{64}$/.test(data.revision || '')) throw new Error(t('settings.loadError'));
     renderSettings(data.settings);
+    writable = data.writable === true;
     revision = data.revision; conflict = false;
     baseline = payload(); ready = true; updateDirty();
-    setNotice(t('settings.restart'));
+    setNotice(t(writable ? 'settings.restart' : 'settings.readOnly'), writable ? 'info' : 'error');
+    if (!writable) { retry.hidden = false; retry.textContent = t('settings.reload'); }
   } catch (error) {
     if (error?.code === 'SETTINGS_DISABLED') {
       form.hidden = true;
@@ -123,7 +127,7 @@ async function loadSettings() {
 inputFor('ALLOW_REMOTE').addEventListener('change', () => { remoteWarning.hidden = !inputFor('ALLOW_REMOTE').checked; });
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!ready || conflict) return;
+  if (!ready || conflict || !writable) return;
   if (!form.reportValidity()) return;
   setButtonBusy(document.getElementById('settingsSave'), true, 'settings.saving');
   setDisabled(true);
@@ -141,7 +145,11 @@ form.addEventListener('submit', async (event) => {
     baseline = payload(); updateDirty();
     setNotice(t('settings.saved'), 'success');
   } catch (error) {
-    if (['SETTINGS_CONFLICT', 'SETTINGS_REVISION_REQUIRED'].includes(error?.code)) {
+    if (error?.code === 'SETTINGS_READ_ONLY') {
+      writable = false; retry.hidden = false; retry.textContent = t('settings.reload');
+      setNotice(t('settings.readOnlyEdits'), 'error');
+      updateDirty(); notice.setAttribute('tabindex', '-1'); notice.focus();
+    } else if (['SETTINGS_CONFLICT', 'SETTINGS_REVISION_REQUIRED'].includes(error?.code)) {
       conflict = true; retry.hidden = false; retry.textContent = t('settings.reload');
       setNotice(t('settings.conflict'), 'error');
     } else setNotice(error instanceof Error ? error.message : t('settings.saveError'), 'error');

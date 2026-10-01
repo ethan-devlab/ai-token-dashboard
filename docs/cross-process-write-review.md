@@ -1,8 +1,8 @@
 # Cross-process write boundary review
 
-Date: 2026-10-01 (Asia/Taipei). Source baseline: 83ba020 on main. Runtime: Node v26.0.0 on macOS. This checkpoint adds a diagnostic probe and decision record only. Product behavior is unchanged.
+Date: 2026-10-01 (Asia/Taipei). Source baseline: 83ba020 on main. Runtime: Node v26.0.0 on macOS. The original checkpoint added a diagnostic probe and decisions only. Q34–Q39 subsequently change product behavior; see [settings-ownership-validation.md](settings-ownership-validation.md).
 
-## Write ownership today
+## Write ownership at baseline
 
 Settings writes originate from the loopback, same-origin, revision-required settings route. server/settings.mjs serializes writes by resolved path in one process. It reads the initial revision, creates an exclusive temporary file, reads the revision again and renames the temporary file over .env. Another dashboard process has a separate queue. A manual editor does not participate in that queue.
 
@@ -20,7 +20,7 @@ node tests/manual-cross-process-write-audit.mjs
 
 The command works as a separate Node command on Windows too, but Windows was not run here. It creates disposable synthetic .env and credential files. A child Node process writes the external replacement. All OAuth/usage responses are mocked; no network request or real credential read occurs.
 
-The probe uses process-local built-in function interception to pause the shipped write sequence at either temporary-file completion or immediately before the native rename. It synchronizes ESM bindings, runs the child writer, then resumes the actual operation. It does not modify the product modules. Hooks are restored and disposable files are removed. This is a forced valid interleaving, not a probability estimate or a reproduction with a live CLI.
+The original probe committed in 40c3e6c uses process-local built-in interception to pause the shipped write sequence at temporary-file completion or immediately before native rename. It synchronizes ESM bindings, runs the child writer, then resumes the operation. It does not modify product modules. Hooks are restored and disposable files removed. This is a forced valid interleaving, not a probability estimate or a live CLI reproduction. The current script retains the raw settings boundary probe and replaces the removed credential-write cases with read-only expiry and in-flight CLI replacement checks. The table below is the original observation record.
 
 | Surface | Child write timing | Observed result | External replacement |
 | --- | --- | --- | --- |

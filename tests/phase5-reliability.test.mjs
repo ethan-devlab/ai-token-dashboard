@@ -3,9 +3,11 @@ import test from 'node:test';
 import { mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createAccountUsageService, normalizeCodexUsage, normalizeClaudeUsage } from '../server/account-usage.mjs';
 import { readSettings, saveSettings } from '../server/settings.mjs';
 import { readRuntimeConfig } from '../server/config.mjs';
+import { acquireSettingsOwner } from '../server/settings-owner.mjs';
 import { quotaWindowForDisplay, remainingPercent } from '../public/scripts/account-usage.mjs';
 
 const time = Date.parse('2026-10-01T00:00:00Z');
@@ -67,21 +69,22 @@ test('quota ignores a successful response for credentials replaced during the re
   const value = await service.get('codex'); assert.equal(value.reason, 'credentials-changed'); assert.deepEqual(value.windows, []); assert.ok(!JSON.stringify(value).includes('fixture-'));
 }));
 
-test('Claude refresh preserves a concurrent CLI login and reports a safe conflict', async () => fixture(async (root) => {
+test('Claude read-only usage preserves a concurrent CLI login and rejects its former quota', async () => fixture(async (root) => {
   const file = path.join(root, 'credentials.json');
-  await writeFile(file, JSON.stringify({ cliNote: 'old', claudeAiOauth: { accessToken: 'fixture-old', refreshToken: 'fixture-refresh', expiresAt: 0 } }));
+  await writeFile(file, JSON.stringify({ cliNote: 'old', claudeAiOauth: { accessToken: 'fixture-old', refreshToken: 'fixture-refresh', expiresAt: time + 3600000 } }));
   const next = { cliNote: 'new', claudeAiOauth: { accessToken: 'fixture-cli-new', refreshToken: 'fixture-cli-refresh', expiresAt: time + 3600000 } };
   let calls = 0;
-  const service = createAccountUsageService({ claudeCredentialsPath: file, now: () => time, fetchImpl: async (url) => { calls++; assert.ok(url.endsWith('/v1/oauth/token')); await writeFile(file, JSON.stringify(next)); return Response.json({ access_token: 'fixture-rotation', expires_in: 3600 }); } });
+  const service = createAccountUsageService({ claudeCredentialsPath: file, now: () => time, fetchImpl: async (url) => { calls++; assert.equal(url, 'https://api.anthropic.com/api/oauth/usage'); await writeFile(file, JSON.stringify(next)); return Response.json({ five_hour: { utilization: 40 } }); } });
   const value = await service.get('claude'); assert.equal(value.reason, 'credentials-changed'); assert.deepEqual(value.windows, []); assert.equal(calls, 1); assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), next); assert.deepEqual(await readdir(root), ['credentials.json']);
 }));
 
-test('owned Claude token rotation preserves same-login stale quota after a transient usage failure', async () => fixture(async (root) => {
+test('read-only Claude usage retains stale quota until token expiry invalidates the cache', async () => fixture(async (root) => {
   const file = path.join(root, 'credentials.json');
   await writeFile(file, JSON.stringify({ claudeAiOauth: { accessToken: 'fixture-old', refreshToken: 'fixture-refresh', expiresAt: time + 60000 } }));
-  let now = time; let fail = false; let rotations = 0;
+  const before = await readFile(file, 'utf8');
+  let now = time; let fail = false; let calls = 0;
   const service = createAccountUsageService({ claudeCredentialsPath: file, now: () => now, fetchImpl: async (url) => {
-    if (url.endsWith('/v1/oauth/token')) { rotations++; return Response.json({ access_token: 'fixture-rotated', expires_in: 3600 }); }
+    assert.equal(url, 'https://api.anthropic.com/api/oauth/usage'); calls++;
     if (fail) throw new Error('fixture-only');
     return Response.json({ five_hour: { utilization: 40, resets_at: new Date(time + 18000000).toISOString() } });
   }});
@@ -89,7 +92,25 @@ test('owned Claude token rotation preserves same-login stale quota after a trans
   for (let check = 0; check < 2; check++) {
     const stale = await service.get('claude', { refresh: true }); assert.equal(stale.status, 'stale'); assert.equal(stale.windows[0].remainingPercent, 60); assert.equal(stale.fetchedAt, first.fetchedAt);
   }
-  assert.equal(rotations, 1);
+  assert.equal(calls, 3);
+  now = time + 60000;
+  const expired = await service.get('claude'); assert.equal(expired.reason, 'auth-expired'); assert.deepEqual(expired.windows, []);
+  assert.equal(calls, 3); assert.equal(await readFile(file, 'utf8'), before);
+  assert.deepEqual(await readdir(root), ['credentials.json']);
+}));
+
+test('Claude authentication rejection has no OAuth retry and leaves credentials unchanged', async () => fixture(async (root) => {
+  const file = path.join(root, 'credentials.json');
+  await writeFile(file, JSON.stringify({ claudeAiOauth: { accessToken: 'fixture-valid', refreshToken: 'fixture-never-used' } }));
+  const before = await readFile(file, 'utf8');
+  for (const status of [401, 403]) {
+    let calls = 0;
+    const service = createAccountUsageService({ claudeCredentialsPath: file, fetchImpl: async (url) => {
+      calls++; assert.equal(url, 'https://api.anthropic.com/api/oauth/usage'); return Response.json({}, { status });
+    } });
+    const result = await service.get('claude'); assert.equal(result.reason, 'auth-expired'); assert.deepEqual(result.windows, []); assert.equal(calls, 1);
+  }
+  assert.equal(await readFile(file, 'utf8'), before);
 }));
 
 test('settings serializes conflicting full-form saves and preserves unrelated file content', async () => fixture(async (root) => {
@@ -111,4 +132,23 @@ test('settings serializes conflicting full-form saves and preserves unrelated fi
   const external = await readSettings(file, runtime);
   await saveSettings(file, { ...values, PORT: '3355' }, { revision: external.revision });
   assert.match(await readFile(file, 'utf8'), /CUSTOM_SECOND=external/);
+}));
+
+test('settings rejects ownership loss after preparing a temporary write and keeps the old file', async () => fixture(async (root) => {
+  const file = path.join(root, '.env'); await writeFile(file, 'PORT=3333\nCUSTOM_VALUE=keep\n');
+  const before = await readFile(file, 'utf8'); const lease = await acquireSettingsOwner(file);
+  const initial = await readSettings(file, readRuntimeConfig({ environment: {}, localConfig: {} }));
+  let guards = 0;
+  await assert.rejects(saveSettings(file, { ...initial.settings, PORT: '3344', CODEX_SESSIONS_DIR: root, CLAUDE_SESSIONS_DIR: root }, {
+    revision: initial.revision, beforeWrite: async () => {
+      if (++guards === 2) {
+        const ownerFile = `${file}.settings-lock/owner.json`;
+        const owner = JSON.parse(await readFile(ownerFile, 'utf8')); owner.generation = randomUUID();
+        await writeFile(ownerFile, JSON.stringify(owner));
+      }
+      await lease.assertWritable();
+    },
+  }), (error) => error.code === 'SETTINGS_READ_ONLY');
+  assert.equal(guards, 2); assert.equal(await readFile(file, 'utf8'), before);
+  assert.deepEqual((await readdir(root)).sort(), ['.env', '.env.settings-lock']);
 }));

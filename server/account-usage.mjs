@@ -1,12 +1,10 @@
-import { chmod, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 const CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
 const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
-const CLAUDE_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
-const CLAUDE_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
 const CACHE_TTL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -95,45 +93,6 @@ async function requestJson(fetchImpl, url, options) {
   catch { throw new AccountUsageFailure('unsupported-response'); }
 }
 
-async function persistClaudeCredentials(filePath, snapshot, oauth) {
-  const original = snapshot.credentials;
-  const temporary = `${filePath}.${randomUUID()}.tmp`;
-  const next = { ...original, claudeAiOauth: { ...original.claudeAiOauth, ...oauth } };
-  const body = `${JSON.stringify(next, null, 2)}\n`;
-  try {
-    if ((await jsonFile(filePath, 'credentials-changed')).revision !== snapshot.revision) throw new AccountUsageFailure('credentials-changed');
-    await writeFile(temporary, body, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    await chmod(temporary, 0o600).catch(() => undefined);
-    if ((await jsonFile(filePath, 'credentials-changed')).revision !== snapshot.revision) throw new AccountUsageFailure('credentials-changed');
-    await rename(temporary, filePath);
-  } catch (error) {
-    await unlink(temporary).catch(() => undefined);
-    throw error;
-  }
-  return { credentials: next, revision: createHash('sha256').update(body).digest('hex') };
-}
-
-async function refreshClaudeToken(fetchImpl, credentialsPath, snapshot, now) {
-  const credentials = snapshot.credentials;
-  const oauth = credentials?.claudeAiOauth;
-  if (!oauth || typeof oauth.refreshToken !== 'string' || !oauth.refreshToken) throw new AccountUsageFailure('auth-expired');
-  const scope = Array.isArray(oauth.scopes) ? oauth.scopes.filter((item) => typeof item === 'string').join(' ') : '';
-  const token = await requestJson(fetchImpl, CLAUDE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: oauth.refreshToken, client_id: CLAUDE_CLIENT_ID, ...(scope ? { scope } : {}) }),
-  });
-  if (typeof token.access_token !== 'string' || !token.access_token || typeof token.expires_in !== 'number' || !Number.isFinite(token.expires_in) || token.expires_in <= 0 || !Number.isSafeInteger(now() + token.expires_in * 1_000)) throw new AccountUsageFailure('unsupported-response');
-  const nextOauth = {
-    accessToken: token.access_token,
-    refreshToken: typeof token.refresh_token === 'string' && token.refresh_token ? token.refresh_token : oauth.refreshToken,
-    expiresAt: now() + Number(token.expires_in) * 1_000,
-    scopes: typeof token.scope === 'string' && token.scope.trim() ? token.scope.trim().split(/\s+/) : oauth.scopes,
-  };
-  try { return await persistClaudeCredentials(credentialsPath, snapshot, nextOauth); }
-  catch (error) { throw new AccountUsageFailure(error?.reason === 'credentials-changed' ? error.reason : 'credential-write-failed'); }
-}
-
 function unavailable(provider, reason, checkedAt) {
   return { provider, status: 'unavailable', reason, fetchedAt: null, checkedAt, windows: [] };
 }
@@ -144,6 +103,11 @@ function staleWindows(windows, nowMs) {
     return Number.isFinite(reset) && reset <= nowMs
       ? { ...window, usedPercent: null, remainingPercent: null, resetExpired: true } : window;
   });
+}
+
+function claudeExpired(snapshot, nowMs) {
+  const expiry = snapshot.credentials?.claudeAiOauth?.expiresAt;
+  return typeof expiry === 'number' && Number.isFinite(expiry) && expiry <= nowMs;
 }
 
 export function createAccountUsageService({
@@ -170,24 +134,11 @@ export function createAccountUsageService({
   }
 
   async function claude(state) {
-    let credentials = state.snapshot.credentials;
-    let oauth = credentials?.claudeAiOauth;
+    const credentials = state.snapshot.credentials;
+    const oauth = credentials?.claudeAiOauth;
     if (!oauth || typeof oauth.accessToken !== 'string' || !oauth.accessToken) throw new AccountUsageFailure('not-signed-in');
-    if (typeof oauth.expiresAt === 'number' && Number.isFinite(oauth.expiresAt) && oauth.expiresAt <= now() + 30_000) {
-      state.snapshot = await refreshClaudeToken(fetchImpl, claudeCredentialsPath, state.snapshot, now);
-      credentials = state.snapshot.credentials;
-      oauth = credentials.claudeAiOauth;
-    }
-    let payload;
-    try {
-      payload = await requestJson(fetchImpl, CLAUDE_USAGE_URL, { headers: { authorization: `Bearer ${oauth.accessToken}`, accept: 'application/json', 'anthropic-beta': 'oauth-2025-04-20', 'anthropic-version': '2023-06-01' } });
-    } catch (error) {
-      if (error?.reason !== 'auth-expired') throw error;
-      state.snapshot = await refreshClaudeToken(fetchImpl, claudeCredentialsPath, state.snapshot, now);
-      credentials = state.snapshot.credentials;
-      oauth = credentials.claudeAiOauth;
-      payload = await requestJson(fetchImpl, CLAUDE_USAGE_URL, { headers: { authorization: `Bearer ${oauth.accessToken}`, accept: 'application/json', 'anthropic-beta': 'oauth-2025-04-20', 'anthropic-version': '2023-06-01' } });
-    }
+    if (claudeExpired(state.snapshot, now())) throw new AccountUsageFailure('auth-expired');
+    const payload = await requestJson(fetchImpl, CLAUDE_USAGE_URL, { headers: { authorization: `Bearer ${oauth.accessToken}`, accept: 'application/json', 'anthropic-beta': 'oauth-2025-04-20', 'anthropic-version': '2023-06-01' } });
     return normalizeClaudeUsage(payload, new Date(now()).toISOString(), typeof oauth.subscriptionType === 'string' ? oauth.subscriptionType : null);
   }
 
@@ -208,6 +159,10 @@ export function createAccountUsageService({
       let snapshot;
       try { snapshot = await jsonFile(credentialsPath(provider), 'not-signed-in'); }
       catch (error) { cache.delete(provider); lastGood.delete(provider); return unavailable(provider, error?.reason || 'invalid-credentials', new Date(now()).toISOString()); }
+      if (provider === 'claude' && claudeExpired(snapshot, now())) {
+        cache.delete(provider); lastGood.delete(provider);
+        return unavailable(provider, 'auth-expired', new Date(now()).toISOString());
+      }
       const cached = cache.get(provider);
       if (cached?.revision !== snapshot.revision) { cache.delete(provider); lastGood.delete(provider); }
       if (!refresh && cached?.revision === snapshot.revision && now() - cached.cachedAt < cacheTtlMs) {
@@ -220,9 +175,7 @@ export function createAccountUsageService({
         lastGood.set(provider, { revision: state.snapshot.revision, value });
       } else {
         const good = lastGood.get(provider);
-        // An owned OAuth rotation preserves login continuity; external replacements do not.
-        if (['network', 'rate-limit', 'service-unavailable'].includes(value.reason) && good && [snapshot.revision, state.snapshot.revision].includes(good.revision)) {
-          lastGood.set(provider, { ...good, revision: state.snapshot.revision });
+        if (['network', 'rate-limit', 'service-unavailable'].includes(value.reason) && good?.revision === snapshot.revision) {
           value = { ...good.value, status: 'stale', reason: value.reason, checkedAt: value.checkedAt, windows: staleWindows(good.value.windows, now()) };
         } else lastGood.delete(provider);
       }

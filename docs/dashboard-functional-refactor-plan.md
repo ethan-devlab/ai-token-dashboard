@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts, Q28–Q33 pricing archives, native Safari download/settings-leave acceptance and FA15 request ownership complete. [functional-status-inventory.md](functional-status-inventory.md) records the current remaining scope for user decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented; cross-phase fixture acceptance completed with FA24 corrected; Q27 detail counts, Q28–Q33 pricing archives, native Safari download/settings-leave acceptance, FA15 request ownership and Q34–Q39 settings/credential ownership complete. [functional-status-inventory.md](functional-status-inventory.md) records the current remaining scope for user decision.
 
 ## Confirmed scope
 
@@ -100,7 +100,7 @@ Acceptance: all 251 matched Sessions export once; sorting/filtering do not chang
 
 ### Phase 5 — Quota and settings reliability
 
-Own `server/account-usage.mjs`, `server/settings.mjs`, and their existing client controllers. Address FA12/FA20 and the selected FA13 policy. Preserve fixed official destinations, same-Origin validation, loopback access, credential redaction, atomic OAuth rotation, allow-listed settings, and restart-required behavior.
+Own `server/account-usage.mjs`, `server/settings.mjs`, and their existing client controllers. Address FA12/FA20 and the selected FA13 policy. Preserve fixed official destinations, same-Origin validation, loopback access, credential redaction, allow-listed settings and restart-required behavior. This original phase retained atomic OAuth rotation; Q34 subsequently removes it in favor of CLI-only credential management.
 
 Normalize only supported values; null/empty utilization and invalid reset times remain unknown. Keep a provider-isolated last good quota only if explicit stale status is chosen. Use unique exclusive temporary files and serialize same-file settings saves; consider conflict detection only if the user chooses that requirement. Check concurrent OAuth/CLI file rotation in a fake credential fixture before changing that lifecycle.
 
@@ -151,3 +151,7 @@ Q28–Q33 are implemented. Current-basis estimates now have complete provider-se
 ## Cross-process write decision checkpoint
 
 The user selected R01 after 83ba020. [cross-process-write-review.md](cross-process-write-review.md) records actual shipped write paths with a controlled child-process interleaving. External changes before the final read are preserved; changes after it are overwritten for settings and Claude credentials. This is a diagnostic baseline, not a passing correctness gate. Q34 credential ownership and Q35 settings ownership require separate decisions before product changes. Pricing lifecycle, production restart and live CLI interaction are outside this checkpoint.
+
+## Settings and credential ownership implementation
+
+Q34–Q39 are selected and delivered. [settings-ownership-validation.md](settings-ownership-validation.md) records read-only Claude credentials, one startup settings writer, read-only additional instances, guarded normal release, conservative explicit recovery and restart-only acquisition. Twenty-three distinct focused cases ran in bounded groups, plus copied multi-process HTTP and root desktop QA. Independent editors must stop the writer before changes; pricing lifecycle, Windows, storage/power-loss failure and rollout remain separate scope.

@@ -1,5 +1,7 @@
 # Local runtime configuration
 .env
+.env.settings-lock/
+.env.settings-lock.retired-*/
 .pricing-cache.json
 .claude-pricing-cache.json
 .pricing-archive/

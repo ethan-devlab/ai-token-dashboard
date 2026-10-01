@@ -76,7 +76,7 @@ The original dependent decisions included model filtering, calendar comparisons,
 - Phase 3 validates fingerprint checks, same-size restored-mtime replacement, in-flight writes, active worker termination and root recovery. Actual watcher errors, worker exit without a message, symlink-swap/deletion timing, partial append and empty-directory edge cases still need focused fixtures; see V05 in the current inventory.
 - The initial detail fixture showed total 2001 and 2000 returned without an explicit truncation flag. Q27 is now complete: exact selected count, returned count, limit, and truncation prompt, with full Token/cost totals. See [detail-completeness-validation.md](detail-completeness-validation.md). Pagination and an observation table are outside this scope.
 - The later [native Safari checkpoint](browser-download-settings-validation.md) verifies actual download bytes, cancellation and unload warnings. Other browsers, interrupted/very large downloads, Windows filesystem/recursive-watch behavior, forced colors, assistive technology and Node 18/22/24 remain unverified. Phase 2 separately validates backend repeated-hour grouping.
-- Upstream live pricing-document format, live quota endpoints, real OAuth rotation conflicts with a running CLI, and subscription semantics were not exercised. Existing service tests use fake responses. No prices or real credential files were changed.
+- Upstream live pricing-document format, live quota endpoints, real CLI login-change timing and subscription semantics were not exercised. Q34 removes dashboard OAuth rotation. Existing service tests use fake responses; no real credential files were changed.
 - `/api/summary` deliberately retains legacy all-snapshot totals with filtered rows. Do not change that deprecated contract without a separate compatibility decision.
 
 ## Coverage and checks
@@ -108,3 +108,7 @@ FA12/FA13/FA20 have focused evidence in [phase5-reliability-validation.md](phase
 ## Cross-phase acceptance disposition
 
 [functional-integration-validation.md](functional-integration-validation.md) records 115 passing baseline checks, all five isolated phase HTTP fixtures, and same-server accounting/calendar/rollback/export/quota/settings behavior. Root desktop QA found FA24 (P2): a successful page read after failed refresh hid the unresolved refresh warning, because its qualifiers were not merged. Equal-identity pages now merge only refreshFailure and retainedSnapshot in addition to pagination fields. The warning persists; snapshot data remains intact; watcher repair triggers full conflict reload. Ten projection and 33 client checks passed after the fix. Subsequent checkpoints close detail-count, pricing-archive, native Safari and FA15 gaps; the current inventory separates remaining scope from completed work.
+
+## Settings and credential ownership disposition
+
+[settings-ownership-validation.md](settings-ownership-validation.md) implements Q34–Q39 after the controlled cross-process probe. Claude credentials are now CLI-owned and read-only to the dashboard; this supersedes Phase 5's automatic rotation. Settings use one cooperating startup writer with explicit recovery and read-only additional instances. The remaining independent-editor interval is governed by stop-before-edit workflow; the change does not claim a shared CLI lock or pricing-cache ownership.

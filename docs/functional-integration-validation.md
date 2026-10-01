@@ -46,7 +46,7 @@ The table below retains this checkpoint's scope with later dispositions. [functi
 
 | Item | Current evidence and boundary | Next decision or check |
 | --- | --- | --- |
-| Cross-process file race | Settings and credential digests catch observed external changes before rename. They cannot exclude a writer in the final check-to-rename interval. | Decide whether a further lifecycle change is needed; do not claim a shared CLI lock. |
+| Cross-process file race | Q34–Q39 subsequently remove dashboard credential writes and add one cooperative settings writer, read-only instances and explicit recovery. See [ownership validation](settings-ownership-validation.md). | Independent .env edits still require stopping the writer; pricing lifecycle and platform/storage limits remain separate. |
 | Bounded Session detail | Q27 is complete in the subsequent [detail checkpoint](detail-completeness-validation.md): exact selected count, returned count, limit, and truncation status. Full Token/cost totals remain intact. | Observation pagination and a table are outside the confirmed count/prompt scope. |
 | Historical pricing | Q28–Q33 subsequently add complete current-basis archives and read-only tracing. See [pricing-archive-validation.md](pricing-archive-validation.md). | A historical effective-rate ledger and old-basis selection remain separate scope. |
 | Browser synchronization | Watcher updates server snapshots. Browser data stays manual; page/detail/export conflicts reload a complete projection. | A future automatic sync policy needs a separate decision. |

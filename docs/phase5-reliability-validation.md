@@ -1,5 +1,7 @@
 # Phase 5 quota and settings validation
 
+Historical checkpoint: Q34–Q39 subsequently replace dashboard OAuth rotation with CLI-owned read-only credentials and add settings ownership. See [settings-ownership-validation.md](settings-ownership-validation.md). The executed evidence below describes the original Phase 5 policy, not the current automatic-refresh behavior.
+
 Date: 2026-10-01 (Asia/Taipei). Branch: main. Node: v26.0.0 on macOS.
 
 ## Confirmed policies

@@ -66,34 +66,25 @@ test('account usage reads Codex login credentials server-side and deduplicates c
   }
 });
 
-test('account usage refreshes an expired Claude OAuth token and atomically persists the rotation', async () => {
+test('account usage leaves expired Claude credentials to the CLI without network or writes', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'account-usage-claude-'));
   try {
     const credentialsPath = path.join(directory, '.credentials.json');
     await writeFile(credentialsPath, JSON.stringify({ claudeAiOauth: { accessToken: 'expired', refreshToken: 'refresh-secret', expiresAt: 1, scopes: ['user:profile'], subscriptionType: 'max' }, preserved: true }));
+    const before = await readFile(credentialsPath, 'utf8');
     const urls = [];
     const service = createAccountUsageService({
       claudeCredentialsPath: credentialsPath,
       now: () => Date.parse('2026-08-24T00:00:00Z'),
       fetchImpl: async (url, options) => {
         urls.push(url);
-        if (url.endsWith('/v1/oauth/token')) {
-          const body = JSON.parse(options.body);
-          assert.equal(body.refresh_token, 'refresh-secret');
-          return new Response(JSON.stringify({ access_token: 'rotated-secret', refresh_token: 'next-refresh-secret', expires_in: 3600, scope: 'user:profile' }), { status: 200, headers: { 'content-type': 'application/json' } });
-        }
-        assert.equal(options.headers.authorization, 'Bearer rotated-secret');
-        return new Response(JSON.stringify({ five_hour: { utilization: 40, resets_at: '2026-08-24T05:00:00Z' } }), { status: 200, headers: { 'content-type': 'application/json' } });
+        throw new Error('Expired credentials must not send any request.');
       },
     });
     const result = await service.get('claude');
-    assert.deepEqual(urls, ['https://platform.claude.com/v1/oauth/token', 'https://api.anthropic.com/api/oauth/usage']);
-    assert.equal(result.windows[0].remainingPercent, 60);
-    assert.equal(result.planType, 'max');
-    const saved = JSON.parse(await readFile(credentialsPath, 'utf8'));
-    assert.equal(saved.claudeAiOauth.accessToken, 'rotated-secret');
-    assert.equal(saved.claudeAiOauth.refreshToken, 'next-refresh-secret');
-    assert.equal(saved.preserved, true);
+    assert.deepEqual(urls, []);
+    assert.equal(result.reason, 'auth-expired'); assert.deepEqual(result.windows, []);
+    assert.equal(await readFile(credentialsPath, 'utf8'), before);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
