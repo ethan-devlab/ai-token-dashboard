@@ -57,8 +57,8 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 | `GET /api/summary` | Deprecated v1 compatibility response. |
 | `GET /api/update` | User-triggered GitHub latest stable release check. |
 | `POST /api/pricing/refresh` | Same-origin manual refresh for the selected provider; not limited by the daily automatic cadence. |
-| `GET /api/settings` | Loopback-only local `.env` values for the settings page. |
-| `POST /api/settings` | Loopback-only, same-origin, bounded JSON save of validated `.env` values; restart required. |
+| `GET /api/settings` | Loopback-only current `.env` values and revision for the settings page. |
+| `POST /api/settings` | Loopback-only, same-origin, bounded JSON save with quoted `If-Match` revision; missing version returns 428, stale version returns 409; restart required. |
 
 All dashboard, session, refresh, pricing, export, diagnostics, and deprecated summary requests accept `provider=codex|claude`; omission remains Codex-compatible. The URL provider takes precedence over the saved dropdown selection. Other query fields include `mode`, `period`, `start`, `end`, `timezone`, `q`, `sort`, `offset`, `limit`, and repeated filters, including `executionType=main|subagent`. Errors use `{ "error": { "code", "message", "requestId" } }`. List payloads never contain raw JSONL, conversation content, or full event streams.
 

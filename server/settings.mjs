@@ -1,5 +1,6 @@
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { parseEnv, readRuntimeConfig } from './config.mjs';
 import { validRepository } from './update-checker.mjs';
 
@@ -40,7 +41,7 @@ function requiredString(input, key) {
   return value.trim();
 }
 
-export function settingsPayload(localConfig, runtimeConfig) {
+export function settingsPayload(localConfig, runtimeConfig, revision) {
   return Object.freeze({
     settings: Object.freeze({
       HOST: settingValue(localConfig, runtimeConfig, 'HOST', (config) => config.host),
@@ -56,6 +57,7 @@ export function settingsPayload(localConfig, runtimeConfig) {
       UPDATE_REPOSITORY: localConfig.UPDATE_REPOSITORY || '',
     }),
     restartRequired: true,
+    ...(revision ? { revision } : {}),
   });
 }
 
@@ -92,22 +94,60 @@ export function mergeEnvText(existing, values) {
   return `${lines.join('\n').replace(/\n+$/, '')}\n`;
 }
 
-export async function saveSettings(envPath, input) {
-  const values = normalizeSettings(input);
+const saves = new Map();
+
+function revisionFor(text) {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+async function envText(envPath) {
   let existing = '';
   try {
     existing = await readFile(envPath, 'utf8');
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
+  return existing;
+}
+
+export async function readSettings(envPath, runtimeConfig) {
+  const text = await envText(envPath);
+  return settingsPayload(parseEnv(text), runtimeConfig, revisionFor(text));
+}
+
+function requireRevision(expected, actual) {
+  if (typeof expected !== 'string' || !/^[a-f0-9]{64}$/.test(expected)) {
+    const error = new Error('Get the current settings revision before saving.');
+    error.status = 428; error.code = 'SETTINGS_REVISION_REQUIRED'; throw error;
+  }
+  if (expected !== actual) {
+    const error = new Error('Settings changed. Reload the current settings before saving.');
+    error.status = 409; error.code = 'SETTINGS_CONFLICT'; throw error;
+  }
+}
+
+async function writeSettings(envPath, values, revision) {
+  const existing = await envText(envPath);
+  requireRevision(revision, revisionFor(existing));
   const next = mergeEnvText(existing, values);
-  const temporaryPath = path.join(path.dirname(envPath), `.${path.basename(envPath)}.${process.pid}.${Date.now()}.tmp`);
+  const temporaryPath = path.join(path.dirname(envPath), `.${path.basename(envPath)}.${randomUUID()}.tmp`);
   try {
-    await writeFile(temporaryPath, next, { encoding: 'utf8', mode: 0o600 });
+    await writeFile(temporaryPath, next, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    requireRevision(revision, revisionFor(await envText(envPath)));
     await rename(temporaryPath, envPath);
   } catch (error) {
     await unlink(temporaryPath).catch(() => undefined);
     throw error;
   }
-  return parseEnv(next);
+  return { localConfig: parseEnv(next), revision: revisionFor(next) };
+}
+
+export function saveSettings(envPath, input, { revision } = {}) {
+  const values = normalizeSettings(input);
+  const key = path.resolve(envPath);
+  const previous = saves.get(key) || Promise.resolve();
+  const pending = previous.catch(() => undefined).then(() => writeSettings(key, values, revision));
+  saves.set(key, pending);
+  pending.finally(() => { if (saves.get(key) === pending) saves.delete(key); }).catch(() => undefined);
+  return pending;
 }

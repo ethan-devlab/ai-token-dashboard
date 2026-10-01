@@ -13,7 +13,7 @@ import { parseClaudeSessionFile } from '../server/claude-session.mjs';
 import { CLAUDE_PRICING } from '../server/pricing.mjs';
 import { parseClaudePricingMarkdown } from '../server/claude-pricing-refresh.mjs';
 import { calculateCost } from '../server/dashboard-data.mjs';
-import { saveSettings, settingsPayload } from '../server/settings.mjs';
+import { readSettings, saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
 import { createAccountUsageService, normalizeClaudeUsage, normalizeCodexUsage } from '../server/account-usage.mjs';
 
@@ -289,14 +289,15 @@ test('settings persistence validates before atomically replacing the local env f
   };
   try {
     await writeFile(envPath, '# local settings\nCUSTOM_VALUE=preserve\nPORT=3333\n');
-    const saved = await saveSettings(envPath, values);
+    const current = await readSettings(envPath, readRuntimeConfig({ environment: {}, localConfig: {} }));
+    const { localConfig: saved, revision } = await saveSettings(envPath, values, { revision: current.revision });
     const persisted = await readFile(envPath, 'utf8');
     assert.match(persisted, /^# local settings\nCUSTOM_VALUE=preserve\nPORT=3344/m);
     assert.equal(saved.UPDATE_REPOSITORY, 'owner/repo');
     assert.equal(settingsPayload(saved, readRuntimeConfig({ environment: {}, localConfig: saved })).restartRequired, true);
 
     const beforeInvalidSave = persisted;
-    await assert.rejects(saveSettings(envPath, { ...values, HOST: '0.0.0.0' }), (error) => error?.code === 'INVALID_SETTINGS');
+    assert.throws(() => saveSettings(envPath, { ...values, HOST: '0.0.0.0' }, { revision }), (error) => error?.code === 'INVALID_SETTINGS');
     assert.equal(await readFile(envPath, 'utf8'), beforeInvalidSave);
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 # Dashboard functional refactor plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–4 implemented and validated; awaiting the next phase decision.
+Date: 2026-10-01 (Asia/Taipei). Status: Phases 1–5 implemented and validated; awaiting the next scope decision.
 
 ## Confirmed scope
 
@@ -106,6 +106,8 @@ Normalize only supported values; null/empty utilization and invalid reset times 
 
 Acceptance: null quota never shows 100% or epoch reset; measured zero still does; rate-limit/auth/network states remain distinct; stale quota cannot become current; concurrent settings saves have no shared temporary path and no success/file mismatch; unrelated configuration lines survive; invalid input leaves the old file intact. No real credential or `.env` write is part of QA.
 
+Q22–Q26 are confirmed: retain explicit stale quota for transient upstream errors; clear old quota for login failures/changes; mask each stale window after its reported reset; reject stale settings forms and retain edits; require a quoted If-Match revision on every settings save; protect Claude rotation against detected concurrent CLI-file replacement. Reload asks before discarding edits. Unversioned settings POST now returns 428. No additional stale-retention deadline was selected. Credential identity is checked by private file digest, with conservative invalidation on any external content change. External writes in the final check-to-rename interval remain a documented limit, not a shared cross-process lock. Evidence: [phase5-reliability-validation.md](phase5-reliability-validation.md).
+
 ## Decisions before implementation
 
 Ask the first independent decisions together, then ask their dependent frontier in later dialogs:
@@ -114,7 +116,7 @@ Ask the first independent decisions together, then ask their dependent frontier 
 - Failed changed file: whole-pass rollback selected. Healthy partial updates with retained failed files are not selected.
 - Mixed-model filter: matching observations selected. Session totals must use the same filtered observations; preserve existing metadata/API compatibility with explicit projection fields if needed.
 
-Phase 1 mixed-source, duplicate/version, reset, and budget decisions are confirmed above. Later decisions still include stale quota; current versus displayed export version; current pricing versus a historical rate ledger; concurrent settings conflict UX; and watcher-to-browser synchronization. Do not quietly settle those future semantics in code.
+Phase 1 accounting, Phase 2 calendars, Phase 3 refresh, Phase 4 displayed exports, and Phase 5 stale quota/settings conflict decisions are confirmed above. Current pricing versus a historical rate ledger and watcher-to-browser synchronization remain separate future decisions. Do not quietly settle those semantics in code.
 
 ## Validation and delivery
 

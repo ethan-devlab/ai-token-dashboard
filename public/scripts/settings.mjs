@@ -14,6 +14,8 @@ const leave = document.getElementById('settingsLeave');
 let baseline = null;
 let ready = false;
 let dirty = false;
+let revision = null;
+let conflict = false;
 
 function setNotice(message, state = 'info') {
   notice.textContent = message;
@@ -26,6 +28,7 @@ function setDisabled(disabled) {
   for (const element of form.querySelectorAll('input, button')) element.disabled = disabled;
   form.setAttribute('aria-busy', String(disabled));
   back.setAttribute('aria-disabled', String(disabled && ready));
+  if (!disabled && conflict) document.getElementById('settingsSave').disabled = true;
 }
 
 function responseError(payload, fallback) {
@@ -83,7 +86,9 @@ back.addEventListener('click', (event) => {
 });
 document.getElementById('settingsKeep').addEventListener('click', () => leave.close());
 document.getElementById('settingsDiscard').addEventListener('click', () => { dirty = false; leave.close(); window.location.assign(back.href); });
-retry.addEventListener('click', () => void loadSettings());
+retry.addEventListener('click', () => { if (dirty) document.getElementById('settingsReload').showModal(); else void loadSettings(); });
+document.getElementById('settingsReloadKeep').addEventListener('click', () => document.getElementById('settingsReload').close());
+document.getElementById('settingsReloadDiscard').addEventListener('click', () => { document.getElementById('settingsReload').close(); void loadSettings(); });
 
 async function loadSettings() {
   ready = false;
@@ -95,7 +100,9 @@ async function loadSettings() {
     const response = await fetch('/api/settings', { headers: { Accept: 'application/json' }, cache: 'no-store' });
     const data = await response.json();
     if (!response.ok) throw responseError(data, t('settings.loadError'));
+    if (!/^[a-f0-9]{64}$/.test(data.revision || '')) throw new Error(t('settings.loadError'));
     renderSettings(data.settings);
+    revision = data.revision; conflict = false;
     baseline = payload(); ready = true; updateDirty();
     setNotice(t('settings.restart'));
   } catch (error) {
@@ -116,6 +123,7 @@ async function loadSettings() {
 inputFor('ALLOW_REMOTE').addEventListener('change', () => { remoteWarning.hidden = !inputFor('ALLOW_REMOTE').checked; });
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (!ready || conflict) return;
   if (!form.reportValidity()) return;
   setButtonBusy(document.getElementById('settingsSave'), true, 'settings.saving');
   setDisabled(true);
@@ -123,16 +131,20 @@ form.addEventListener('submit', async (event) => {
   try {
     const response = await fetch('/api/settings', {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'If-Match': `"${revision}"` },
       body: JSON.stringify(payload()),
     });
     const data = await response.json();
     if (!response.ok) throw responseError(data, t('settings.saveError'));
     renderSettings(data.settings);
+    revision = data.revision;
     baseline = payload(); updateDirty();
     setNotice(t('settings.saved'), 'success');
   } catch (error) {
-    setNotice(error instanceof Error ? error.message : t('settings.saveError'), 'error');
+    if (['SETTINGS_CONFLICT', 'SETTINGS_REVISION_REQUIRED'].includes(error?.code)) {
+      conflict = true; retry.hidden = false; retry.textContent = t('settings.reload');
+      setNotice(t('settings.conflict'), 'error');
+    } else setNotice(error instanceof Error ? error.message : t('settings.saveError'), 'error');
   } finally {
     setButtonBusy(document.getElementById('settingsSave'), false, 'settings.saving');
     setDisabled(false);

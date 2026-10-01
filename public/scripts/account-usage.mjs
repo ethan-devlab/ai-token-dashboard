@@ -28,7 +28,13 @@ export function formatCountdown(resetsAt, translate, now = Date.now()) {
 
 export function remainingPercent(window) {
   const value = window?.remainingPercent;
-  return value == null || !Number.isFinite(Number(value)) ? null : Math.max(0, Math.min(100, Number(value)));
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? value : null;
+}
+
+export function quotaWindowForDisplay(window, { stale = false, now = Date.now() } = {}) {
+  const reset = Date.parse(window.resetsAt || '');
+  const resetExpired = stale && Number.isFinite(reset) && reset <= now;
+  return resetExpired ? { ...window, usedPercent: null, remainingPercent: null, resetExpired: true } : window;
 }
 
 export function renderQuotaStrip(host, windows, translate, formatDate) {
@@ -38,7 +44,7 @@ export function renderQuotaStrip(host, windows, translate, formatDate) {
     const value = document.createElement('strong'); const remaining = remainingPercent(window);
     value.textContent = remaining == null ? '—' : translate('accountUsage.remaining', { value: Math.round(remaining * 10) / 10 });
     const reset = document.createElement('span'); reset.className = 'muted';
-    reset.textContent = window.resetsAt ? translate('accountUsage.resets', { date: formatDate(window.resetsAt) }) : translate('accountUsage.reset.unknown');
+    reset.textContent = window.resetExpired ? translate('accountUsage.reset.expired') : window.resetsAt ? translate('accountUsage.resets', { date: formatDate(window.resetsAt) }) : translate('accountUsage.reset.unknown');
     item.append(label, value, reset); return item;
   }));
 }

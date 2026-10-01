@@ -11,7 +11,7 @@ import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.
 import { CLAUDE_PRICING, PRICING } from './server/pricing.mjs';
 import { createPricingRefreshService } from './server/pricing-refresh.mjs';
 import { createProviderRegistry } from './server/provider-registry.mjs';
-import { saveSettings, settingsPayload } from './server/settings.mjs';
+import { readSettings, saveSettings, settingsPayload } from './server/settings.mjs';
 import { projectionIdentity, requireProjection } from './server/projection.mjs';
 import { resolveRange } from './server/timezone.mjs';
 import { createUpdateChecker } from './server/update-checker.mjs';
@@ -19,7 +19,7 @@ import { createUpdateChecker } from './server/update-checker.mjs';
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(APP_DIR, 'public');
 const ENV_PATH = path.join(APP_DIR, '.env');
-let localConfig = readEnvFile(ENV_PATH);
+const localConfig = readEnvFile(ENV_PATH);
 const CONFIG = readRuntimeConfig({ localConfig });
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
@@ -158,8 +158,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && requestUrl.pathname === '/api/pricing/refresh') { verifyPost(req); const provider = await requireProvider(requestUrl); let result; try { result = await provider.pricingService.refresh({ manual: true }); } catch { throw new ApiError(502, 'PRICING_REFRESH_FAILED', 'Pricing refresh failed; existing prices were retained.'); } const cached = await provider.cache.get(); json(res, 200, { ...dashboardPayload(provider, cached, requestContext(requestUrl)), pricingUpdate: { changedModels: result.changedModels || [] } }, id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/export') { const format = requestUrl.searchParams.get('format') || 'csv-sessions'; if (!VALID_EXPORTS.has(format)) throw new ApiError(400, 'INVALID_EXPORT_FORMAT', 'Invalid export format.'); const provider = await requireProvider(requestUrl); const cached = await provider.cache.get(); const { summary, context } = projectedRequest(provider, cached, requestUrl); const output = buildExport(format, buildDashboardPayload(summary, context, { provider: provider.id, ...cached.metadata }, { ...options(), exportAllSessions: true })); if (Buffer.byteLength(output.body) > 32 * 1024 * 1024) throw new ApiError(413, 'EXPORT_TOO_LARGE', 'Export exceeds 32 MiB. Narrow the query and try again.'); const fileName = `local-ai-token-dashboard-${provider.id}-${format}.${output.extension}`; res.writeHead(200, { ...headers(output.contentType, Buffer.byteLength(output.body), API_CSP, id, `attachment; filename="${fileName}"`), 'X-Export-Scope': encodeURIComponent(JSON.stringify({ projection: output.metadata.projection.key, snapshotVersion: output.metadata.projection.snapshotVersion, pricingRevision: output.metadata.projection.pricingRevision, range: output.metadata.range, matchedSessionCount: output.metadata.matchedSessionCount, scope: output.metadata.scope })) }); res.end(output.body); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const selectedProvider = providerId(requestUrl); json(res, 200, { version: CURRENT_VERSION, provider: selectedProvider, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, providers: await providerRegistry.diagnostics(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
-    if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); localConfig = await saveSettings(ENV_PATH, await readJsonBody(req, 16 * 1024)); json(res, 200, settingsPayload(localConfig, CONFIG), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, await readSettings(ENV_PATH, CONFIG), id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); const saved = await saveSettings(ENV_PATH, await readJsonBody(req, 16 * 1024), { revision: /^"([a-f0-9]{64})"$/.exec(req.headers['if-match'] || '')?.[1] }); json(res, 200, settingsPayload(saved.localConfig, CONFIG, saved.revision), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/update') { json(res, 200, await updateChecker.check(), id); return; }
     if (req.method === 'GET' && await serveStatic(requestUrl.pathname, res, id)) return;
     throw new ApiError(404, 'NOT_FOUND', 'Not found.');

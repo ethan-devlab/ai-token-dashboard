@@ -350,7 +350,9 @@ test('quota percentages preserve unknown values rather than reporting zero remai
   assert.equal(remainingPercent({ remainingPercent: 'invalid' }), null);
   assert.equal(remainingPercent({ remainingPercent: 0 }), 0);
   assert.equal(remainingPercent({ remainingPercent: 55.5 }), 55.5);
-  assert.equal(remainingPercent({ remainingPercent: 102 }), 100);
+  assert.equal(remainingPercent({ remainingPercent: 102 }), null);
+  assert.equal(remainingPercent({ remainingPercent: '' }), null);
+  assert.equal(remainingPercent({ remainingPercent: false }), null);
 });
 
 test('settings dirtiness clears on reversion and follows the last successful save', () => {

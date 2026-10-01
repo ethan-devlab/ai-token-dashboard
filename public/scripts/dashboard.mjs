@@ -11,7 +11,7 @@ import { renderModelBreakdown } from './model-breakdown.mjs';
 import { createProjectionCache, mergeSessionPage, projectionParameters } from './projection-cache.mjs';
 import { projectionLoadState, emptyExplorerKey } from './projection-state.mjs';
 import { createUsageTrendController } from './trend.mjs';
-import { formatCountdown, windowLabelKey, remainingPercent, renderQuotaStrip } from './account-usage.mjs';
+import { formatCountdown, windowLabelKey, remainingPercent, renderQuotaStrip, quotaWindowForDisplay } from './account-usage.mjs';
 
 const state = createDashboardState(); const $ = (id) => document.getElementById(id); const channels = createRequestChannels(); const projectionCache = createProjectionCache();
 const controls = Object.freeze({ provider: $('provider'), rangeMode: $('rangeMode'), weekInput: $('weekInput'), monthInput: $('monthInput'), yearInput: $('yearInput'), customStart: $('customStart'), customEnd: $('customEnd'), search: $('search'), sort: $('sort'), timezone: $('timezone'), locale: $('locale'), unit: $('unit'), showExact: $('showExact'), showDetails: $('showDetails'), density: $('density'), trendMetric: $('trendMetric'), trendMode: $('trendMode'), trendMark: $('trendMark'), columnLastUsed: $('columnLastUsed'), columnModel: $('columnModel'), columnInput: $('columnInput'), columnOutput: $('columnOutput'), columnCost: $('columnCost') });
@@ -22,21 +22,24 @@ let defaultQuery; let searchTimer = 0; let countdownTimer = 0; let accountUsage 
 function showNotice(message) { $('notice').hidden = !message; $('notice').textContent = message; }
 function persistBudgets() { state.view.budgetsByProvider[state.provider] = state.view.budgets; saveViewPreferences(window.localStorage, state.view); }
 function renderProviderNotice() { const item = providerAvailability.get(state.provider); const unavailable = item?.available === false; $('providerNotice').hidden = !unavailable; $('providerNotice').textContent = unavailable ? t('provider.unavailable', { provider: item.label || state.provider }) : ''; }
-function updateAccountUsageCountdowns() { document.querySelectorAll('[data-account-reset]').forEach((element) => { element.textContent = formatCountdown(element.dataset.accountReset, t); }); }
+function updateAccountUsageCountdowns() { if (accountUsage.status === 'stale' && accountUsage.windows.some((window) => !window.resetExpired && quotaWindowForDisplay(window, { stale: true }).resetExpired)) renderAccountUsage(); document.querySelectorAll('[data-account-reset]').forEach((element) => { element.textContent = formatCountdown(element.dataset.accountReset, t); }); }
 function renderAccountUsage() {
   const panel = $('accountUsage'); const host = $('accountUsageWindows'); const status = $('accountUsageStatus'); const loading = accountUsage.status === 'loading';
-  panel.setAttribute('aria-busy', String(loading)); setButtonBusy($('refreshAccountUsage'), loading, 'action.checking'); host.replaceChildren(); $('quotaStrip').replaceChildren(); $('quotaDetails').hidden = accountUsage.status !== 'available'; status.dataset.state = accountUsage.status === 'available' ? 'ready' : loading ? 'loading' : 'error';
+  const stale = accountUsage.status === 'stale'; const visible = stale || accountUsage.status === 'available';
+  panel.setAttribute('aria-busy', String(loading)); setButtonBusy($('refreshAccountUsage'), loading, 'action.checking'); host.replaceChildren(); $('quotaStrip').replaceChildren(); $('quotaDetails').hidden = !visible; status.dataset.state = accountUsage.status === 'available' ? 'ready' : loading ? 'loading' : 'error';
   if (loading) { status.textContent = t('accountUsage.loading'); return; }
-  if (accountUsage.status !== 'available') { const reasons = new Set(['not-signed-in', 'auth-expired', 'network', 'rate-limit', 'unsupported-response', 'invalid-credentials', 'credential-write-failed', 'service-unavailable']); const reason = reasons.has(accountUsage.reason) ? accountUsage.reason : 'service-unavailable'; status.textContent = t(`accountUsage.unavailable.${reason}`, { provider: state.provider === 'claude' ? 'Claude' : 'Codex' }); return; }
+  const reasons = new Set(['not-signed-in', 'auth-expired', 'network', 'rate-limit', 'unsupported-response', 'invalid-credentials', 'credential-write-failed', 'credentials-changed', 'service-unavailable']); const reason = reasons.has(accountUsage.reason) ? accountUsage.reason : 'service-unavailable';
+  if (!visible) { status.textContent = t(`accountUsage.unavailable.${reason}`, { provider: state.provider === 'claude' ? 'Claude' : 'Codex' }); return; }
   const provider = state.provider === 'claude' ? 'Claude' : 'Codex'; const fiveHour = accountUsage.windows.some((window) => window.kind === 'five-hour');
-  status.textContent = `${t('accountUsage.available', { provider, plan: accountUsage.planType || '—', date: formatDate(accountUsage.fetchedAt) })}${fiveHour ? '' : ` · ${t('accountUsage.fiveHourUnavailable')}`}`;
+  status.textContent = stale ? `${t('accountUsage.stale', { date: formatDate(accountUsage.fetchedAt), checked: formatDate(accountUsage.checkedAt) })} ${t(`accountUsage.unavailable.${reason}`, { provider })}` : `${t('accountUsage.available', { provider, plan: accountUsage.planType || '—', date: formatDate(accountUsage.fetchedAt) })}${fiveHour ? '' : ` · ${t('accountUsage.fiveHourUnavailable')}`}`;
+  accountUsage.windows = accountUsage.windows.map((window) => quotaWindowForDisplay(window, { stale }));
   renderQuotaStrip($('quotaStrip'), accountUsage.windows, t, formatDate);
   for (const window of accountUsage.windows) {
     const card = document.createElement('article'); card.className = 'account-usage-window';
     const heading = document.createElement('div'); heading.className = 'account-usage-window-header'; const label = document.createElement('span'); label.textContent = t(windowLabelKey(window));
     const remaining = document.createElement('strong'); const remainingValue = remainingPercent(window); remaining.textContent = remainingValue == null ? '—' : t('accountUsage.remaining', { value: Math.round(remainingValue * 10) / 10 }); heading.append(label, remaining);
     const meter = document.createElement('div'); meter.className = 'account-usage-meter'; meter.setAttribute('role', 'progressbar'); meter.setAttribute('aria-label', t(windowLabelKey(window))); meter.setAttribute('aria-valuemin', '0'); meter.setAttribute('aria-valuemax', '100'); if (remainingValue != null) meter.setAttribute('aria-valuenow', String(remainingValue)); meter.style.setProperty('--remaining', `${remainingValue ?? 0}%`); meter.append(document.createElement('span'));
-    const reset = document.createElement('div'); reset.className = 'account-usage-reset'; const absolute = document.createElement('span'); absolute.textContent = window.resetsAt ? t('accountUsage.resets', { date: formatDate(window.resetsAt) }) : t('accountUsage.reset.unknown'); reset.append(absolute); if (window.resetsAt) { const countdown = document.createElement('span'); countdown.className = 'account-usage-countdown'; countdown.dataset.accountReset = window.resetsAt; countdown.textContent = formatCountdown(window.resetsAt, t); reset.append(countdown); }
+    const reset = document.createElement('div'); reset.className = 'account-usage-reset'; const absolute = document.createElement('span'); absolute.textContent = window.resetExpired ? t('accountUsage.reset.expired') : window.resetsAt ? t('accountUsage.resets', { date: formatDate(window.resetsAt) }) : t('accountUsage.reset.unknown'); reset.append(absolute); if (window.resetsAt && !window.resetExpired) { const countdown = document.createElement('span'); countdown.className = 'account-usage-countdown'; countdown.dataset.accountReset = window.resetsAt; countdown.textContent = formatCountdown(window.resetsAt, t); reset.append(countdown); }
     const used = document.createElement('span'); used.className = 'muted'; used.textContent = t('accountUsage.used', { value: window.usedPercent == null ? '—' : Math.round(Number(window.usedPercent) * 10) / 10 }); card.append(heading, meter, used, reset); host.append(card);
   }
 }
@@ -274,7 +277,20 @@ async function loadDetail(sessionKey) {
     throw error;
   }
 }
-async function loadAccountUsage({ refresh = false } = {}) { accountUsage = { provider: state.provider, status: 'loading', windows: [] }; renderAccountUsage(); try { const path = refresh ? '/api/account-usage/refresh' : '/api/account-usage'; const result = await channels.request('accountUsage', `${path}?provider=${encodeURIComponent(state.provider)}`, { method: refresh ? 'POST' : 'GET' }); if (result.stale || result.payload.provider !== state.provider) return; accountUsage = result.payload; renderAccountUsage(); } catch (error) { if (error?.name === 'AbortError') return; accountUsage = { provider: state.provider, status: 'unavailable', reason: 'service-unavailable', windows: [] }; renderAccountUsage(); } }
+async function loadAccountUsage({ refresh = false } = {}) {
+  const provider = state.provider;
+  accountUsage = { provider, status: 'loading', windows: [] }; renderAccountUsage();
+  try {
+    const path = refresh ? '/api/account-usage/refresh' : '/api/account-usage';
+    const result = await channels.request('accountUsage', `${path}?provider=${encodeURIComponent(provider)}`, { method: refresh ? 'POST' : 'GET' });
+    if (result.stale || result.payload.provider !== state.provider) return;
+    accountUsage = result.payload; renderAccountUsage();
+  } catch (error) {
+    if (error?.name === 'AbortError' || provider !== state.provider) return;
+    // A failed local request cannot verify the current login identity.
+    accountUsage = { provider, status: 'unavailable', reason: 'service-unavailable', windows: [] }; renderAccountUsage();
+  }
+}
 async function applyChartInterval(bounds, timezone) {
   if (state.source.status !== 'ready' || state.source.projectionStale) return;
   window.clearTimeout(searchTimer);
