@@ -1,6 +1,6 @@
 # Local Host and Origin implementation validation
 
-Date: 2026-10-02 (Asia/Taipei). Approved plan: 33f1b89, Q67–Q69. This report covers isolated copied services and desktop browser checks. The formal 127.0.0.1:3333 process was not restarted or used for these checks.
+Date: 2026-10-02 (Asia/Taipei). Approved plan: 33f1b89, Q67–Q69. Implementation commit: f1629c5. The implementation checks below used isolated copied services and desktop browser checks. Formal restart was separately authorized after that commit; its evidence is in the final section.
 
 ## Delivered behavior
 
@@ -43,4 +43,16 @@ No real .env, credential, usage log or pricing cache was modified. Upstream requ
 
 Origin and Fetch Metadata are browser source restrictions, not local process authentication. A local program can forge them; a local proxy can rewrite them. Missing-source GET remains compatible by Q68. Code already running in the dashboard origin is outside this boundary. HTTPS tunnel compatibility and proxy trust are not supported.
 
-The formal 3333 backend still runs its previously started f53726f code. Public assets are served from disk, so a page reload can load the new POST client before that process supports it. A separately authorized restart is required to synchronize the API before normal use of the new client. Existing explicit blank update configuration remains disabled after restart; the default applies only when the key is absent. This phase does not silently replace that local setting.
+At the implementation checkpoint, the formal 3333 backend still ran its previously started f53726f code. Public assets are served from disk, so a page reload could load the new POST client before that process supported it. A separately authorized restart was required to synchronize the API. Explicit blank update configuration remains disabled; the default applies only when the key is absent. This phase does not silently replace that local setting.
+
+## Authorized formal restart follow-up
+
+After f1629c5, the user selected restart and validation of 3333 while preserving settings. The old listener PID 68657 had this checkout as its working directory and used node server.mjs under npm start. It received SIGTERM, exited normally and freed the port. npm start launched the current source with Node v26.0.0; PID 69544 listens on 127.0.0.1:3333. No manual lock removal or recovery was required. The service was left running.
+
+Before/after .env SHA-256 and settings revision were equal: 01602ebfcfc4427badcaf1224b6f51f3a869904842f2a0dff902fd4fd80d7b52. September range, aggregate Token totals and pricing revision also matched. One-digit and padded September requests agreed. The settings response retained ethan-devlab/codex-token-dashboard as its update repository. No settings save, pricing refresh, credential write or private export was performed.
+
+Actual HTTP checks established GET /api/update returns 405 with Allow: POST, POST without Origin returns 403 INVALID_ORIGIN, and cross-origin GET or cross-site metadata returns the expected 403 source error. Valid direct GET remained available. Settings and pricing writers were available, the active Codex archive was verified and its watcher was watching. Served dashboard, request-channel and settings modules matched the checkout bytes.
+
+The actual desktop page loaded September from the one-digit month URL, displayed its canonical 2026-09 value and had no query error. Clicking Check for updates completed through the new POST route and displayed "You are using the current release (2.1.0)." This was a live read of public release information, not a mocked version or release write. The normal page's browser error log was empty. Screenshot: local-policy-live-restart.png in the evidence directory above. The created test tab was closed.
+
+This establishes this local source process and the selected workflows. It does not certify packaged releases, other deployments, all live quota contracts or physical durability. The broader isolated regression suite was not repeated for the documentation-only follow-up.

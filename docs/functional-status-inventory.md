@@ -4,7 +4,7 @@ Date: 2026-10-01 (Asia/Taipei). Reviewed source checkpoint: 59e30b6 on main. Thi
 
 Follow-up: 2026-10-02. The month-input and Q61–Q63 implementation added focused runtime checks, recorded in the linked follow-up report. The original inventory verification below describes the 2026-10-01 documentation pass only.
 
-Local safety follow-up: Q67–Q69 are implemented with isolated HTTP and desktop evidence. The formal 3333 process has not loaded this phase; restart remains a separate user decision. See [local request validation](local-host-origin-validation.md).
+Local safety follow-up: Q67–Q69 are implemented with isolated HTTP and desktop evidence. The user separately authorized restart after f1629c5; the formal 3333 process now runs that implementation. See [local request validation and startup follow-up](local-host-origin-validation.md).
 
 Q34–Q39 settings/credential ownership, Q40–Q50 query/native downloads and Q51–Q60 pricing ownership/recovery are delivered. The old buffered-download limit and unresolved pricing-writer policy are historical. External-editor, storage, live-contract and platform boundaries remain below.
 
@@ -57,7 +57,7 @@ All 17 defects reproduced by the original bounded audit have correction evidence
 | Post-pricing resource acceptance | At 150000 observations, first dashboard 1147.7 ms, warm/filter 163.1–167.6 ms, page/detail at most 43.5 ms, each export preparation plus transfer at most 123.1 ms; normal observed RSS 388.4 MiB | [Pricing ownership acceptance](pricing-ownership-recovery-validation.md), commit 59e30b6 |
 | Month input and Q61–Q63 follow-up, 2026-10-02 | One-digit month input works; model prices have name/version order and search; wildcard bind accepts the actual destination IP while retaining Host/Origin and private API restrictions | [Focused HTTP, desktop and restart validation](month-pricing-remote-validation.md); Quick Tunnels registered, but public DNS returned ENOTFOUND, so external acceptance remains unverified |
 | Authorized local startup, 2026-10-02 | f53726f source runs on 127.0.0.1:3333; .env bytes unchanged, September queries agree, model search works, writer ownership and Codex watcher available | [Local startup follow-up](month-pricing-remote-validation.md#authorized-local-startup-follow-up); Claude's missing directory remains unavailable |
-| Local request safety, Q67–Q69 | Single Host/authority gate, API source validation, direct GET/native download compatibility and body-free same-origin POST update checks | [Isolated HTTP and desktop evidence](local-host-origin-validation.md); 3333 restart is pending, and local programs/proxies are not authenticated |
+| Local request safety, Q67–Q69 | Single Host/authority gate, API source validation, direct GET/native download compatibility and body-free same-origin POST update checks | [Isolated HTTP, desktop and authorized 3333 restart evidence](local-host-origin-validation.md); local programs/proxies are not authenticated |
 
 The [initial performance baseline](performance-baseline.md) preserves the former 32 MiB rejection measurement. It does not describe the current download contract. The post-pricing run is the latest measurement, not a general hardware or concurrency guarantee.
 
@@ -71,7 +71,7 @@ Counts in these reports overlap. Do not add them to claim a new aggregate suite 
 | R02 | Q51–Q60 are delivered: independent pricing writer, archive-plus-publication activation, manual reader load, per-response active-basis verification, separate metadata warnings and guarded manual repair. Interrupted repair markers prevent premature cost recovery. | [Pricing ownership validation](pricing-ownership-recovery-validation.md). External editors must stop the writer; the archive is not a tamper-proof or power-loss-certified ledger |
 | R03 | Q40–Q50 resource targets remain satisfied after Q51–Q60. The latest 35309532-byte CSV adds at most 2.02 MiB observed RSS during transfer; its full preparation/transfer sequence reaches 510.1 MiB. [Latest acceptance](pricing-ownership-recovery-validation.md) retains the measurement limits; [native delivery](query-export-performance-validation.md) retains saved-byte and cancellation evidence. | Real distributions, arbitrary capacities, concurrent refresh memory, true peaks and cross-platform limits remain unverified |
 | R04 | Scan membership/fingerprints and dirty generations establish a stable admitted pass, not an atomic filesystem-wide snapshot or guaranteed delivery of every OS watcher event. | Exercise remaining scan/watch failure paths before changing this policy |
-| R05 | [Authorized local startup](month-pricing-remote-validation.md#authorized-local-startup-follow-up) establishes f53726f source behavior on this machine's 3333 service. It does not establish a packaged/released artifact or a general rollout. | Packaged-artifact and other deployment targets require a separate validation scope |
+| R05 | [Latest authorized local startup](local-host-origin-validation.md#authorized-formal-restart-follow-up) establishes f1629c5 source behavior on this machine's 3333 service, with unchanged settings, September totals and pricing basis. It does not establish a packaged/released artifact or a general rollout. | Packaged-artifact and other deployment targets require a separate validation scope |
 
 ## Validation gaps
 

@@ -1,6 +1,6 @@
 # Local Host and Origin protection plan
 
-Date: 2026-10-02 (Asia/Taipei). Design source checkpoint: bd040cb; approved plan commit: 33f1b89. Status: implemented and validated in isolated services. See [implementation evidence](local-host-origin-validation.md). The default update repository was delivered in bd040cb. The formal 3333 service has not been restarted for this phase.
+Date: 2026-10-02 (Asia/Taipei). Design source checkpoint: bd040cb; approved plan commit: 33f1b89. Status: implemented in f1629c5, validated in isolated services and loaded on formal 3333 after separate restart authorization. See [implementation and restart evidence](local-host-origin-validation.md). The default update repository was delivered in bd040cb.
 
 ## Confirmed scope
 
@@ -64,4 +64,4 @@ Implement first, then add focused validation; no TDD or broad security scan is r
 5. Narrow regressions: relevant request-policy/service cases, copied calendar/projection/streaming HTTP checks and the existing remote-bind fixture. Keep Q62 wildcard behavior and private API denial. Run broader checks only if a change or failure justifies them.
 6. Record evidence and limitations; inspect and commit completed files. Offer an explicit local restart decision after the isolated implementation is complete. A live service restart is separate from the current design authorization.
 
-The user confirmed implementation of this plan after commit 33f1b89. The accepted GET-to-POST migration is the only intended public endpoint break; direct callers must send POST with the appropriate Origin. No private sample logs or credentials were used for the acceptance fixtures. Formal service restart remains a separate user decision.
+The user confirmed implementation of this plan after commit 33f1b89. The accepted GET-to-POST migration is the only intended public endpoint break; direct callers must send POST with the appropriate Origin. No private sample logs or credentials were used for the acceptance fixtures. Formal service restart was separately authorized after f1629c5 and validated in the linked report.
