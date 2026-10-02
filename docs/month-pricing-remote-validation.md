@@ -56,3 +56,13 @@ Two actual Quick Tunnels registered a connection: one with the default upstream 
 The optional `node tests/month-remote-http.mjs --tunnel` command performs a live check and must not run as an automatic unit/CI check. Its network-failure record is a validation gap, not a passing tunnel assertion. `--serve` is for manual isolated desktop checks. No real session or credential data is used. The CLI setup follows [Cloudflare Quick Tunnel documentation](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
 No production restart, second-device LAN check, Windows check, full source contract suite or performance benchmark was performed. The source contract suite can fetch and write live source caches; the copied fixtures provide the bounded route evidence. These small changes do not certify general remote deployment or HTTPS tunnel support.
+
+## Authorized local startup follow-up
+
+After commit f53726f, the user selected local restart and validation. Port 3333 had no listener. Both owner locks identified the same absent PID on this machine. The restricted `node server.mjs --unlock-settings` and `node server.mjs --unlock-pricing` commands succeeded; no force recovery or manual lock deletion was used. `npm start` then loaded the current source on `127.0.0.1:3333` with Node v26.0.0. The service was left running for the user.
+
+The exact .env SHA-256 matched before and after startup and validation. Runtime Host/port and full-path policy remained `127.0.0.1`, `3333` and false. Settings and pricing write ownership were available. Codex was available and watching; Claude remained unavailable because its configured Session directory was missing. This check did not repair or alter that source configuration.
+
+Actual dashboard queries with `period=2026-9` and `period=2026-09` returned 200, equal Token totals and the correct Taipei September bounds. `2026-13` returned 400. HTTP-served state, pricing-table and dashboard modules matched the checked-in source bytes. A new in-app browser tab showed the September period with a canonical month control. Searching `gpt-6` returned four of the 48 retained model rates, beginning with `gpt-6.1-sol`, then `gpt-6-sol`. Browser error logs were empty; the test tab was closed. Screenshots: `live-september-after-restart.png` and `live-model-search-after-restart.png` in the artifact directory above.
+
+This establishes one local source startup and its bounded live behavior. The preceding no-production-restart statement describes the isolated checks before this authorization. It does not certify a packaged release, remote deployment, tunnel support, all real-log variants or all model-cost history.
