@@ -8,9 +8,9 @@ Local safety follow-up: Q67–Q69 are implemented with isolated HTTP and desktop
 
 2026-10-03 settings follow-up: the formal service had started as a reader after a prior owner exited with retained locks. Restricted recovery and restart restored settings and pricing writer access without changing .env. The settings form also gained the requested Reload-to-legend spacing. See [recovery and desktop evidence](settings-ownership-validation.md#2026-10-03-stale-owner-recovery-and-settings-spacing).
 
-Process follow-up: [startup/shutdown investigation](process-lifecycle-investigation.md) reproduces a SIGHUP exit that leaves both locks and a subsequent read-only startup; SIGTERM releases both. The old owner's actual termination cause remains unknown. Graceful SIGHUP handling and persistent lifecycle records are planned, not delivered features.
+Process follow-up: [startup/shutdown investigation](process-lifecycle-investigation.md) reproduced a SIGHUP exit that left both locks and a subsequent read-only startup before this change. The old owner's actual termination cause remains unknown.
 
-Q70–Q77 now select graceful SIGHUP, permanently retained minimal records, a 30-second coalesced shutdown, fatal observation, Diagnostics availability and latched journal failure. The [concrete implementation plan](process-lifecycle-plan.md) awaits final implementation confirmation; these policies are not yet runtime features. Independent startup remains outside the selected scope.
+Q70–Q77 are implemented with [isolated lifecycle and desktop validation](process-lifecycle-validation.md): graceful SIGHUP, permanently retained minimal records, a 30-second coalesced shutdown, native fatal observation, Diagnostics availability and latched journal failure. The formal 3333 process has not restarted for this implementation. Independent startup remains outside the selected scope; SIGKILL, an unresponsive event loop and power-loss durability remain limits.
 
 Q34–Q39 settings/credential ownership, Q40–Q50 query/native downloads and Q51–Q60 pricing ownership/recovery are delivered. The old buffered-download limit and unresolved pricing-writer policy are historical. External-editor, storage, live-contract and platform boundaries remain below.
 

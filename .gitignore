@@ -1,5 +1,6 @@
 # Local runtime configuration
 .env
+.lifecycle/
 .env.settings-lock/
 .env.settings-lock.retired-*/
 .pricing-cache.json

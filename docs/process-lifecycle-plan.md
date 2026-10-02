@@ -1,6 +1,6 @@
 # Graceful shutdown and lifecycle record plan
 
-Date: 2026-10-03 (Asia/Taipei). Design checkpoint: f017d95. Status: confirmed policies and implementation plan; not implemented. See the [process investigation](process-lifecycle-investigation.md). The exact termination cause of historical PID 69544 remains unknown.
+Date: 2026-10-03 (Asia/Taipei). Design checkpoint: f017d95. Plan commit: 7f63b6f. Status: user-confirmed implementation completed; see [validation](process-lifecycle-validation.md). The formal 3333 restart remains a separate decision. See the [process investigation](process-lifecycle-investigation.md). The exact termination cause of historical PID 69544 remains unknown.
 
 ## Confirmed decisions
 
@@ -62,4 +62,4 @@ Implement first, then add focused tests; no TDD. All fault injection uses dispos
 
 Run the new lifecycle tests plus selected settings-ownership, local-source and stream-shutdown regressions. Do not repeat the broad contract harness or pricing fetches against the real app. Check syntax, fixture cleanup, data/log redaction, docs and intended staged files. Record actual results and limits, then commit. The formal 3333 process, .env and credentials remain unchanged during implementation acceptance; a formal restart is a separate decision afterward.
 
-The user must confirm this concrete plan before implementation, as required by the grilling workflow. Q70–Q77 determine policy; this document makes the change and acceptance reviewable.
+The user confirmed complete implementation after plan commit 7f63b6f. Q70–Q77 remain the policy basis. No formal restart or independent startup manager was included in that authorization.

@@ -60,13 +60,17 @@ function createProvider({ id, label, sessionsDirectory, pricingService, config }
     if (watcherStarted && config.autoRefresh && !closed) await startWatcher();
     return { id, label, available, ...(available ? {} : { reason: 'sessions-directory-missing' }) };
   }
-  async function close() {
+  function stopWatcher() {
     closed = true; watcherStatus = 'closed';
     clearTimeout(watcherTimer); clearTimeout(recoveryTimer); watcherTimer = null; recoveryTimer = null;
-    detach(); cache.close(); await index.close();
+    detach();
+  }
+  async function close() {
+    stopWatcher(); const refreshing = cache.close();
+    await Promise.all([startPromise, refreshing, index.close()]);
   }
   return Object.freeze({
-    id, label, sessionsDirectory, pricingService, cache, availability, startWatcher, close,
+    id, label, sessionsDirectory, pricingService, cache, availability, startWatcher, stopWatcher, close,
     watcher: () => ({ enabled: config.autoRefresh, status: watcherStatus, debounceMs: config.autoRefreshDebounceMs, retryMs: config.autoRefresh ? WATCHER_RETRY_MS : null }),
   });
 }
@@ -79,6 +83,7 @@ export function createProviderRegistry({ config, pricingServices }) {
     get: (id) => providers.get(id) || null,
     list: async () => ({ defaultProvider: 'codex', providers: await Promise.all([...providers.values()].map((provider) => provider.availability())) }),
     startWatchers: () => Promise.all([...providers.values()].map((provider) => provider.startWatcher())),
+    stopWatchers: () => { for (const provider of providers.values()) provider.stopWatcher(); },
     close: () => Promise.all([...providers.values()].map((provider) => provider.close())),
     diagnostics: async () => Promise.all([...providers.values()].map(async (provider) => ({ ...(await provider.availability()), snapshot: provider.cache.status(), watcher: provider.watcher(), pricing: provider.pricingService.status() }))),
   });

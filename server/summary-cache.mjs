@@ -43,7 +43,7 @@ export function createSummaryCache(loader, now = () => new Date()) {
   return Object.freeze({
     get, refresh,
     invalidate: () => { if (!closed) generation += 1; },
-    close: () => { closed = true; },
+    close: () => { closed = true; return refreshPromise?.catch(() => undefined); },
     initialized: () => Boolean(snapshot),
     status: () => scanMetadata(snapshot, Boolean(refreshPromise), lastFailure),
   });

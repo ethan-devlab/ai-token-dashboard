@@ -20,6 +20,7 @@ import { acquirePricingOwner, unlockPricing } from './server/pricing-owner.mjs';
 import { projectionIdentity, requireProjection } from './server/projection.mjs';
 import { resolveRange } from './server/timezone.mjs';
 import { createUpdateChecker } from './server/update-checker.mjs';
+import { createLifecycleJournal, createProcessLifecycle } from './server/process-lifecycle.mjs';
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(APP_DIR, 'public');
@@ -38,20 +39,19 @@ if (recoveryArguments.some((argument) => argument.startsWith('--unlock-settings'
     process.exit(1);
   }
 }
+let pricingOwner; let settingsOwner; let providerRegistry; let updateChecker; let accountUsageService; let exportService; let server;
+let pricingServices = {};
+const pricingTimers = new Map();
+const sockets = new Set();
+const lifecycleJournal = createLifecycleJournal(APP_DIR);
+const lifecycle = createProcessLifecycle({ journal: lifecycleJournal, stop: stopAdmission, cleanup, forceClose: () => {
+  server?.closeAllConnections?.();
+  for (const socket of sockets) socket.destroy();
+} });
 const localConfig = readEnvFile(ENV_PATH);
 const CONFIG = readRuntimeConfig({ localConfig });
 const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
-const pricingOwner = await acquirePricingOwner(APP_DIR);
-const pricingServices = Object.freeze({
-  codex: createPricingRefreshService({ baseline: PRICING, owner: pricingOwner, cachePath: path.join(APP_DIR, '.pricing-cache.json'), archiveDirectory: path.join(APP_DIR, '.pricing-archive', 'codex') }),
-  claude: createClaudePricingRefreshService({ baseline: CLAUDE_PRICING, owner: pricingOwner, cachePath: path.join(APP_DIR, '.claude-pricing-cache.json'), archiveDirectory: path.join(APP_DIR, '.pricing-archive', 'claude') }),
-});
-await Promise.all(Object.values(pricingServices).map((service) => service.initialize()));
-const providerRegistry = createProviderRegistry({ config: CONFIG, pricingServices });
-const updateChecker = createUpdateChecker({ repository: CONFIG.updateRepository, currentVersion: CURRENT_VERSION });
-const accountUsageService = createAccountUsageService();
-const exportService = createExportService();
 const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const API_CSP = "default-src 'none'; frame-ancestors 'none'";
 const STATIC_TYPES = Object.freeze({ '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' });
@@ -150,11 +150,9 @@ async function verifiedSnapshot(provider) {
   return snapshot;
 }
 const startedAt = Date.now();
-let cleanupPromise;
-const pricingTimers = new Map();
 const pricingStarted = new Set();
 function schedulePricingRefresh(provider) {
-  if (cleanupPromise || !pricingOwner.status().writable) return;
+  if (lifecycle.stopping() || !pricingOwner.status().writable) return;
   const current = new Date();
   const nextUtcDay = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate() + 1, 0, 0, 1);
   const timer = setTimeout(() => { provider.pricingService.refresh().catch(() => undefined).finally(() => schedulePricingRefresh(provider)); }, Math.max(1_000, nextUtcDay - Date.now()));
@@ -162,16 +160,18 @@ function schedulePricingRefresh(provider) {
   pricingTimers.set(provider.id, timer);
 }
 function startPricingRefresh(provider) {
-  if (!pricingOwner.status().writable || pricingStarted.has(provider.id)) return;
+  if (lifecycle.stopping() || !pricingOwner.status().writable || pricingStarted.has(provider.id)) return;
   pricingStarted.add(provider.id);
   provider.pricingService.refresh().catch(() => undefined).finally(() => schedulePricingRefresh(provider));
 }
-const settingsOwner = isLoopbackHost(CONFIG.host) ? await acquireSettingsOwner(ENV_PATH) : null;
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   if (req.aborted || res.destroyed) return;
   const id = requestId(); const started = Date.now();
+  let finish;
   try {
     const requestUrl = validateRequest(req, CONFIG);
+    if (lifecycle.stopping()) throw new ApiError(503, 'SERVER_STOPPING', 'Dashboard is stopping. Retry after restart.');
+    finish = lifecycle.admit();
     if (!['GET', 'POST'].includes(req.method || '')) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
     if (requestUrl.pathname === '/api/update' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Use POST to check for updates.'); }
     if (req.method === 'GET' && requestUrl.pathname === '/api/providers') { json(res, 200, await providerRegistry.list(), id); return; }
@@ -232,35 +232,71 @@ const server = http.createServer(async (req, res) => {
       finally { if (!preparing) res.removeListener('close', abandoned); }
       return;
     }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const selectedProvider = providerId(requestUrl); json(res, 200, { version: CURRENT_VERSION, provider: selectedProvider, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, providers: await providerRegistry.diagnostics(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const selectedProvider = providerId(requestUrl); json(res, 200, { version: CURRENT_VERSION, provider: selectedProvider, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, providers: await providerRegistry.diagnostics(), lifecycle: lifecycleJournal.status(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, { ...await readSettings(ENV_PATH, CONFIG), ...await settingsOwner.check() }, id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); const input = await readJsonBody(req, 16 * 1024); await settingsOwner.assertWritable(); const saved = await saveSettings(ENV_PATH, input, { revision: /^"([a-f0-9]{64})"$/.exec(req.headers['if-match'] || '')?.[1], beforeWrite: settingsOwner.assertWritable }); json(res, 200, { ...settingsPayload(saved.localConfig, CONFIG, saved.revision), ...settingsOwner.status() }, id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/update') { verifyPost(req); if (req.headers['transfer-encoding'] !== undefined) throw new ApiError(413, 'BODY_NOT_ALLOWED', 'Request body is not allowed.'); json(res, 200, await updateChecker.check(), id); return; }
     if (req.method === 'GET' && await serveStatic(requestUrl.pathname, res, id)) return;
     throw new ApiError(404, 'NOT_FOUND', 'Not found.');
   } catch (failure) { if (res.headersSent || res.destroyed) res.destroy(); else error(res, failure, id); }
-});
-function cleanup() {
-  if (!cleanupPromise) {
-    for (const timer of pricingTimers.values()) clearTimeout(timer);
-    exportService.close(); providerRegistry.close();
-    cleanupPromise = (async () => {
-      await Promise.all(Object.values(pricingServices).map((service) => service.close()));
-      await Promise.all([
-        pricingOwner.release().catch(() => { console.error('Pricing ownership cleanup failed; explicit recovery may be required.'); }),
-        settingsOwner?.release().catch(() => { console.error('Settings ownership cleanup failed; explicit recovery may be required.'); }),
-      ]);
-    })();
-  }
-  return cleanupPromise;
+  finally { finish?.(); }
 }
-server.on('close', () => { void cleanup(); });
-server.on('error', () => { process.exitCode = 1; void cleanup(); console.error('Dashboard could not listen. Check the configured host and port.'); });
-for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { exportService.close(); server.close(); server.closeIdleConnections?.(); });
-try {
-  server.listen(CONFIG.port, CONFIG.host, () => {
+function stopAdmission() {
+  for (const timer of pricingTimers.values()) clearTimeout(timer);
+  pricingTimers.clear();
+  exportService?.close();
+  providerRegistry?.stopWatchers();
+  server?.close();
+  server?.closeIdleConnections?.();
+}
+async function closeHttp() {
+  if (!server) return;
+  await new Promise((resolve, reject) => {
+    server.close(failure => { if (failure && failure.code !== 'ERR_SERVER_NOT_RUNNING') reject(failure); else resolve(); });
+    server.closeIdleConnections?.();
+  });
+}
+async function cleanup() {
+  // The lifecycle controller drains admitted handlers and startup before this point.
+  await closeHttp();
+  await providerRegistry?.close();
+  await Promise.all(Object.values(pricingServices).map(service => service.close()));
+  const releases = await Promise.allSettled([pricingOwner?.release(), settingsOwner?.release()]);
+  if (releases.some(result => result.status === 'rejected')) throw new Error('Ownership cleanup failed.');
+}
+async function initialize() {
+  pricingOwner = await acquirePricingOwner(APP_DIR);
+  if (lifecycle.stopping()) return;
+  pricingServices = Object.freeze({
+    codex: createPricingRefreshService({ baseline: PRICING, owner: pricingOwner, cachePath: path.join(APP_DIR, '.pricing-cache.json'), archiveDirectory: path.join(APP_DIR, '.pricing-archive', 'codex') }),
+    claude: createClaudePricingRefreshService({ baseline: CLAUDE_PRICING, owner: pricingOwner, cachePath: path.join(APP_DIR, '.claude-pricing-cache.json'), archiveDirectory: path.join(APP_DIR, '.pricing-archive', 'claude') }),
+  });
+  await Promise.all(Object.values(pricingServices).map(service => service.initialize()));
+  if (lifecycle.stopping()) return;
+  providerRegistry = createProviderRegistry({ config: CONFIG, pricingServices });
+  updateChecker = createUpdateChecker({ repository: CONFIG.updateRepository, currentVersion: CURRENT_VERSION });
+  accountUsageService = createAccountUsageService();
+  exportService = createExportService();
+  settingsOwner = isLoopbackHost(CONFIG.host) ? await acquireSettingsOwner(ENV_PATH) : null;
+  if (lifecycle.stopping()) return;
+  server = http.createServer(handleRequest);
+  server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+  server.on('close', () => { void lifecycle.shutdown('server-closed'); });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(CONFIG.port, CONFIG.host, () => { server.removeListener('error', reject); resolve(); });
+  });
+  server.on('error', () => {
+    process.exitCode = 1;
+    console.error('Dashboard could not listen. Check the configured host and port.');
+    void lifecycle.shutdown('listen-failed');
+  });
+  if (!lifecycle.stopping()) {
+    lifecycleJournal.record('listening');
     providerRegistry.startWatchers().catch(() => undefined);
     startPricingRefresh(providerRegistry.get('codex'));
     console.log(`Local AI Token Dashboard: http://${CONFIG.host}:${CONFIG.port}`);
-  });
-} catch { process.exitCode = 1; await cleanup(); console.error('Dashboard could not listen. Check the configured host and port.'); }
+  }
+}
+try { await lifecycle.track(initialize); }
+catch { process.exitCode = 1; console.error('Dashboard could not start. Check the configured host and port.'); void lifecycle.shutdown('startup-failed'); }
