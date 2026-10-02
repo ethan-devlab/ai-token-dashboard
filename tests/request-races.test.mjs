@@ -18,7 +18,7 @@ test('late fetch rejection after replacement is stale and cannot remove the curr
 test('body parse rejection after destroy is stale even when parsing ignores the signal', async () => {
   const body = deferred(); const started = deferred();
   const channels = createRequestChannels(async () => ({ ok: true, headers: { get: () => 'application/json' }, json: () => { started.resolve(); return body.promise; } }));
-  const pending = channels.request('update', '/api/update'); await started.promise;
+  const pending = channels.request('update', '/api/update', { method: 'POST' }); await started.promise;
   channels.destroy(); body.reject(new SyntaxError('late invalid JSON'));
   assert.equal((await pending).stale, true);
 });

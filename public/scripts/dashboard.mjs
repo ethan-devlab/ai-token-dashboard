@@ -342,7 +342,7 @@ function setLocaleFromControl() { setLocale(controls.locale.value); try { window
 async function checkUpdates() {
   const attempt = ++updateGeneration; setButtonBusy($('checkUpdates'), true, 'action.checking');
   try {
-    const result = await channels.request('update', '/api/update');
+    const result = await channels.request('update', '/api/update', { method: 'POST' });
     if (!result.stale && attempt === updateGeneration) showNotice(result.payload.status === 'available' ? t('update.available', { version: result.payload.latestVersion }) : result.payload.status === 'current' ? t('update.current', { version: result.payload.currentVersion }) : t(`update.${result.payload.status || 'disabled'}`));
   } catch (error) {
     if (error?.name !== 'AbortError' && attempt === updateGeneration) showNotice(apiError(error));

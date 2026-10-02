@@ -47,6 +47,8 @@ With `ALLOW_REMOTE=1`, wildcard binds (`0.0.0.0` or `::`) accept the actual dest
 
 ## API v2
 
+All requests must pass the Host gate. API GET requests accept absent source headers for direct local tools, but reject explicit cross-origin or conflicting browser source headers. POST requires an exact same-origin Origin. These checks do not authenticate local processes or establish proxy trust. See [request policy and validation](docs/local-host-origin-validation.md).
+
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/providers` | Provider availability without exposing local paths. |
@@ -61,7 +63,7 @@ With `ALLOW_REMOTE=1`, wildcard binds (`0.0.0.0` or `::`) accept the actual dest
 | `GET /api/export/download/:ticket` | One-use native download of the prepared projection. |
 | `GET /api/diagnostics` | Redacted process/index information; disabled in remote mode. |
 | `GET /api/summary` | Deprecated v1 compatibility response. |
-| `GET /api/update` | User-triggered GitHub latest stable release check. |
+| `POST /api/update` | Same-origin, body-free GitHub latest stable release check. GET returns 405 without an upstream request. |
 | `POST /api/pricing/refresh` | Same-origin, writer-only manual price refresh; not limited by the daily cadence. |
 | `POST /api/pricing/load` | Same-origin load of the latest verified publication; available to readers and the writer. |
 | `POST /api/pricing/repair` | Same-origin, writer-only repair of current pricing storage; no arbitrary path or history selection. |

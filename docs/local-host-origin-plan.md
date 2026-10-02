@@ -1,6 +1,6 @@
 # Local Host and Origin protection plan
 
-Date: 2026-10-02 (Asia/Taipei). Source checkpoint: bd040cb. Status: policy and implementation plan only; the request protections below are not implemented. The default update repository is already delivered in bd040cb.
+Date: 2026-10-02 (Asia/Taipei). Design source checkpoint: bd040cb; approved plan commit: 33f1b89. Status: implemented and validated in isolated services. See [implementation evidence](local-host-origin-validation.md). The default update repository was delivered in bd040cb. The formal 3333 service has not been restarted for this phase.
 
 ## Confirmed scope
 
@@ -13,7 +13,7 @@ Existing opt-in remote-bind behavior and its private API/full-path restrictions 
 
 ## Evidence and protection boundary
 
-server/config.mjs has exact configured/loopback Host checks and Q62 socket-destination checks for wildcard binds. server.mjs validates Host globally and requires Origin on POST, but does not apply a common source check to GET APIs. GET /api/update calls the release checker. public/scripts/dashboard.mjs currently calls that endpoint as GET; request-channels.mjs already supports a method option and protects request generations.
+At the design checkpoint, server/config.mjs had exact configured/loopback Host checks and Q62 socket-destination checks for wildcard binds. server.mjs validated Host globally and required Origin on POST, but had no common source check for GET APIs. GET /api/update called the release checker. The implementation adds server/request-policy.mjs at the common gate and changes the route and client request to POST; existing request-channel generation protection remains.
 
 Origin identifies scheme, host and port; it can be absent on same-origin GET and can be null in opaque contexts. Fetch Metadata distinguishes same-origin, same-site, cross-site and user-initiated navigation. See [MDN Origin](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Origin) and [MDN Sec-Fetch-Site](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Site).
 
@@ -32,7 +32,7 @@ Apply checks before Provider scans, credential reads, pricing verification, expo
 
 Static HTML/assets keep the global Host gate, CSP and nosniff rules. They do not receive the API source restriction: a normal bookmark or link can open the local UI, which then uses its own same-origin API. API response and download access use the source gate. CSP frame-ancestors remains none. This change does not create a browser identity or protect against code already executing in the Dashboard origin.
 
-| Request | Planned result |
+| Request | Implemented result |
 | --- | --- |
 | Valid Host, GET dashboard without source headers | Allowed under Q68 |
 | Valid Host, API GET with matching Origin/same-origin metadata | Allowed |
@@ -64,4 +64,4 @@ Implement first, then add focused validation; no TDD or broad security scan is r
 5. Narrow regressions: relevant request-policy/service cases, copied calendar/projection/streaming HTTP checks and the existing remote-bind fixture. Keep Q62 wildcard behavior and private API denial. Run broader checks only if a change or failure justifies them.
 6. Record evidence and limitations; inspect and commit completed files. Offer an explicit local restart decision after the isolated implementation is complete. A live service restart is separate from the current design authorization.
 
-The user must confirm this concrete plan before implementation. The accepted GET-to-POST migration is the only intended public endpoint break; direct callers must send POST with the appropriate Origin. No private sample logs or credentials are needed for the acceptance fixtures.
+The user confirmed implementation of this plan after commit 33f1b89. The accepted GET-to-POST migration is the only intended public endpoint break; direct callers must send POST with the appropriate Origin. No private sample logs or credentials were used for the acceptance fixtures. Formal service restart remains a separate user decision.
