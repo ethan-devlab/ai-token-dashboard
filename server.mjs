@@ -9,7 +9,7 @@ import { createExportPlan } from './server/export-format.mjs';
 import { createExportService } from './server/export-service.mjs';
 import { createAccountUsageService } from './server/account-usage.mjs';
 import { createClaudePricingRefreshService } from './server/claude-pricing-refresh.mjs';
-import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.mjs';
+import { allowedRequestHost, isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.mjs';
 import { CLAUDE_PRICING, PRICING } from './server/pricing.mjs';
 import { createPricingRefreshService } from './server/pricing-refresh.mjs';
 import { createProviderRegistry } from './server/provider-registry.mjs';
@@ -71,7 +71,7 @@ function requestContext(requestUrl) {
   const period = requestUrl.searchParams.get('period');
   const start = requestUrl.searchParams.get('start');
   const end = requestUrl.searchParams.get('end');
-  if ((period != null && !/^\d{4}(?:-\d{2}|-W\d{2})?$/.test(period)) || (start != null && start.length > 32) || (end != null && end.length > 32) || (fromMs != null && toMs != null && fromMs >= toMs)) throw new ApiError(400, 'INVALID_RANGE', 'Invalid selected time range.');
+  if ((period != null && !/^\d{4}(?:-\d{1,2}|-W\d{2})?$/.test(period)) || (start != null && start.length > 32) || (end != null && end.length > 32) || (fromMs != null && toMs != null && fromMs >= toMs)) throw new ApiError(400, 'INVALID_RANGE', 'Invalid selected time range.');
   const q = requestUrl.searchParams.get('q') ?? requestUrl.searchParams.get('search') ?? '';
   if (q.length > 256) throw new ApiError(400, 'INVALID_QUERY', 'Search is too long.');
   const sort = requestUrl.searchParams.get('sort') || 'recent';
@@ -92,13 +92,8 @@ function exportHeaders(res, plan, id) {
     'X-Export-Scope': encodeURIComponent(JSON.stringify({ projection: metadata.projection.key, snapshotVersion: metadata.projection.snapshotVersion, pricingRevision: metadata.projection.pricingRevision, range: metadata.range, matchedSessionCount: metadata.matchedSessionCount, scope: metadata.scope })) });
 }
 function error(res, failure, id) { json(res, failure.status || 500, { error: { code: failure.code || 'INTERNAL_ERROR', message: failure.status ? failure.message : 'Internal server error.', requestId: id, ...(failure.refreshStatus ? { reason: failure.refreshStatus.reason, failedFiles: failure.refreshStatus.failedFiles, retainedSnapshot: failure.refreshStatus.retainedSnapshot } : {}) } }, id); }
-function allowedHost(host) {
-  const configured = `${CONFIG.host.includes(':') && !CONFIG.host.startsWith('[') ? `[${CONFIG.host}]` : CONFIG.host}:${CONFIG.port}`.toLowerCase();
-  if (String(host || '').toLowerCase() === configured) return true;
-  return isLoopbackHost(CONFIG.host) && new Set([`127.0.0.1:${CONFIG.port}`, `localhost:${CONFIG.port}`, `[::1]:${CONFIG.port}`]).has(String(host || '').toLowerCase());
-}
 function verifyPost(req, { bodyLimit = 0 } = {}) {
-  if (!allowedHost(req.headers.host)) throw new ApiError(400, 'INVALID_HOST', 'Invalid Host header.');
+  if (!allowedRequestHost(CONFIG, req.headers.host, req.socket.localAddress)) throw new ApiError(400, 'INVALID_HOST', 'Invalid Host header.');
   const origin = req.headers.origin;
   if (!origin || origin !== `http://${req.headers.host}`) throw new ApiError(403, 'INVALID_ORIGIN', 'Same-origin Origin is required.');
   const length = Number(req.headers['content-length'] || 0);
@@ -178,9 +173,9 @@ const server = http.createServer(async (req, res) => {
   if (req.aborted || res.destroyed) return;
   const id = requestId(); const started = Date.now();
   try {
-    if (!allowedHost(req.headers.host)) throw new ApiError(400, 'INVALID_HOST', 'Invalid Host header.');
+    if (!allowedRequestHost(CONFIG, req.headers.host, req.socket.localAddress)) throw new ApiError(400, 'INVALID_HOST', 'Invalid Host header.');
     if (!['GET', 'POST'].includes(req.method || '')) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
-    const requestUrl = new URL(req.url || '/', `http://${CONFIG.host}:${CONFIG.port}`);
+    const requestUrl = new URL(req.url || '/', `http://${req.headers.host}`);
     if (req.method === 'GET' && requestUrl.pathname === '/api/providers') { json(res, 200, await providerRegistry.list(), id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/pricing/versions') {
       const service = pricingServices[providerId(requestUrl)];

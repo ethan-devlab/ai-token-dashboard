@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isIP } from 'node:net';
 
 export function parseEnv(text) {
   const values = {};
@@ -44,6 +45,17 @@ function flag(value, name) {
 export function isLoopbackHost(host) {
   const normalized = String(host).trim().toLowerCase();
   return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1' || normalized === '[::1]';
+}
+
+export function allowedRequestHost(config, host, localAddress) {
+  const configuredHost = config.host.toLowerCase();
+  const authority = (address) => `${address.includes(':') && !address.startsWith('[') ? `[${address}]` : address}:${config.port}`.toLowerCase();
+  const requested = String(host || '').toLowerCase();
+  if (requested === authority(configuredHost)) return true;
+  if (isLoopbackHost(configuredHost)) return ['127.0.0.1', 'localhost', '::1'].some(address => requested === authority(address));
+  if (!['0.0.0.0', '::', '[::]'].includes(configuredHost) || !isIP(localAddress || '')) return false;
+  // A wildcard listens on several interfaces. Admit only this socket's destination, never forwarded headers.
+  return [localAddress, localAddress.replace(/^::ffff:/i, '')].some(address => requested === authority(address));
 }
 
 export function readRuntimeConfig({ environment = process.env, localConfig = {} } = {}) {

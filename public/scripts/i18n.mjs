@@ -3,6 +3,9 @@ export const LOCALE_PREFERENCE_KEY = 'codex-token-dashboard:locale:v1';
 
 const dictionaries = {
   en: {
+    'pricing.search': 'Search model prices',
+    'pricing.matches': '{count} of {total} models. Names grouped; higher versions first within each naming family. This is not release-date order.',
+    'pricing.noMatches': 'No model prices match this search.',
     'pricing.currentBasis': 'Estimate with the current retained basis; not historical billing',
     'pricing.revision': 'Basis {revision}',
     'pricing.archive.view': 'View archived basis',
@@ -63,6 +66,9 @@ const dictionaries = {
     'price.unavailable': 'Unavailable', 'update.disabled': 'Update checks are disabled. Set UPDATE_REPOSITORY to owner/repo to enable them.', 'update.checking': 'Checking GitHub Releases…', 'update.current': 'You are using the current release ({version}).', 'update.available': 'Version {version} is available. Download it manually, verify SHA-256, then replace the local files after closing this dashboard.', 'update.unavailable.network': 'Could not reach GitHub Releases. The dashboard remains local and usable.', 'update.unavailable.not-found': 'The configured GitHub release repository was not found.', 'update.unavailable.rate-limit': 'GitHub rate limit reached. Try again later.', 'update.unavailable.invalid-release': 'GitHub returned an invalid stable release.', 'update.unavailable.invalid-version': 'Could not compare the release version safely.', 'update.download': 'Download {name}', 'update.verify': 'Verify SHA-256: {sha256}',
   },
   'zh-Hant': {
+    'pricing.search': '搜尋模型費率',
+    'pricing.matches': '{count} / {total} 個模型。依名稱分組，同系列較高版本優先；並非發布日期排序。',
+    'pricing.noMatches': '沒有符合搜尋條件的模型費率。',
     'pricing.currentBasis': '依目前保留的計價依據估算；不是歷史帳單',
     'pricing.revision': '計價版本 {revision}',
     'pricing.archive.view': '查看封存依據',

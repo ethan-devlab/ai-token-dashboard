@@ -31,6 +31,13 @@ function safeTimezone(value, fallback = 'UTC') {
   }
 }
 
+export function normalizeMonthValue(value) {
+  const text = String(value || '').trim();
+  const match = /^(\d{4})-(\d{1,2})$/.exec(text);
+  return match && Number(match[1]) > 0 && Number(match[2]) >= 1 && Number(match[2]) <= 12
+    ? `${match[1]}-${match[2].padStart(2, '0')}` : text;
+}
+
 function densityValue(value, fallback = 'comfortable') { return Object.hasOwn(DENSITY_LIMITS, value) ? value : fallback; }
 
 function columnDatasetKey(key) { return `column${key[0].toUpperCase()}${key.slice(1)}`; }
@@ -73,7 +80,7 @@ export function readQueryState(controls, filters = {}, previous = null) {
   const query = {
     rangeMode: controls.rangeMode.value,
     weekValue: controls.weekInput.value,
-    monthValue: controls.monthInput.value,
+    monthValue: normalizeMonthValue(controls.monthInput.value),
     yearValue: controls.yearInput.value,
     customStart: controls.customStart.value,
     customEnd: controls.customEnd.value,
@@ -106,7 +113,7 @@ export function queryStateFromSearch(defaults, search) {
   return {
     ...defaults, intervalBounds,
     rangeMode: RANGE_MODES.has(rangeMode) ? rangeMode : defaults.rangeMode,
-    weekValue: params.get('week') ?? defaults.weekValue, monthValue: params.get('month') ?? defaults.monthValue, yearValue: params.get('year') ?? defaults.yearValue,
+    weekValue: params.get('week') ?? defaults.weekValue, monthValue: normalizeMonthValue(params.get('month') ?? defaults.monthValue), yearValue: params.get('year') ?? defaults.yearValue,
     customStart: intervalBounds ? zonedDateTimeValue(intervalBounds[0], timezone) : params.get('start') ?? defaults.customStart, customEnd: intervalBounds ? zonedDateTimeValue(intervalBounds[1], timezone) : params.get('end') ?? defaults.customEnd,
     search: (params.get('q') ?? defaults.search).trim().slice(0, 256), sort: SORT_MODES.has(sort) ? sort : defaults.sort,
     timezone,
@@ -131,7 +138,7 @@ export function saveProviderPreference(storage, provider) {
 export function queryStateToSearch(query, provider = 'codex') {
   const params = new URLSearchParams();
   if (provider !== 'codex') params.set('provider', provider);
-  const values = [['range', query.rangeMode], ['week', query.weekValue], ['month', query.monthValue], ['year', query.yearValue], ['start', query.customStart], ['end', query.customEnd], ['q', query.search], ['sort', query.sort], ['timezone', query.timezone]];
+  const values = [['range', query.rangeMode], ['week', query.weekValue], ['month', normalizeMonthValue(query.monthValue)], ['year', query.yearValue], ['start', query.customStart], ['end', query.customEnd], ['q', query.search], ['sort', query.sort], ['timezone', query.timezone]];
   for (const [name, value] of values) if (value && !(name === 'sort' && value === 'recent')) params.set(name, value);
   if (query.rangeMode === 'custom' && validIntervalBounds(query.intervalBounds)) { params.set('from', String(query.intervalBounds[0])); params.set('to', String(query.intervalBounds[1])); }
   for (const key of FILTER_KEYS) for (const value of stringList(query.filters?.[key])) params.append(key, value);
@@ -139,13 +146,13 @@ export function queryStateToSearch(query, provider = 'codex') {
 }
 
 export function applyQueryStateToControls(controls, query) {
-  controls.rangeMode.value = query.rangeMode; controls.weekInput.value = query.weekValue; controls.monthInput.value = query.monthValue; controls.yearInput.value = query.yearValue;
+  controls.rangeMode.value = query.rangeMode; controls.weekInput.value = query.weekValue; controls.monthInput.value = normalizeMonthValue(query.monthValue); controls.yearInput.value = query.yearValue;
   controls.customStart.value = query.customStart; controls.customEnd.value = query.customEnd; controls.search.value = query.search; controls.sort.value = query.sort; controls.timezone.value = query.timezone;
 }
 
 export function requestParameters(query, page = {}, provider = 'codex') {
   const params = new URLSearchParams({ provider, mode: query.rangeMode, timezone: query.timezone, q: query.search, sort: query.sort, offset: String(page.offset || 0), limit: String(page.limit || 100) });
-  const period = query.rangeMode === 'week' ? query.weekValue : query.rangeMode === 'month' ? query.monthValue : query.rangeMode === 'year' ? query.yearValue : '';
+  const period = query.rangeMode === 'week' ? query.weekValue : query.rangeMode === 'month' ? normalizeMonthValue(query.monthValue) : query.rangeMode === 'year' ? query.yearValue : '';
   if (period) params.set('period', period);
   if (query.rangeMode === 'custom' && !validIntervalBounds(query.intervalBounds)) for (const [name, value] of [['start', query.customStart], ['end', query.customEnd]]) if (value) params.set(name, value);
   if (query.rangeMode === 'custom' && validIntervalBounds(query.intervalBounds)) { params.set('from', String(query.intervalBounds[0])); params.set('to', String(query.intervalBounds[1])); }

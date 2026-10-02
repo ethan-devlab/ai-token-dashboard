@@ -2,6 +2,8 @@
 
 Date: 2026-10-01 (Asia/Taipei). Reviewed source checkpoint: 59e30b6 on main. This inventory reconciles the original audit with implementation through Q60 and the saved validation records. This pass changes documentation only and does not repeat prior runtime checks.
 
+Follow-up: 2026-10-02. The month-input and Q61–Q63 implementation added focused runtime checks, recorded in the linked follow-up report. The original inventory verification below describes the 2026-10-01 documentation pass only.
+
 Q34–Q39 settings/credential ownership, Q40–Q50 query/native downloads and Q51–Q60 pricing ownership/recovery are delivered. The old buffered-download limit and unresolved pricing-writer policy are historical. External-editor, storage, live-contract and platform boundaries remain below.
 
 ## Status rules
@@ -51,6 +53,7 @@ All 17 defects reproduced by the original bounded audit have correction evidence
 | Request ownership | Fifty focused checks, Provider races and native cancellation passed; only current attempts can publish or release busy state | [Request-race validation](request-race-validation.md) |
 | Query/native streaming, Q40–Q50 | Selective projections, bounded reuse, uncapped native downloads, one slot, deadlines and pinned content satisfy the selected local workload targets | [Stream delivery](query-export-performance-validation.md), commit 348a8ba |
 | Post-pricing resource acceptance | At 150000 observations, first dashboard 1147.7 ms, warm/filter 163.1–167.6 ms, page/detail at most 43.5 ms, each export preparation plus transfer at most 123.1 ms; normal observed RSS 388.4 MiB | [Pricing ownership acceptance](pricing-ownership-recovery-validation.md), commit 59e30b6 |
+| Month input and Q61–Q63 follow-up, 2026-10-02 | One-digit month input works; model prices have name/version order and search; wildcard bind accepts the actual destination IP while retaining Host/Origin and private API restrictions | [Focused HTTP, desktop and restart validation](month-pricing-remote-validation.md); Quick Tunnels registered, but public DNS returned ENOTFOUND, so external acceptance remains unverified |
 
 The [initial performance baseline](performance-baseline.md) preserves the former 32 MiB rejection measurement. It does not describe the current download contract. The post-pricing run is the latest measurement, not a general hardware or concurrency guarantee.
 
@@ -71,11 +74,11 @@ Counts in these reports overlap. Do not add them to claim a new aggregate suite 
 | ID | Not yet established | Concrete follow-up |
 | --- | --- | --- |
 | V01 | Windows filesystem/hard-link/rename permissions, recursive watcher and the supported Node-version matrix | Run the focused commands in each checkpoint on the required targets; do not infer Windows behavior from macOS |
-| V02 | Live pricing document format, quota endpoints, real read-only CLI login changes and release-check endpoint behavior | A separately selected live check must preserve fixed endpoints, credential privacy and current manual-action boundaries; dashboard OAuth refresh is removed |
+| V02 | Live quota endpoints, real read-only CLI login changes and release-check endpoint behavior; general future pricing document compatibility | A read-only OpenAI pricing GET parsed 40 rows during the [2026-10-02 follow-up](month-pricing-remote-validation.md); this does not certify ongoing compatibility or the live cache. Other checks must preserve fixed endpoints and credential privacy; dashboard OAuth refresh is removed |
 | V03 | Populated real Provider-log variants beyond the synthetic identity/cumulative/turn cases | Validate sanitized representative logs without exporting transcripts or credentials |
 | V04 | Settings-save disk-full/denied-write behavior, interrupted settings replacement and incomplete owner acquisition/retirement; physical durability | Pricing write/rename/metadata failures and publication-stage SIGKILL now have evidence. Settings ownership loss and stale-lock recovery are also tested, but do not establish every write-stage failure. Use disposable paths and injected errors; actual disk exhaustion and power loss need a separate scope. Credential writes are removed |
 | V05 | Actual watcher error emission, worker exit without a message, symlink-swap/deletion timing, partial append and empty-directory edge cases | Build focused isolated cases. Active worker termination, same-size restored-mtime replacement, in-flight writes, dirty follow-up and root recovery already have evidence |
-| V06 | General concurrent-load responsiveness and browsers other than the tested Safari/in-app browser remain unverified | [Stream validation](query-export-performance-validation.md) now covers complete >32 MiB native files, actual cancellation/interruption/retry, busy admission, pinned data and slow-consumer backpressure; no general concurrent-load SLA is claimed |
+| V06 | General concurrent-load responsiveness, other browsers, second-device LAN access and HTTPS tunnel end-to-end behavior remain unverified | [Stream validation](query-export-performance-validation.md) covers native delivery. [Remote follow-up](month-pricing-remote-validation.md) covers same-machine IPv4 LAN and IPv6 destination checks; two registered Quick Tunnels had ENOTFOUND. Q63 defers tunnel compatibility; no general concurrent-load SLA is claimed |
 | V07 | Forced colors and assistive technology | Perform desktop-only interaction checks; prior geometry and AX evidence alone do not certify these modes |
 
 No gap above is reported as a newly reproduced defect. Native Service/Tray remain unsupported/deferred, rather than a tested shipping feature. The source contract harness remains skipped because it can fetch upstream prices and write source caches; isolated route fixtures provide the bounded HTTP evidence.

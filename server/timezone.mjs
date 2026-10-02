@@ -93,7 +93,7 @@ function periodStart(mode, period, today) {
     if (mode === 'year') return { ...today, month: 1, day: 1 };
     return today;
   }
-  const pattern = mode === 'week' ? /^(\d{4})-W(\d{2})$/ : mode === 'month' ? /^(\d{4})-(\d{2})$/ : mode === 'year' ? /^(\d{4})$/ : null;
+  const pattern = mode === 'week' ? /^(\d{4})-W(\d{2})$/ : mode === 'month' ? /^(\d{4})-(\d{1,2})$/ : mode === 'year' ? /^(\d{4})$/ : null;
   const match = pattern?.exec(period);
   if (!match || Number(match[1]) < 1) invalidRange('Invalid period for the selected mode.');
   const year = Number(match[1]); const value = Number(match[2]);

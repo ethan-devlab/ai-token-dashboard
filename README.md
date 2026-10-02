@@ -41,6 +41,10 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 | `AUTO_REFRESH_DEBOUNCE_MS` | `1500` | Coalescing delay for the optional watcher. |
 | `UPDATE_REPOSITORY` | unset | Optional canonical `owner/repo` for user-triggered release checks. |
 
+Month input accepts `YYYY-M` and `YYYY-MM`; the browser stores valid values as `YYYY-MM`. Model prices support name search and natural numeric version order within each naming family. This order does not indicate release dates.
+
+With `ALLOW_REMOTE=1`, wildcard binds (`0.0.0.0` or `::`) accept the actual destination IP and configured port in the Host header. External domain names and forwarded headers do not grant access. Remote settings, diagnostics and login-plan APIs remain disabled; full paths require a loopback bind. HTTPS tunnel compatibility is not supported by this change. See [month, pricing and remote validation](docs/month-pricing-remote-validation.md).
+
 ## API v2
 
 | Endpoint | Purpose |

@@ -20,6 +20,8 @@ test('historical ISO weeks use their week year, including year rollover and vali
   bounds(resolveRange({ mode: 'week', period: '2026-W01', timezone: 'Asia/Taipei' }), '2025-12-28T16:00Z', '2026-01-04T16:00Z');
 });
 test('period formats are mode-specific; impossible months and dates do not normalize', () => {
+  bounds(utc({ mode: 'month', period: '2026-9' }), '2026-09-01T00:00Z', '2026-10-01T00:00Z');
+  bounds(resolveRange({ mode: 'month', period: '2026-9', timezone: 'Asia/Taipei' }), '2026-08-31T16:00Z', '2026-09-30T16:00Z');
   for (const [mode, period] of [['month', '2026-13'], ['month', '2026'], ['year', '2026-01'], ['today', '2026'], ['all', '2026-W01']]) rejects({ mode, period });
   for (const start of ['2026-02-31T00:00', '2025-02-29T00:00', '2026-04-31T00:00', '2026-00-01T00:00', '2026-01-01T24:00', '0000-01-01T00:00']) rejects({ mode: 'custom', start, end: '2027-01-01T00:00' });
   bounds(utc({ mode: 'custom', start: '2024-02-29T00:00', end: '2024-03-01T00:00' }), '2024-02-29T00:00Z', '2024-03-01T00:00Z');
