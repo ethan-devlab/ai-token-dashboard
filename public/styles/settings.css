@@ -1,5 +1,5 @@
 .settings-shell { max-inline-size: 1120px; }
-.settings-form { display: grid; gap: var(--space-4); }
+.settings-form { display: grid; gap: var(--space-4); margin-block-start: var(--space-5); }
 .settings-unavailable { display: grid; gap: var(--space-3); padding: var(--space-5); }
 .settings-unavailable h2, .settings-unavailable p { margin: 0; }
 .settings-unavailable p { color: var(--color-muted); max-inline-size: 65ch; }

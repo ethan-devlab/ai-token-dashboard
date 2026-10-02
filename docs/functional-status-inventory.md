@@ -6,6 +6,8 @@ Follow-up: 2026-10-02. The month-input and Q61–Q63 implementation added focuse
 
 Local safety follow-up: Q67–Q69 are implemented with isolated HTTP and desktop evidence. The user separately authorized restart after f1629c5; the formal 3333 process now runs that implementation. See [local request validation and startup follow-up](local-host-origin-validation.md).
 
+2026-10-03 settings follow-up: the formal service had started as a reader after a prior owner exited with retained locks. Restricted recovery and restart restored settings and pricing writer access without changing .env. The settings form also gained the requested Reload-to-legend spacing. See [recovery and desktop evidence](settings-ownership-validation.md#2026-10-03-stale-owner-recovery-and-settings-spacing).
+
 Q34–Q39 settings/credential ownership, Q40–Q50 query/native downloads and Q51–Q60 pricing ownership/recovery are delivered. The old buffered-download limit and unresolved pricing-writer policy are historical. External-editor, storage, live-contract and platform boundaries remain below.
 
 ## Status rules

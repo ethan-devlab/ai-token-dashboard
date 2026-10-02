@@ -1,5 +1,19 @@
 # Settings ownership and read-only credentials validation
 
+## 2026-10-03 stale-owner recovery and settings spacing
+
+The reported Safari read-only state was reproduced in the actual settings page and GET /api/settings returned writable=false, writeReason=occupied. The current listener PID 72927 used this checkout under npm start. Both the settings and pricing lock records identified PID 69544 on this machine; that PID was absent. The termination cause of the former process was not established. No live owner was removed and no automatic takeover policy was introduced.
+
+The existing restricted node server.mjs --unlock-settings and --unlock-pricing commands both succeeded. The read-only listener then exited through SIGTERM and npm start launched PID 73255 on 127.0.0.1:3333. Actual settings GET reported writable=true, writeReason=null; pricing reported writable=true with an available active archive. The before/after .env SHA-256 remained 01602ebfcfc4427badcaf1224b6f51f3a869904842f2a0dff902fd4fd80d7b52. The real settings file was not saved or rewritten.
+
+public/styles/settings.css adds margin-block-start: var(--space-5) to the form. In a desktop read-only fixture, the Reload current settings button bottom and SESSION SOURCE legend top were 20 CSS pixels apart. The existing token resolves to 20px at the tested font size. This also gives the normal writable form a consistent top margin. No ownership module or API contract changed.
+
+Focused acceptance used node tests/settings-owner-http.mjs --serve. Its isolated ownership, read-only routes, graceful/failure cleanup, crash/manual recovery and fixed read-only lifecycle checks passed. The fixture also retained its read-only Claude credential checks. The actual desktop fixture writer saved Maximum files from 999 to 998; its .env contained MAX_FILES=998 and the page displayed saved success with no unsaved changes. The fixture reader remained disabled with the correct read-only warning. Both pages had empty browser error logs. All created browser tabs and fixture processes were closed, and the disposable fixture root was removed.
+
+The user's Safari settings tab was reloaded after recovery: the read-only error was gone, inputs and Save to .env were enabled, and the page retained its original values. The service was left running. Evidence is in /Users/ethan/.codex/visualizations/2026/09/30/01a0f0ef-7186-77c2-b30d-f4695955d901/: settings-writer-recovered-safari.png, settings-reload-gap-readonly.png, settings-reload-gap-evidence.json and settings-recovered-writer-save-fixture.png.
+
+Existing Q37/Q38/Q39/Q58 remain: abnormal exit can leave a lock, explicit recovery requires a confirmed absent same-machine owner, and a running reader needs restart to acquire ownership. Unknown or live owners remain blocked. No broad suite, new platform validation or storage-durability check was needed for the one-rule CSS change and explicit local recovery.
+
 Date: 2026-10-01 (Asia/Taipei). Branch: main. Policy baseline: 16a78b6. Runtime: Node v26.0.0 on macOS. Q34–Q39 are implemented.
 
 ## Delivered behavior
