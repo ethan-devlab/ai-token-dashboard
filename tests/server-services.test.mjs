@@ -268,6 +268,12 @@ test('runtime configuration keeps update repository local and rejects an acciden
   const config = readRuntimeConfig({ environment: { PORT: '4242', UPDATE_REPOSITORY: 'other/repo' }, localConfig });
   assert.equal(config.updateRepository, 'owner/repo');
   assert.equal(config.port, 4242);
+  const defaults = readRuntimeConfig({ environment: { UPDATE_REPOSITORY: 'other/repo' } });
+  assert.equal(defaults.updateRepository, 'ethan-devlab/codex-token-dashboard');
+  assert.equal(settingsPayload({}, defaults).settings.UPDATE_REPOSITORY, defaults.updateRepository);
+  const disabled = readRuntimeConfig({ environment: {}, localConfig: { UPDATE_REPOSITORY: '' } });
+  assert.equal(disabled.updateRepository, '');
+  assert.equal(settingsPayload({ UPDATE_REPOSITORY: '' }, disabled).settings.UPDATE_REPOSITORY, '');
   assert.throws(() => readRuntimeConfig({ environment: { HOST: '0.0.0.0' } }), /Non-loopback HOST requires ALLOW_REMOTE=1/);
 });
 

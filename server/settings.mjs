@@ -1,7 +1,7 @@
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { parseEnv, readRuntimeConfig } from './config.mjs';
+import { DEFAULT_UPDATE_REPOSITORY, parseEnv, readRuntimeConfig } from './config.mjs';
 import { validRepository } from './update-checker.mjs';
 
 export const SETTINGS_KEYS = Object.freeze([
@@ -54,7 +54,7 @@ export function settingsPayload(localConfig, runtimeConfig, revision) {
       EXPOSE_FULL_PATHS: settingValue(localConfig, runtimeConfig, 'EXPOSE_FULL_PATHS', (config) => config.exposeFullPaths ? '1' : '0'),
       AUTO_REFRESH: settingValue(localConfig, runtimeConfig, 'AUTO_REFRESH', (config) => config.autoRefresh ? '1' : '0'),
       AUTO_REFRESH_DEBOUNCE_MS: settingValue(localConfig, runtimeConfig, 'AUTO_REFRESH_DEBOUNCE_MS', (config) => String(config.autoRefreshDebounceMs)),
-      UPDATE_REPOSITORY: localConfig.UPDATE_REPOSITORY || '',
+      UPDATE_REPOSITORY: localConfig.UPDATE_REPOSITORY ?? DEFAULT_UPDATE_REPOSITORY,
     }),
     restartRequired: true,
     ...(revision ? { revision } : {}),

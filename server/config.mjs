@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { isIP } from 'node:net';
 
+export const DEFAULT_UPDATE_REPOSITORY = 'ethan-devlab/codex-token-dashboard';
+
 export function parseEnv(text) {
   const values = {};
   for (const line of String(text).split(/\r?\n/)) {
@@ -96,6 +98,6 @@ export function readRuntimeConfig({ environment = process.env, localConfig = {} 
     autoRefresh,
     autoRefreshDebounceMs,
     // Update checks are deliberately exempt from process-env overrides.
-    updateRepository: localConfig.UPDATE_REPOSITORY || '',
+    updateRepository: localConfig.UPDATE_REPOSITORY ?? DEFAULT_UPDATE_REPOSITORY,
   });
 }

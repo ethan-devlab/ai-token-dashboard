@@ -39,7 +39,7 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 | `EXPOSE_FULL_PATHS` | `0` | Only allowed with a loopback host. |
 | `AUTO_REFRESH` | `0` | Uses a debounced filesystem hint; manual refresh remains available. |
 | `AUTO_REFRESH_DEBOUNCE_MS` | `1500` | Coalescing delay for the optional watcher. |
-| `UPDATE_REPOSITORY` | unset | Optional canonical `owner/repo` for user-triggered release checks. |
+| `UPDATE_REPOSITORY` | `ethan-devlab/codex-token-dashboard` | Canonical `owner/repo` for user-triggered release checks. An explicit blank value disables checks; a custom value selects another repository. |
 
 Month input accepts `YYYY-M` and `YYYY-MM`; the browser stores valid values as `YYYY-MM`. Model prices support name search and natural numeric version order within each naming family. This order does not indicate release dates.
 
