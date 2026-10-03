@@ -30,3 +30,11 @@ The changed-owner unit check makes the first process probe report absent and the
 The formal 3333 process still runs the earlier backend from the separately authorized pricing recovery. Its settings and pricing writer access are available; this phase did not signal it or change its .env. A separately selected restart is required to enable Q78 there. The previous Claude publication/archive error remains outside this lock change.
 
 No Codex application code, terminal behavior, service manager, dependency or global configuration was modified. No real Codex stop button was used to force-kill the formal server. The unchanged real 30-second deadline, full suite, power-loss durability, a frozen event loop and other operating systems were not retested. This change restores safe access on next startup; it does not claim SIGKILL can execute shutdown cleanup.
+
+## Authorized formal restart after 351c4d6
+
+The user selected restart and verification. Preflight confirmed PID 81058 held both leases on 127.0.0.1:3333. SIGTERM recorded cleanup-complete and exit 0; both lock paths were absent before restart. The previous npm session ended successfully. A new npm start, Node PID 81611, now runs Q78 and owns both leases.
+
+The .env SHA-256 remained `86115a871701c9aef95f4286923ba2dffa377f560ccbf6661b85f67b5a442268`. Settings revision, HOST and ALLOW_REMOTE are unchanged. September 2026 / Asia/Taipei range, complete totals, full cost object and pricing basis revision exactly match preflight; adopted usage is 587597633 Tokens. Settings and both Provider pricing services are writable. The new lifecycle record has start/listening, availability=true and no error. Its private file mode is 0600. The real desktop settings page has enabled controls and save with no console errors; no real configuration save was made.
+
+The prior Claude publication/archive error remains separate and unchanged. No forced stop was applied to the formal service; the automatic absent-owner path was verified in the isolated multiprocess checks above. Artifacts: `startup-recovery-live-before.json`, `startup-recovery-live-after.json` and `startup-recovery-live-settings.png` in the chat visualization directory. The temporary tab was closed and the service remains running.
