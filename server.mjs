@@ -10,7 +10,7 @@ import { createExportService } from './server/export-service.mjs';
 import { createAccountUsageService } from './server/account-usage.mjs';
 import { createClaudePricingRefreshService } from './server/claude-pricing-refresh.mjs';
 import { isLoopbackHost, readEnvFile, readRuntimeConfig } from './server/config.mjs';
-import { validateRequest } from './server/request-policy.mjs';
+import { isLocalSettingsRequest, validateRequest } from './server/request-policy.mjs';
 import { CLAUDE_PRICING, PRICING } from './server/pricing.mjs';
 import { createPricingRefreshService } from './server/pricing-refresh.mjs';
 import { createProviderRegistry } from './server/provider-registry.mjs';
@@ -233,8 +233,8 @@ async function handleRequest(req, res) {
       return;
     }
     if (req.method === 'GET' && requestUrl.pathname === '/api/diagnostics') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'DIAGNOSTICS_DISABLED', 'Diagnostics are disabled in remote mode.'); const selectedProvider = providerId(requestUrl); json(res, 200, { version: CURRENT_VERSION, provider: selectedProvider, uptimeMs: Date.now() - startedAt, node: process.version, platform: process.platform, config: { host: CONFIG.host, port: CONFIG.port, maxFiles: CONFIG.maxFiles, parseConcurrency: CONFIG.parseConcurrency, autoRefresh: CONFIG.autoRefresh, exposeFullPaths: CONFIG.exposeFullPaths }, providers: await providerRegistry.diagnostics(), lifecycle: lifecycleJournal.status(), requestDurationMs: Date.now() - started, memory: process.memoryUsage() }, id); return; }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); json(res, 200, { ...await readSettings(ENV_PATH, CONFIG), ...await settingsOwner.check() }, id); return; }
-    if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLoopbackHost(CONFIG.host)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Settings are disabled in remote mode.'); verifyPost(req, { bodyLimit: 16 * 1024 }); const input = await readJsonBody(req, 16 * 1024); await settingsOwner.assertWritable(); const saved = await saveSettings(ENV_PATH, input, { revision: /^"([a-f0-9]{64})"$/.exec(req.headers['if-match'] || '')?.[1], beforeWrite: settingsOwner.assertWritable }); json(res, 200, { ...settingsPayload(saved.localConfig, CONFIG, saved.revision), ...settingsOwner.status() }, id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/settings') { if (!isLocalSettingsRequest(req, requestUrl)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Open settings through a local loopback address.'); json(res, 200, { ...await readSettings(ENV_PATH, CONFIG), ...await settingsOwner.check() }, id); return; }
+    if (req.method === 'POST' && requestUrl.pathname === '/api/settings') { if (!isLocalSettingsRequest(req, requestUrl)) throw new ApiError(403, 'SETTINGS_DISABLED', 'Open settings through a local loopback address.'); verifyPost(req, { bodyLimit: 16 * 1024 }); const input = await readJsonBody(req, 16 * 1024); await settingsOwner.assertWritable(); const saved = await saveSettings(ENV_PATH, input, { revision: /^"([a-f0-9]{64})"$/.exec(req.headers['if-match'] || '')?.[1], beforeWrite: settingsOwner.assertWritable }); json(res, 200, { ...settingsPayload(saved.localConfig, CONFIG, saved.revision), ...settingsOwner.status() }, id); return; }
     if (req.method === 'POST' && requestUrl.pathname === '/api/update') { verifyPost(req); if (req.headers['transfer-encoding'] !== undefined) throw new ApiError(413, 'BODY_NOT_ALLOWED', 'Request body is not allowed.'); json(res, 200, await updateChecker.check(), id); return; }
     if (req.method === 'GET' && await serveStatic(requestUrl.pathname, res, id)) return;
     throw new ApiError(404, 'NOT_FOUND', 'Not found.');
@@ -277,7 +277,7 @@ async function initialize() {
   updateChecker = createUpdateChecker({ repository: CONFIG.updateRepository, currentVersion: CURRENT_VERSION });
   accountUsageService = createAccountUsageService();
   exportService = createExportService();
-  settingsOwner = isLoopbackHost(CONFIG.host) ? await acquireSettingsOwner(ENV_PATH) : null;
+  settingsOwner = await acquireSettingsOwner(ENV_PATH);
   if (lifecycle.stopping()) return;
   server = http.createServer(handleRequest);
   server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });

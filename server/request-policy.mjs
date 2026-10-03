@@ -1,5 +1,11 @@
 import { isIP } from 'node:net';
-import { allowedRequestHost } from './config.mjs';
+import { allowedRequestHost, isLoopbackAddress } from './config.mjs';
+
+export function isLocalSettingsRequest(req, requestUrl) {
+  // Only the actual local connection grants access. Proxy headers cannot grant it.
+  return isLoopbackAddress(req.socket.remoteAddress) && isLoopbackAddress(req.socket.localAddress)
+    && (requestUrl.hostname === 'localhost' || isLoopbackAddress(requestUrl.hostname));
+}
 
 function reject(status, code, message) { throw Object.assign(new Error(message), { status, code }); }
 

@@ -27,7 +27,9 @@ globalThis.fetch=async(url)=>{if(!String(url).endsWith('/pricing.md'))return Res
  const rates={...PRICING.rates,'gpt-6.1-sol':{input:2,cachedInput:0.1,output:10},'gpt-6-sol':{input:2,cachedInput:0.2,output:10}};
  const price=v=>v==null?'-':'$'+v;
  return new Response('### Standard pricing data\\n| Model | Short context input | Short context cached input | Short context cache writes | Short context output |\\n|---|---|---|---|---|\\n'+Object.entries(rates).map(([id,r])=>'| '+[id,price(r.input),price(r.cachedInput),price(r.cacheWrite),price(r.output)].join(' | ')+' |').join('\\n'),{headers:{'content-type':'text/markdown'}});};\n`);
-  const html = path.join(app, 'public/index.html'); await writeFile(html, (await readFile(html, 'utf8')).replace('<main ', '<p role="status">TEST ONLY. Synthetic September=7 and October=13 Tokens. Disposable configuration; source responses are synthetic.</p><main '));
+  for (const page of ['index.html', 'settings.html']) {
+    const html = path.join(app, 'public', page); await writeFile(html, (await readFile(html, 'utf8')).replace('<main ', '<p role="status">TEST ONLY. Synthetic September=7 and October=13 Tokens. Disposable configuration; source responses are synthetic.</p><main '));
+  }
   const selectedPort = await port();
   const config = { HOST:'127.0.0.1', PORT:String(selectedPort), CODEX_SESSIONS_DIR:codex, CLAUDE_SESSIONS_DIR:claude, AUTO_REFRESH:'0', ...values };
   await writeFile(path.join(app,'.env'), Object.entries(config).map(([key,value])=>`${key}=${value}`).join('\n')+'\n');
@@ -90,18 +92,42 @@ try {
   const direct = await fetch(`http://127.0.0.1:${remote.port}/api/providers`); evidence.remoteDirectStatus=direct.status;
   assert.equal(direct.status,200);
   const origin=`http://127.0.0.1:${remote.port}`;
+  const settingsResponse=await fetch(origin+'/api/settings'); assert.equal(settingsResponse.status,200);
+  const remoteSettings=await settingsResponse.json();assert.equal(remoteSettings.writable,true);assert.equal(remoteSettings.settings.HOST,'0.0.0.0');
+  const saveOptions={method:'POST',headers:{Origin:origin,'Content-Type':'application/json','If-Match':`"${remoteSettings.revision}"`},body:JSON.stringify({...remoteSettings.settings,MAX_FILES:'999'})};
+  const saved=await fetch(origin+'/api/settings',saveOptions);assert.equal(saved.status,200);
+  assert.ok((await readFile(path.join(remote.app,'.env'),'utf8')).includes('MAX_FILES=999\n'));
+  assert.equal((await fetch(origin+'/api/settings',saveOptions)).status,409);
+  assert.equal((await fetch(origin+'/api/settings',{...saveOptions,headers:{...saveOptions.headers,Origin:'http://evil.test'}})).status,403);
+  assert.equal((await fetch(origin+'/api/settings',{method:'POST'})).status,403);
+  assert.equal((await fetch(`http://localhost:${remote.port}/api/settings`)).status,200);
+  const readerPort=await port();
+  const readerChild=spawn(process.execPath,['--import',path.join(remote.app,'offline.mjs'),path.join(remote.app,'server.mjs')],{cwd:remote.app,env:{PORT:String(readerPort),CODEX_HOME:path.join(remote.app,'no-auth'),CLAUDE_CONFIG_DIR:path.join(remote.app,'no-auth')},stdio:['ignore','pipe','pipe']});
+  const reader={child:readerChild,output:''};processes.push(reader);readerChild.stdout.on('data',chunk=>reader.output+=chunk);readerChild.stderr.on('data',chunk=>reader.output+=chunk);
+  for(let i=0;i<100&&!reader.output.includes('Local AI Token Dashboard:');i++)await delay(25);
+  assert.ok(reader.output.includes('Local AI Token Dashboard:'));
+  const readerOrigin=`http://127.0.0.1:${readerPort}`;const readonly=await fetch(readerOrigin+'/api/settings').then(response=>response.json());assert.equal(readonly.writable,false);
+  const deniedSave=await fetch(readerOrigin+'/api/settings',{method:'POST',headers:{Origin:readerOrigin,'Content-Type':'application/json','If-Match':`"${readonly.revision}"`},body:JSON.stringify({...readonly.settings,MAX_FILES:'998'})});
+  assert.equal(deniedSave.status,409);assert.equal((await deniedSave.json()).error.code,'SETTINGS_READ_ONLY');
+  evidence.checks.push('wildcard bind permits loopback settings GET/save with exact Origin/revision; localhost aliases work; a second process stays read-only');
   assert.equal((await rawRequest(remote,{Host:`127.0.0.1:${remote.port}`,Origin:origin},'POST','/api/refresh')).status,200);
   assert.equal((await rawRequest(remote,{Host:`127.0.0.1:${remote.port}`,Origin:origin.replace('http:','https:')},'POST','/api/refresh')).status,403);
   for(const headers of [{Host:'evil.test'},{Host:`127.0.0.1:${remote.port+1}`},{Host:'evil.test', 'X-Forwarded-Host':`127.0.0.1:${remote.port}`, 'X-Forwarded-Proto':'http'}]) assert.equal((await rawRequest(remote,headers)).status,400);
   const lan=Object.values(os.networkInterfaces()).flat().find(item=>item?.family==='IPv4'&&!item.internal);
-  if(lan){ const response=await fetch(`http://${lan.address}:${remote.port}/api/dashboard?mode=all`); assert.equal(response.status,200); const body=await response.json(); assert.equal(body.totals.totalTokens,20); assert.ok(!JSON.stringify(body).includes('/TEST_ONLY/private-workspace')); evidence.sameMachineLanInterface=true; }
+  if(lan){ const lanOrigin=`http://${lan.address}:${remote.port}`;const response=await fetch(lanOrigin+'/api/dashboard?mode=all'); assert.equal(response.status,200); const body=await response.json(); assert.equal(body.totals.totalTokens,20); assert.ok(!JSON.stringify(body).includes('/TEST_ONLY/private-workspace')); evidence.sameMachineLanInterface=true;
+    const before=await readFile(path.join(remote.app,'.env'));
+    for(const method of ['GET','POST']){const rejected=await fetch(lanOrigin+'/api/settings',{method,headers:{Origin:lanOrigin,'X-Forwarded-For':'127.0.0.1','X-Forwarded-Host':`localhost:${remote.port}`,Forwarded:'for=127.0.0.1;host=localhost'}});assert.equal(rejected.status,403);assert.equal((await rejected.json()).error.code,'SETTINGS_DISABLED');}
+    assert.deepEqual(await readFile(path.join(remote.app,'.env')),before);
+    evidence.checks.push('actual LAN-interface connections cannot read/write settings; spoofed proxy headers do not grant access; file bytes unchanged');
+  }
   evidence.checks.push('wildcard socket IP works; wrong port, external Host, spoofed forwarded headers and HTTPS Origin remain rejected');
-  evidence.checks.push('remote bind serves configured Host and blocks settings, diagnostics and login usage');
+  evidence.checks.push('non-loopback settings URL and remotely bound diagnostics/login usage stay denied');
   const ipv6=await launch('remote-ipv6',{HOST:'::',ALLOW_REMOTE:'1'});
   const ipv6response=await fetch(`http://[::1]:${ipv6.port}/api/dashboard?mode=all`); assert.equal(ipv6response.status,200); assert.equal((await ipv6response.json()).totals.totalTokens,20);
-  assert.equal((await fetch(`http://[::1]:${ipv6.port}/api/settings`)).status,403);
-  evidence.checks.push('IPv6 wildcard serves its actual loopback destination with remote privacy policy');
+  assert.equal((await fetch(`http://[::1]:${ipv6.port}/api/settings`)).status,200);
+  assert.equal((await fetch(`http://127.0.0.1:${ipv6.port}/api/settings`)).status,200);
+  evidence.checks.push('IPv6 wildcard permits IPv6 and IPv4-mapped loopback settings; other remote privacy policies stay enforced');
   if(process.argv.includes('--tunnel')) { await tunnel(remote,false); await tunnel(remote,true); }
   console.log(JSON.stringify(evidence,null,2));
-  if(process.argv.includes('--serve')) { console.log(JSON.stringify({testOnly:true,local:local.base,exposed:exposed.base,remote:remote.base,root})); await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause(); }
+  if(process.argv.includes('--serve')) { console.log(JSON.stringify({testOnly:true,local:local.base,exposed:exposed.base,remote:remote.base,localSettings:origin+'/settings.html',readerSettings:readerOrigin+'/settings.html',lanSettings:lan?`http://${lan.address}:${remote.port}/settings.html`:null,root})); await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);process.stdin.once('data',resolve);process.stdin.resume();});process.stdin.pause(); }
 } finally { for(const instance of processes.reverse()) await stop(instance); await rm(root,{recursive:true,force:true}); }

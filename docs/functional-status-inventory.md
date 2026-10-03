@@ -10,6 +10,8 @@ Local safety follow-up: Q67–Q69 are implemented with isolated HTTP and desktop
 
 Process follow-up: [startup/shutdown investigation](process-lifecycle-investigation.md) reproduced a SIGHUP exit that left both locks and a subsequent read-only startup before this change. The old owner's actual termination cause remains unknown.
 
+Wildcard settings follow-up: local settings administration now checks actual loopback connection endpoints and a local loopback URL, rather than the configured bind address. HOST=0.0.0.0 therefore permits local settings saves while LAN settings remain denied. Single-writer ownership, exact Origin and revision guards remain in place. See [isolated HTTP and desktop validation](wildcard-local-settings-validation.md). The formal 3333 service has not yet loaded this backend change.
+
 Q70–Q77 are implemented with [isolated lifecycle and desktop validation](process-lifecycle-validation.md): graceful SIGHUP, permanently retained minimal records, a 30-second coalesced shutdown, native fatal observation, Diagnostics availability and latched journal failure. The user separately authorized a formal restart after 4b79358; 3333 now runs it, with settings/pricing writer access and unchanged settings/history. Independent startup remains outside the selected scope; SIGKILL, an unresponsive event loop and power-loss durability remain limits.
 
 Q34–Q39 settings/credential ownership, Q40–Q50 query/native downloads and Q51–Q60 pricing ownership/recovery are delivered. The old buffered-download limit and unresolved pricing-writer policy are historical. External-editor, storage, live-contract and platform boundaries remain below.

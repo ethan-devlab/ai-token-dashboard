@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateRequest } from '../server/request-policy.mjs';
+import { isLocalSettingsRequest, validateRequest } from '../server/request-policy.mjs';
 
 const config = { host: '127.0.0.1', port: 3333 };
 function request(headers = {}, extra = {}) {
@@ -39,4 +39,17 @@ test('POST requires exact origin while preserving direct tools and distrusts for
 test('request targets cannot replace the admitted authority', () => {
   for (const url of ['http://evil.test/api/dashboard', '//evil.test/api/dashboard', '/\\evil.test/api/dashboard', '/\t/evil.test/api/dashboard', '*']) denied(request({}, { url }), 'INVALID_REQUEST_TARGET');
   assert.equal(validateRequest(request({}, { url: '/api/dashboard?q=http%3A%2F%2Fexample.com' }), config).origin, 'http://127.0.0.1:3333');
+});
+
+test('settings admission uses both real loopback endpoints and a loopback URL, never forwarded claims', () => {
+  for (const address of ['127.0.0.1', '127.0.0.2', '::1', '0:0:0:0:0:0:0:1', '::ffff:127.0.0.1', '::ffff:7f00:1']) {
+    for (const host of ['127.0.0.1', 'localhost', '[::1]']) assert.equal(isLocalSettingsRequest({ socket: { localAddress: address, remoteAddress: address } }, new URL(`http://${host}:3333/api/settings`)), true);
+  }
+  for (const socket of [{ localAddress: '127.0.0.1', remoteAddress: '192.0.2.9' }, { localAddress: '192.0.2.9', remoteAddress: '127.0.0.1' }, { localAddress: '::1', remoteAddress: '::ffff:c000:209' }, { localAddress: 'fe80::1%en0', remoteAddress: 'fe80::2%en0' }, { localAddress: '127.0.0.1' }, {}]) {
+    assert.equal(isLocalSettingsRequest({ socket, headers: { 'x-forwarded-for': '127.0.0.1', forwarded: 'for=127.0.0.1' } }, new URL('http://127.0.0.1:3333/api/settings')), false);
+  }
+  const local = { socket: { localAddress: '127.0.0.1', remoteAddress: '127.0.0.1' } };
+  for (const host of ['0.0.0.0', '192.0.2.9', 'evil.test']) assert.equal(isLocalSettingsRequest(local, new URL(`http://${host}:3333/api/settings`)), false);
+  for (const host of ['localhost:3333', '[::1]:3333']) assert.equal(validateRequest(request({ host }), { ...config, host: '0.0.0.0' }).host, host);
+  denied(request({ host: 'localhost:3333' }, { socket: { localAddress: '192.0.2.9' } }), 'INVALID_HOST', { ...config, host: '0.0.0.0' });
 });

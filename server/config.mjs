@@ -49,6 +49,17 @@ export function isLoopbackHost(host) {
   return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1' || normalized === '[::1]';
 }
 
+export function isLoopbackAddress(value) {
+  const address = String(value || '').replace(/^\[|\]$/g, '');
+  const family = isIP(address);
+  if (family === 4) return address.split('.')[0] === '127';
+  if (family !== 6 || address.includes('%')) return false;
+  const normalized = new URL(`http://[${address}]`).hostname.slice(1, -1);
+  if (normalized === '::1') return true;
+  const mapped = /^::ffff:([a-f0-9]{1,4}):([a-f0-9]{1,4})$/.exec(normalized);
+  return Boolean(mapped && (Number.parseInt(mapped[1], 16) >> 8) === 127);
+}
+
 export function allowedRequestHost(config, host, localAddress) {
   const configuredHost = config.host.toLowerCase();
   const authority = (address) => `${address.includes(':') && !address.startsWith('[') ? `[${address}]` : address}:${config.port}`.toLowerCase();
@@ -56,6 +67,7 @@ export function allowedRequestHost(config, host, localAddress) {
   if (requested === authority(configuredHost)) return true;
   if (isLoopbackHost(configuredHost)) return ['127.0.0.1', 'localhost', '::1'].some(address => requested === authority(address));
   if (!['0.0.0.0', '::', '[::]'].includes(configuredHost) || !isIP(localAddress || '')) return false;
+  if (isLoopbackAddress(localAddress) && ['127.0.0.1', 'localhost', '::1'].some(address => requested === authority(address))) return true;
   // A wildcard listens on several interfaces. Admit only this socket's destination, never forwarded headers.
   return [localAddress, localAddress.replace(/^::ffff:/i, '')].some(address => requested === authority(address));
 }
