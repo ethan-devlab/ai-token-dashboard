@@ -25,3 +25,13 @@ Desktop evidence outside the repository: `wildcard-local-settings-saved.png` and
 ## Deployment status and limits
 
 The running formal service remained bound to 127.0.0.1:3333 and reported writable settings. Its current .env was not changed by this work. A separately selected restart is required to load the corrected backend. No tunnel, external device, full test suite or performance benchmark was run; this phase changes settings admission and ownership initialization only.
+
+## Authorized formal restart after d36ed83
+
+The user selected restart and verification. Preflight found Node PID 80249, launched through npm start from this checkout, listening on 127.0.0.1:3333. SIGTERM ended it with recorded shutdown-requested, cleanup-complete and exit code 0; its settings lease was released. A new npm start process, Node PID 80973, loaded the corrected backend and retained the same loopback bind.
+
+The current .env SHA-256 stayed `86115a871701c9aef95f4286923ba2dffa377f560ccbf6661b85f67b5a442268`. Settings revision, HOST and ALLOW_REMOTE matched preflight. Settings reported writable=true. September 2026 / Asia/Taipei boundaries and complete totals matched byte-for-byte JSON values, including 587597633 Tokens. Lifecycle availability was true with no error; the new run contained start/listening and retained 0700 directory / 0600 file modes. The formal desktop settings page had enabled fields and save, no read-only warning and no console errors. No real configuration was saved.
+
+A separate pricing lease still named former PID 75532, which was confirmed absent. It was not owned by PID 80249 and was not released by that process. The new service correctly remains a pricing reader (occupied); the existing Codex basis remains valid, while the Claude archive is unavailable. No manual unlock or pricing repair was performed. Recovery of this older lease requires a separate user decision under the existing manual recovery policy.
+
+Evidence: `wildcard-restart-before.json`, `wildcard-restart-after.json` and `wildcard-live-settings-after-restart.png` in the chat visualization directory. The temporary formal browser tab was closed; the npm start service remains running.
