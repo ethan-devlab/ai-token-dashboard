@@ -56,7 +56,6 @@ async function pricingFiles() {
 async function unlock(args, expected = 0) {
   const command = launch(await freePort(), args); const [code] = await once(command.child, 'exit'); assert.equal(code, expected); assert.equal(command.fetches, 0); return command;
 }
-async function unlockBoth() { await unlock(['--unlock-pricing']); await unlock(['--unlock-settings']); }
 const mark = (name) => evidence.checks.push(name);
 
 try {
@@ -131,8 +130,9 @@ globalThis.fetch=async(url)=>{process.send?.({type:'fetch'});const mode=await st
     const preceding = await dashboard(writer); await state({ offline: false, input, killAt: stage });
     const request = fetch(writer.base + route('pricing/refresh'), { method: 'POST', headers: { Origin: writer.base } }).then(() => {}, () => {});
     await waitFor(() => writer.stages.includes(stage)); await stop(writer, 'SIGKILL'); await request;
-    await state({}); await unlockBoth(); writer = await start(); const recovered = await dashboard(writer);
+    await state({}); writer = await start(); const recovered = await dashboard(writer);
     assert.equal(recovered.pricing.archive.available, true);
+    assert.equal(recovered.pricing.refresh.writable, true);
     assert.equal(recovered.pricing.revision === preceding.pricing.revision, !expectNew);
     assert.equal((await dashboard(reader)).pricing.refresh.writable, false);
     mark(`SIGKILL after ${stage}: restart uses ${expectNew ? 'new published' : 'previous published'} basis`);
@@ -140,7 +140,7 @@ globalThis.fetch=async(url)=>{process.send?.({type:'fetch'});const mode=await st
   const active = await dashboard(writer); const activeFile = path.join(root, '.pricing-archive', 'codex', active.pricing.revision + '.json'); await writeFile(activeFile, 'TEST ONLY interrupted repair'); await state({ killAt: 'quarantine' });
   const repairRequest = fetch(writer.base + route('pricing/repair'), { method: 'POST', headers: { Origin: writer.base } }).then(() => {}, () => {});
   await waitFor(() => writer.stages.includes('quarantine')); await stop(writer, 'SIGKILL'); await repairRequest;
-  await state({}); await unlockBoth(); writer = await start(); assert.equal((await dashboard(writer)).cost.total, null);
+  await state({}); writer = await start(); assert.equal((await dashboard(writer)).cost.total, null);
   await post(writer, 'repair', 'codex', 502); assert.equal((await dashboard(writer)).cost.total, null);
   await state({ offline: false, input: 15 }); await post(writer, 'repair'); await post(reader, 'load'); await state({});
   mark('SIGKILL after quarantine preserves evidence; unknown restart requires newly validated source');

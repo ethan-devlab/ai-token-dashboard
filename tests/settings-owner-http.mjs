@@ -111,17 +111,14 @@ globalThis.fetch = async (url) => {
   const failed = launch(port2); const [failureCode] = await once(failed.child, 'exit'); assert.equal(failureCode, 1); await absent(lock);
   writer = await start(port1); assert.equal((await json(writer, '/api/settings')).writable, true);
   await stop(writer, 'SIGKILL'); assert.equal((await stat(lock)).isDirectory(), true);
-  const blocked = await start(port1); assert.equal((await json(blocked, '/api/settings')).writable, false);
-  const beforeUnlockCalls = await readFile(callFile, 'utf8');
-  const recovery = launch(await freePort(), ['--unlock-settings']); const [recoveryCode] = await once(recovery.child, 'exit');
-  assert.equal(recoveryCode, 0); assert.ok(recovery.output.includes('Settings ownership recovered.'));
-  assert.equal(await readFile(callFile, 'utf8'), beforeUnlockCalls); await absent(lock);
-  assert.equal((await json(blocked, '/api/settings')).writable, false); await stop(blocked);
+  writer = await start(port1); assert.equal((await json(writer, '/api/settings')).writable, true);
+  assert.equal((await json(reader, '/api/settings')).writable, false);
+  await stop(writer); await absent(lock);
   writer = await start(port1); assert.equal((await json(writer, '/api/settings')).writable, true);
   const beforeRefusal = await readFile(path.join(lock, 'owner.json'), 'utf8');
   const refused = launch(await freePort(), ['--unlock-settings']); const [refusedCode] = await once(refused.child, 'exit');
   assert.equal(refusedCode, 1); assert.equal(await readFile(path.join(lock, 'owner.json'), 'utf8'), beforeRefusal);
-  console.log('PASS: isolated ownership, read-only routes, Claude no-write/no-refresh, graceful/failure cleanup, crash/manual recovery, fixed read-only lifecycle.');
+  console.log('PASS: isolated ownership, read-only routes, Claude no-write/no-refresh, graceful/failure cleanup, automatic crash recovery, fixed read-only lifecycle.');
   if (process.argv.includes('--serve')) {
     console.log(JSON.stringify({ TEST_ONLY: true, writer: writer.base, reader: reader.base, root, claude: 'expired', command: 'valid | expired' }));
     await new Promise((resolve) => {

@@ -179,13 +179,12 @@ try {
     const records = (await journal(instance))[0];
     if (kind === 'kill') { assert.equal(instance.exited.signal, 'SIGKILL'); assert.equal(records.at(-1).event, 'listening'); }
     else { assert.equal(instance.exited.code, 1); assert.equal(records.at(-2).event, 'fatal'); assert.equal(records.at(-1).event, 'exit'); }
-    const blocked = await ready(await launch(instance)); assert.equal((await get(blocked, '/api/settings')).writable, false); await stop(blocked);
-    for (const command of ['--unlock-settings', '--unlock-pricing']) {
-      const recovery = await launch(instance, [command]); await until(() => Boolean(recovery.exited)); assert.equal(recovery.exited.code, 0);
-    }
+    const recovered = await ready(await launch(instance)); assert.equal((await get(recovered, '/api/settings')).writable, true);
+    for (const provider of (await get(recovered)).providers) assert.equal(provider.pricing.writable, true);
+    await stop(recovered);
     await released(instance); assert.equal((await journal(instance)).length, 2);
   }
-  console.log('PASS: native fatal exception/rejection and SIGKILL retain locks; restricted recovery creates no run record.');
+  console.log('PASS: native fatal exception/rejection and SIGKILL retain locks until startup safely recovers both writers.');
 
   for (const mode of [{ openFailure: true }, { failWrite: 2 }, { failWrite: 2, partialWrite: true }]) {
     const item = await fixture('journal-fault-' + children.length, mode); const instance = await ready(await launch(item));

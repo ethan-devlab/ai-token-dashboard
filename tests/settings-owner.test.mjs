@@ -60,12 +60,35 @@ test('normal release survives a concurrent refused unlock attempt', () => fixtur
   assert.deepEqual(await fs.readdir(root), []);
 }));
 
-test('startup never steals an absent owner; only explicit recovery restores access', () => fixture(async (root, file) => {
+test('startup recovers an absent local owner without promoting a running reader', () => fixture(async (root, file) => {
+  await acquireSettingsOwner(file);
+  const reader = await acquireSettingsOwner(file); assert.equal(reader.status().writable, false);
+  const ownerFile = await markAbsent(file); const before = JSON.parse(await fs.readFile(ownerFile, 'utf8'));
+  const next = await acquireSettingsOwner(file); assert.equal(next.status().writable, true); await next.assertWritable();
+  const current = JSON.parse(await fs.readFile(ownerFile, 'utf8'));
+  assert.equal(current.pid, process.pid); assert.notEqual(current.generation, before.generation);
+  assert.equal((await reader.check()).writable, false); await next.release();
+  assert.deepEqual(await fs.readdir(root), []);
+}));
+
+test('simultaneous startup recovery elects one writer and preserves its generation', () => fixture(async (root, file) => {
   await acquireSettingsOwner(file); await markAbsent(file);
-  const blocked = await acquireSettingsOwner(file); assert.equal(blocked.status().writable, false);
-  await unlockSettings(file);
-  assert.equal((await blocked.check()).writable, false);
-  const next = await acquireSettingsOwner(file); assert.equal(next.status().writable, true); await next.release();
+  const leases = await Promise.all(Array.from({ length: 8 }, () => acquireSettingsOwner(file)));
+  const winners = leases.filter(lease => lease.status().writable); assert.equal(winners.length, 1);
+  await winners[0].assertWritable();
+  assert.deepEqual(await fs.readdir(`${file}.settings-lock`), ['owner.json']);
+  await winners[0].release();
+  for (const reader of leases.filter(lease => !lease.status().writable)) assert.equal((await reader.check()).writable, false);
+}));
+
+test('startup rechecks owner absence inside the retirement guard', () => fixture(async (root, file) => {
+  await acquireSettingsOwner(file); const ownerFile = await markAbsent(file); const before = await fs.readFile(ownerFile, 'utf8');
+  const originalKill = process.kill; let probes = 0;
+  process.kill = () => { if (++probes === 1) throw Object.assign(new Error('TEST ONLY absent'), { code: 'ESRCH' }); return true; };
+  try { assert.equal((await acquireSettingsOwner(file)).status().writable, false); assert.equal(probes, 2); }
+  finally { process.kill = originalKill; }
+  assert.equal(await fs.readFile(ownerFile, 'utf8'), before);
+  assert.deepEqual(await fs.readdir(`${file}.settings-lock`), ['owner.json']);
 }));
 
 test('foreign, malformed, oversized, busy and unexpected owner state is never recovered', () => fixture(async (root, file) => {
@@ -75,19 +98,22 @@ test('foreign, malformed, oversized, busy and unexpected owner state is never re
   for (const body of ['{', ' '.repeat(4097), JSON.stringify({ ...JSON.parse(initial), host: 'TEST_ONLY-other-host' })]) {
     await fs.writeFile(ownerFile, body);
     await assert.rejects(unlockSettings(file));
+    assert.equal((await acquireSettingsOwner(file)).status().writable, false);
     assert.equal(await fs.readFile(ownerFile, 'utf8'), body);
     assert.deepEqual(await fs.readdir(`${file}.settings-lock`), ['owner.json']);
   }
   await fs.writeFile(ownerFile, initial); await markAbsent(file);
   const originalKill = process.kill;
   process.kill = () => { throw Object.assign(new Error('TEST ONLY permission denied'), { code: 'EPERM' }); };
-  try { await assert.rejects(unlockSettings(file), (error) => error.reason === 'unknown-owner'); }
+  try { await assert.rejects(unlockSettings(file), (error) => error.reason === 'unknown-owner'); assert.equal((await acquireSettingsOwner(file)).status().writeReason, 'unknown-owner'); }
   finally { process.kill = originalKill; }
   await fs.mkdir(`${file}.settings-lock/.operation`);
   await assert.rejects(unlockSettings(file), (error) => error.reason === 'ownership-busy');
+  assert.equal((await acquireSettingsOwner(file)).status().writeReason, 'ownership-busy');
   await fs.rmdir(`${file}.settings-lock/.operation`);
   await fs.writeFile(`${file}.settings-lock/unexpected`, 'TEST ONLY');
   await assert.rejects(unlockSettings(file), (error) => error.reason === 'invalid-owner');
+  assert.equal((await acquireSettingsOwner(file)).status().writeReason, 'invalid-owner');
   assert.equal(await fs.readFile(`${file}.settings-lock/unexpected`, 'utf8'), 'TEST ONLY');
 }));
 

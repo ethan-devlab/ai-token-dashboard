@@ -90,14 +90,21 @@ export async function acquirePricingOwner(appDirectory) {
   let reason = 'unavailable';
   try {
     place = await location(envPath);
-    await mkdir(place.lock, { mode: 0o700 });
+    try { await mkdir(place.lock, { mode: 0o700 }); }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      // Recheck under retirement's generation guard; only a confirmed absent local owner is recoverable.
+      ownerAbsent(await readOwner(place.lock));
+      await retire(place.lock, ownerAbsent);
+      await mkdir(place.lock, { mode: 0o700 });
+    }
     const candidate = randomUUID();
     try {
       await writeFile(path.join(place.lock, 'owner.json'), JSON.stringify({ version: 1, generation: candidate,
         pid: process.pid, host: HOST, createdAt: new Date().toISOString() }) + '\n', { flag: 'wx', mode: 0o600 });
       generation = candidate;
     } catch { reason = 'unavailable'; } // A failed/incomplete acquisition stays blocked for explicit inspection.
-  } catch (error) { reason = error.code === 'EEXIST' ? 'occupied' : error.reason || 'unavailable'; }
+  } catch (error) { reason = error.code === 'EEXIST' || error.reason === 'active-owner' ? 'occupied' : error.reason || 'unavailable'; }
   let released = false;
   const status = () => ({ writable: Boolean(generation && !released), writeReason: generation && !released ? null : reason });
   async function assertWritable() {
