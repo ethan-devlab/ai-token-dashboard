@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>Local AI Token Dashboard</title>
+  <rect width="64" height="64" rx="16" fill="#11161c"/>
+  <path d="M16 48V34M32 48V24M48 48V14" fill="none" stroke="#63d3b2" stroke-width="8" stroke-linecap="round"/>
+</svg>

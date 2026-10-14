@@ -54,7 +54,7 @@ const require = createRequire(import.meta.url);
 const { version: CURRENT_VERSION } = require('./package.json');
 const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 const API_CSP = "default-src 'none'; frame-ancestors 'none'";
-const STATIC_TYPES = Object.freeze({ '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' });
+const STATIC_TYPES = Object.freeze({ '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' });
 const VALID_MODES = new Set(['all', 'last24h', 'today', 'week', 'month', 'year', 'custom']);
 const VALID_SORTS = new Set(['recent', 'cost', 'total', 'input', 'cache', 'output']);
 const VALID_EXPORTS = new Set(['csv-sessions', 'csv-trend', 'json-report', 'markdown-summary']);

@@ -10,6 +10,8 @@ Ranges use the selected IANA timezone and half-open boundaries [from,to). Calend
 
 Costs use the current verified rates for all selected event dates. Rule check/start dates do not prevent pricing older usage. These are current-rate estimates, not historical bills. Partial pricing shows the known subtotal with ≥. If no billable usage has a known price, cost is unknown (—), not zero. An empty range or confirmed free usage can still show $0.00. Exports retain the pricing basis and calculation policy.
 
+Bundled model rates were checked against the official OpenAI and Anthropic tables on 2026-10-14. They include GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol/Luna, Claude Fable/Mythos 5.1, and Claude Opus/Sonnet/Haiku 5.5. Use **Update model prices** after restart to publish the latest official rates into an existing pricing archive; upgrading bundled data does not overwrite a retained publication. Price details show each context tier. Claude Haiku 5.5 switches above 100,000 input tokens per request; OpenAI long-context rows switch above 272,000. Cache-read rates are model-specific.
+
 ## Charts and sessions
 
 Select a single metric, stacked Token/cost plots, or dual axes; use bars or unsmoothed lines. The dashboard retains existing view preferences and saves the new layout and mark choices locally. Pointer movement shows a compact preview. Click a bucket to pin its complete values, or use Left/Right/Home/End and Enter. The data table exposes the same amounts and cost qualifiers.

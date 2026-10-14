@@ -17,8 +17,10 @@ Decompression is streamed with the built-in Node API, which Node currently label
 - Mixed priced/unpriced usage shows its known subtotal with a lower-bound marker. Fully unpriced usage shows Cost unknown; empty usage and confirmed free usage remain zero when a verified basis is available.
 - A valid basis with entirely unpriced usage returns cost.available=false, cost.unavailableReason=unpriced-usage, and pricingCoverage.ratio=0. A missing/invalid basis uses cost.unavailableReason=pricing-basis and ratio=null.
 - KPI, trend, model, Session, detail and export amounts use the same rules. Unknown rates, unsupported cache durations and unknown modifiers remain unpriced.
+- Legacy Claude records with missing speed or missing/`not_available` geography use the standard-rate lower bound when the service tier is explicitly standard. Supported geography and speed modifiers only add surcharges. These estimates remain partial (`≥`); explicit unsupported modifiers or an unknown service tier remain unpriced.
 - API pricing.calculationPolicy and projection.pricingPolicy identify current-rates-all-event-dates-v1. CSV adds pricingCalculationPolicy; JSON and Markdown retain the full pricing basis and policy. CSV readers must select fields by column name and continue to distinguish recordType=data from recordType=metadata.
 - Existing pricing archives and their revisions are preserved. The calculation policy identifies this change separately from the retained fee rules. No historical billing ledger or historical-rate switch is introduced.
+- On writer startup, a valid pre-archive price publication without a revision is migrated once when its archive is empty and no repair is pending. Its rates and check time are retained; migration needs no network request. Revision-bearing publications with missing or damaged archives still require explicit repair.
 
 ## Upgrade steps
 

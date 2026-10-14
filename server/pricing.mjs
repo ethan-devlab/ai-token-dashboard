@@ -41,6 +41,17 @@ export function createPricing(pricing) {
       if (value != null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) throw new Error(`Invalid ${field} price for ${raw.id}.`);
       rates[field] = value ?? null;
     }
+    if (raw.rates?.contextTier != null) {
+      const tier = raw.rates.contextTier;
+      if (!Number.isSafeInteger(tier.aboveInputTokens) || tier.aboveInputTokens <= 0 || !tier.rates || tier.rates.contextTier) throw new Error('Invalid pricing context tier.');
+      const tierRates = {};
+      for (const field of RATE_FIELDS) {
+        const value = tier.rates[field];
+        if (value != null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) throw new Error(`Invalid context ${field} price.`);
+        tierRates[field] = value ?? null;
+      }
+      rates.contextTier = Object.freeze({ aboveInputTokens: tier.aboveInputTokens, rates: Object.freeze(tierRates) });
+    }
     return Object.freeze({ id: raw.id, aliases: Object.freeze(raw.aliases.map((alias) => String(alias).toLowerCase())), pattern: raw.pattern, matcher, effectiveFrom: raw.effectiveFrom, effectiveFromMs: dateValue(raw.effectiveFrom), rates: Object.freeze(rates) });
   });
   if (!rules.length) throw new Error('Pricing must contain at least one rule.');
@@ -77,9 +88,10 @@ export const PRICING_POLICY = 'current-rates-all-event-dates-v1';
 
 export function matchPricingRule(pricing, model) {
   const normalized = String(model || '').trim().toLowerCase();
+  const claudeName = pricing.provider === 'claude' ? normalized.replace(/^(claude-(?:haiku|sonnet|opus)-\d+)-(\d+)(?=-\d{8}$|$)/, '$1.$2') : normalized;
   // This is a current-rate estimate. Retained rule dates are provenance, not
   // historical billing cutoffs or model release dates.
-  const matches = pricing.rules.filter((rule) => rule.aliases.includes(normalized) || rule.matcher.test(normalized));
+  const matches = pricing.rules.filter((rule) => rule.aliases.includes(normalized) || rule.matcher.test(normalized) || claudeName !== normalized && (rule.aliases.includes(claudeName) || rule.matcher.test(claudeName)));
   if (!matches.length) return null;
   return matches.sort((left, right) => right.id.length - left.id.length || right.effectiveFromMs - left.effectiveFromMs)[0];
 }

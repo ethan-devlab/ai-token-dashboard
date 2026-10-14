@@ -31,6 +31,7 @@ jobs:
           npm run test:server
           npm run test:client
           npm run test:contract
+          node --test tests/pricing-archive.test.mjs tests/phase1-accounting.test.mjs tests/latest-model-pricing.test.mjs
       - name: Create source archive and digest
         env:
           TAG: ${{ github.ref_name }}
@@ -39,6 +40,11 @@ jobs:
           git archive --format=zip --prefix="ai-token-dashboard-${TAG}/" --output="release/ai-token-dashboard-${TAG}.zip" "$GITHUB_SHA"
           sha256sum "release/ai-token-dashboard-${TAG}.zip" > release/SHA256SUMS
           cp docs/migration-v3.md "release/MIGRATION-${TAG}.md"
+          if test -f "docs/releases/${TAG}.md"; then
+            cat "docs/releases/${TAG}.md" docs/migration-v3.md > release/RELEASE-NOTES.md
+          else
+            cp docs/migration-v3.md release/RELEASE-NOTES.md
+          fi
       - name: Attest source archive
         uses: actions/attest@v4
         with:
@@ -47,4 +53,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" "release/ai-token-dashboard-${TAG}.zip" release/SHA256SUMS "release/MIGRATION-${TAG}.md" --notes-file docs/migration-v3.md --generate-notes
+        run: gh release create "$TAG" "release/ai-token-dashboard-${TAG}.zip" release/SHA256SUMS "release/MIGRATION-${TAG}.md" --notes-file release/RELEASE-NOTES.md --generate-notes

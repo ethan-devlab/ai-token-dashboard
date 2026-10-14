@@ -52,6 +52,12 @@ export function parseStandardPricingMarkdown(markdown) {
       cacheWrite: parsePrice(columns[3]),
       output: parsePrice(columns[4]),
     };
+    if (columns.length >= 9 && columns[5] !== '-') {
+      rates[id].contextTier = { aboveInputTokens: 272_000, rates: {
+        input: parsePrice(columns[5]), cachedInput: parsePrice(columns[6]),
+        cacheWrite: parsePrice(columns[7]), output: parsePrice(columns[8]),
+      } };
+    }
   }
   if (Object.keys(rates).length < 10) throw new PricingRefreshError('invalid-source', 'The Standard pricing table is unexpectedly incomplete.');
   return rates;
@@ -214,6 +220,21 @@ export function createPricingRefreshService({ baseline, cachePath, archiveDirect
         lastAutomaticAttemptDate = typeof stored.lastAutomaticAttemptDate === 'string' ? stored.lastAutomaticAttemptDate : null;
       } catch (error) {
         publicationError = 'publication'; archiveError = 'archive';
+        // Pre-archive publications have no revision. Migrate only an intact legacy
+        // cache with no existing archive or pending repair; never reseal v3 damage.
+        if (authority.status().writable && !await repairPending()) {
+          try {
+            const { next, stored } = await readPublication();
+            if (!Object.hasOwn(stored, 'revision') && !await archive.hasRecords()) {
+              const checkedAt = stored.lastCheckedAt || next.checkedAt || null;
+              if (checkedAt != null && !Number.isFinite(Date.parse(checkedAt))) throw new Error('Invalid legacy check time.');
+              lastAutomaticAttemptDate = typeof stored.lastAutomaticAttemptDate === 'string' ? stored.lastAutomaticAttemptDate : null;
+              await sealAndPublish(next, 'cache', checkedAt);
+              initialized = true;
+              return;
+            }
+          } catch { /* Invalid legacy publications require explicit repair. */ }
+        }
         try { fresh = error.code === 'ENOENT' && !await archive.hasRecords(); } catch { fresh = false; }
         if (fresh && authority.status().writable) {
           try { await sealAndPublish(baseline, 'bundled', baseline.checkedAt || null); } catch { /* Token queries remain available. */ }

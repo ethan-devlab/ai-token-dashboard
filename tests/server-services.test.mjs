@@ -265,8 +265,8 @@ const pricingMarkdown = `# Pricing
 
 test('pricing markdown parser reads the official Standard short-context rates', () => {
   const rates = parseStandardPricingMarkdown(pricingMarkdown);
-  assert.deepEqual(rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12 });
-  assert.deepEqual(rates['gpt-5.5'], { input: 5, cachedInput: 0.5, cacheWrite: null, output: 30 });
+  assert.deepEqual(rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, output: 12, contextTier: { aboveInputTokens: 272000, rates: { input: 4, cachedInput: 0.4, cacheWrite: 5, output: 18 } } });
+  assert.deepEqual(rates['gpt-5.5'], { input: 5, cachedInput: 0.5, cacheWrite: null, output: 30, contextTier: { aboveInputTokens: 272000, rates: { input: 10, cachedInput: 1, cacheWrite: null, output: 45 } } });
 });
 
 test('pricing refresh runs automatically once per UTC day across restarts and manual refresh remains unrestricted', async () => {
@@ -282,7 +282,7 @@ test('pricing refresh runs automatically once per UTC day across restarts and ma
     await service.refresh({ manual: true });
     await service.refresh({ manual: true });
     assert.equal(fetchCalls, 3);
-    assert.deepEqual(service.current().rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, cacheWrite5m: null, cacheWrite1h: null, output: 12 });
+    assert.deepEqual(service.current().rates['gpt-5.6-terra'], { input: 2, cachedInput: 0.2, cacheWrite: 2.5, cacheWrite5m: null, cacheWrite1h: null, output: 12, contextTier: { aboveInputTokens: 272000, rates: { input: 4, cachedInput: 0.4, cacheWrite: 5, cacheWrite5m: null, cacheWrite1h: null, output: 18 } } });
     assert.deepEqual(service.current().rates['codex-auto-review'], PRICING.rates['codex-auto-review']);
 
     currentTime = new Date('2026-08-07T10:00:00Z');
@@ -533,9 +533,9 @@ test('Claude pricing parser and cost calculator preserve cache duration and expl
   assert.equal(explicit.total, 11);
   assert.equal(explicit.unknownModifiers.size, 0);
   const unknown = calculateCost(CLAUDE_PRICING, [{ model: 'claude-opus-5', timestamp: '2026-08-18T00:00:00Z', usage: baseUsage, pricingModifiers: { inferenceGeo: 'not_available', speed: 'standard', serviceTier: 'standard' } }]);
-  assert.equal(unknown.total, null);
-  assert.equal(unknown.available, false);
-  assert.equal(unknown.unavailableReason, 'unpriced-usage');
-  assert.equal(unknown.unpricedTokens, 1_000_000);
-  assert.deepEqual([...unknown.unknownModifiers], ['claude-opus-5:inferenceGeo=not_available']);
+  assert.equal(unknown.total, 5);
+  assert.equal(unknown.available, true);
+  assert.equal(unknown.unavailableReason, null);
+  assert.equal(unknown.unpricedTokens, 0);
+  assert.deepEqual([...unknown.unknownModifiers], ['claude-opus-5:legacy geography/speed surcharge not reported; base-rate lower bound']);
 });

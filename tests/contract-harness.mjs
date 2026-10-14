@@ -45,6 +45,11 @@ test('v2 dashboard HTTP contract is redacted, server-authoritative, and same-ori
     const serverPort = await port(); dashboard = start({ serverPort, sessionsDirectory: sessions, claudeSessionsDirectory: claudeSessions });
     const base = `http://127.0.0.1:${serverPort}`;
     await ready(`${base}/api/dashboard?mode=all`);
+    const favicon = await fetch(`${base}/favicon.svg`);
+    assert.equal(favicon.status, 200);
+    assert.equal(favicon.headers.get('content-type'), 'image/svg+xml');
+    assert.equal(favicon.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(await favicon.text(), /<svg\s/);
     const providers = await (await fetch(`${base}/api/providers`)).json();
     assert.equal(providers.version, JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8')).version);
     assert.deepEqual(providers.providers.map(({ id, available }) => ({ id, available })), [{ id: 'codex', available: true }, { id: 'claude', available: true }]);

@@ -16,12 +16,18 @@ function modifierState(pricing, event) {
   const values = event.pricingModifiers || {};
   let multiplier = 1;
   const unknown = [];
+  let lowerBound = false;
+  // Legacy Claude logs omit these fields. All supported geography/speed
+  // modifiers are surcharges (validated >= 1), so base rates are a lower bound.
+  const missingGeo = pricing.provider === 'claude' && (values.inferenceGeo == null || values.inferenceGeo === 'not_available');
+  const missingSpeed = pricing.provider === 'claude' && values.speed == null;
+  if (missingGeo || missingSpeed) lowerBound = true;
   if (values.inferenceGeo === 'us' && pricing.modifiers.usGeoPattern?.test(model) && pricing.modifiers.usGeoMultiplier != null) multiplier *= pricing.modifiers.usGeoMultiplier;
-  else if (values.inferenceGeo !== 'global') unknown.push(`${model}:inferenceGeo=${values.inferenceGeo || 'missing'}`);
+  else if (values.inferenceGeo !== 'global' && !missingGeo) unknown.push(`${model}:inferenceGeo=${values.inferenceGeo || 'missing'}`);
   if (values.speed === 'fast' && pricing.modifiers.fastPattern?.test(model) && pricing.modifiers.fastMultiplier != null) multiplier *= pricing.modifiers.fastMultiplier;
-  else if (values.speed !== 'standard') unknown.push(`${model}:speed=${values.speed || 'missing'}`);
+  else if (values.speed !== 'standard' && !missingSpeed) unknown.push(`${model}:speed=${values.speed || 'missing'}`);
   if (values.serviceTier !== 'standard') unknown.push(`${model}:serviceTier=${values.serviceTier || 'missing'}`);
-  return { multiplier, unknown };
+  return { multiplier, unknown, lowerBound };
 }
 
 function pricingRule(pricing, event, cache) {
@@ -31,6 +37,10 @@ function pricingRule(pricing, event, cache) {
   const rule = matchPricingRule(pricing, event.model);
   if (cache.size >= 4096) cache.clear();
   cache.set(key, rule); return rule;
+}
+function eventRates(rule, event) {
+  const tier = rule.rates.contextTier;
+  return tier && event.usage?.inputTokens > tier.aboveInputTokens ? tier.rates : rule.rates;
 }
 export function calculateCost(pricing, events, rules) {
   const cost = { total: 0, input: 0, cached: 0, cacheWrite: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, pricedTokens: 0, billableTokens: 0, unpricedTokens: 0, unknownModels: new Set(), unavailableComponents: new Set(), unknownModifiers: new Set() };
@@ -44,9 +54,10 @@ export function calculateCost(pricing, events, rules) {
     if (!cost.available) { cost.unpricedTokens += billable; continue; }
     const matched = pricingRule(pricing, event, rules);
     if (!matched) { cost.unpricedTokens += billable; cost.unknownModels.add(event.model || 'unknown'); continue; }
-    const rate = matched.rates;
+    const rate = eventRates(matched, event);
     const modifier = modifierState(pricing, event);
     for (const item of modifier.unknown) cost.unknownModifiers.add(item);
+    if (modifier.lowerBound) cost.unknownModifiers.add(`${event.model}:legacy geography/speed surcharge not reported; base-rate lower bound`);
     // Unknown modifiers can change every rate. A base-rate guess is not a known subtotal.
     if (modifier.unknown.length) { cost.unpricedTokens += billable; continue; }
     for (const [name, tokens, price] of [['input', eventUsage.uncachedInputTokens, rate.input], ['cached', eventUsage.cachedInputTokens, rate.cachedInput], ['cacheWrite', genericCacheWrite, pricing.provider === 'claude' ? null : rate.cacheWrite], ['cacheWrite5m', eventUsage.cacheWrite5mTokens, rate.cacheWrite5m], ['cacheWrite1h', eventUsage.cacheWrite1hTokens, rate.cacheWrite1h], ['output', eventUsage.outputTokens, rate.output]]) {
@@ -127,8 +138,9 @@ function eventCost(pricing, event, rules) {
   if (!rule) return { total: 0, partial: billableTokens > 0, pricedTokens: 0, billableTokens };
   const modifier = modifierState(pricing, event);
   if (modifier.unknown.length) return { total: 0, partial: true, pricedTokens: 0, billableTokens };
-  let total = 0; let partial = false; let pricedTokens = 0;
-  for (const [tokens, price] of [[value.uncachedInputTokens, rule.rates.input], [value.cachedInputTokens, rule.rates.cachedInput], [generic, pricing.provider === 'claude' ? null : rule.rates.cacheWrite], [value.cacheWrite5mTokens, rule.rates.cacheWrite5m], [value.cacheWrite1hTokens, rule.rates.cacheWrite1h], [value.outputTokens, rule.rates.output]]) {
+  let total = 0; let partial = Boolean(modifier.lowerBound); let pricedTokens = 0;
+  const rate = eventRates(rule, event);
+  for (const [tokens, price] of [[value.uncachedInputTokens, rate.input], [value.cachedInputTokens, rate.cachedInput], [generic, pricing.provider === 'claude' ? null : rate.cacheWrite], [value.cacheWrite5mTokens, rate.cacheWrite5m], [value.cacheWrite1hTokens, rate.cacheWrite1h], [value.outputTokens, rate.output]]) {
     if (!tokens) continue;
     if (price == null) partial = true; else { total += tokens / pricing.unitTokens * price * modifier.multiplier; pricedTokens += tokens; }
   }

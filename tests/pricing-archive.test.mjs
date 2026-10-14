@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { CLAUDE_PRICING, PRICING, createPricing } from '../server/pricing.mjs';
+import { CLAUDE_PRICING, PRICING, createPricing, matchPricingRule } from '../server/pricing.mjs';
 import { pricingBasis, pricingFromBasis, pricingRevision } from '../server/pricing-basis.mjs';
 import { createPricingArchive } from '../server/pricing-archive.mjs';
 import { createPricingRefreshService } from '../server/pricing-refresh.mjs';
@@ -23,6 +23,12 @@ test('basis revisions ignore check dates and order, but cover every calculation 
   assert.equal(pricingRevision({ ...CLAUDE_PRICING, checkedAt: at, updatedAt: '2030-01-01', rules: [...CLAUDE_PRICING.rules].reverse() }), revision);
   for (const field of ['source', 'unitTokens', 'costDisclaimer']) { const changed = { ...basis, [field]: field === 'unitTokens' ? 1000 : field === 'source' ? 'https://example.invalid/prices' : 'Changed estimate conditions' }; assert.notEqual(pricingRevision(pricingFromBasis(changed)), revision); }
   for (const change of [(b) => { b.rules[0].rates.input += 1; }, (b) => { b.rules[0].effectiveFrom = '2027-01-01'; }, (b) => { b.rules[0].pattern += '$'; }, (b) => { b.modifiers.fastMultiplier += 1; }]) { const changed = structuredClone(basis); change(changed); assert.notEqual(pricingRevision(pricingFromBasis(changed)), revision); }
+});
+
+test('Claude dated hyphen model identifiers use their retained dotted price family', () => {
+  assert.equal(matchPricingRule(CLAUDE_PRICING, 'claude-haiku-4-5-20251001').id, 'claude-haiku-4.5');
+  assert.equal(matchPricingRule(CLAUDE_PRICING, 'claude-haiku-9-9-20251001'), null);
+  assert.equal(matchPricingRule(PRICING, 'claude-haiku-4-5-20251001'), null);
 });
 
 test('archives persist immutable bases, separate check times, restart and reject corruption', async (t) => {
@@ -79,4 +85,28 @@ test('a verified published basis loads without metadata writes', async (t) => {
   const service = createPricingRefreshService({ baseline: PRICING, cachePath, archiveStore: { ...store, save: () => { throw new Error('TEST ONLY no writes'); } } });
   await service.initialize(); assert.equal(service.current().archive.available, true); assert.equal(service.current().revision, first.current().revision);
   assert.equal(service.status().metadataError, 'metadata'); assert.equal(service.status().lastCheckedAt, null);
+});
+
+test('legacy Claude publication migrates offline and prices August and September usage', async (t) => {
+  const directory = await root(t); const cachePath = path.join(directory, 'cache');
+  const legacy = { version: 1, pricing: { ...pricingBasis(CLAUDE_PRICING), updatedAt: CLAUDE_PRICING.updatedAt }, lastCheckedAt: '2026-08-30T00:00:00Z', lastAutomaticAttemptDate: '2026-08-30' };
+  await writeFile(cachePath, JSON.stringify(legacy));
+  const options = { baseline: CLAUDE_PRICING, cachePath, sourceUrl: CLAUDE_PRICING.source, fetchImpl: async () => { throw new Error('Offline'); } };
+  const service = createPricingRefreshService(options); await service.initialize();
+  assert.equal(service.current().archive.available, true);
+  assert.equal(service.current().archive.origin, 'cache');
+  assert.equal(service.status().lastCheckedAt, legacy.lastCheckedAt);
+  const publication = JSON.parse(await readFile(cachePath));
+  assert.equal(publication.revision, pricingRevision(CLAUDE_PRICING));
+  for (const timestamp of ['2026-08-15T00:00:00Z', '2026-09-15T00:00:00Z']) {
+    const data = { ...summary(service.current()), provider: 'claude' };
+    data.sessions[0] = { ...data.sessions[0], provider: 'claude', model: 'claude-opus-5', usageEvents: [{ timestamp, model: 'claude-opus-5', pricingModifiers: { inferenceGeo: 'global', speed: 'standard', serviceTier: 'standard' }, usage: { ...zeroUsage(), inputTokens: 1000, uncachedInputTokens: 1000, outputTokens: 100, totalTokens: 1100 } }] };
+    const dashboard = buildDashboardPayload(data, request, {});
+    assert.equal(dashboard.cost.available, true); assert.equal(dashboard.cost.total, 0.0075);
+    assert.equal(dashboard.sessions[0].cost.total, 0.0075);
+  }
+  const restarted = createPricingRefreshService(options); await restarted.initialize(); assert.equal(restarted.current().archive.available, true);
+  await rm(path.join(`${cachePath}.archive`, publication.revision + '.json'));
+  const damaged = createPricingRefreshService(options); await damaged.initialize();
+  assert.equal(damaged.current().archive.available, false);
 });

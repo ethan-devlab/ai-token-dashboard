@@ -173,7 +173,14 @@ function renderPricing(data) {
     const list = document.createElement('dl');
     const fields = [['table.input', 'input'], ['cached.input', 'cachedInput'], ...(claude ? [['provider.cacheWrite5m', 'cacheWrite5m'], ['provider.cacheWrite1h', 'cacheWrite1h']] : []), ['table.output', 'output']];
     for (const [label, key] of fields) { const row = document.createElement('div'); const term = document.createElement('dt'); term.textContent = t(label); const value = document.createElement('dd'); value.textContent = rate[key] == null ? '—' : formatCost(rate[key]); row.append(term, value); list.append(row); }
-    card.append(heading, unit, list); return card;
+    card.append(heading, unit, list);
+    if (rate.contextTier) {
+      const note = document.createElement('p'); note.className = 'rate-unit'; note.textContent = t('pricing.contextTier', { count: integerFormat.format(rate.contextTier.aboveInputTokens) });
+      const tierList = document.createElement('dl');
+      for (const [label, key] of fields) { const row = document.createElement('div'); const term = document.createElement('dt'); term.textContent = t(label); const value = document.createElement('dd'); value.textContent = rate.contextTier.rates[key] == null ? '—' : formatCost(rate.contextTier.rates[key]); row.append(term, value); tierList.append(row); }
+      card.append(note, tierList);
+    }
+    return card;
   }));
 }
 function renderExplorer(data) {

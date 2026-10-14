@@ -62,6 +62,19 @@ test('partial and inconsistent Claude duration breakdowns do not discard or doub
   assert.equal(calculateCost(CLAUDE_PRICING, parsed.usageEvents).unpricedTokens, 70);
 });
 
+test('legacy missing Claude surcharges retain a lower bound across all projections', async (t) => {
+  const f = await fixture(t, 'claude');
+  await f.write('one.jsonl', [assistant(5, {}, { inference_geo: 'not_available', speed: undefined })]);
+  const summary = await f.index.refresh(); const dashboard = buildDashboardPayload(summary, request, {});
+  assert.equal(dashboard.cost.total, 0.000175);
+  assert.equal(dashboard.cost.pricingCoverage.partial, true);
+  assert.equal(dashboard.models[0].cost, dashboard.cost.total);
+  assert.equal(dashboard.trend.points[0].cost, dashboard.cost.total);
+  assert.equal(dashboard.trend.points[0].partialCost, true);
+  assert.equal(buildSessionDetail(summary, request, dashboard.sessions[0].sessionKey).cost.total, dashboard.cost.total);
+  assert.match(buildExport('markdown-summary', dashboard).body, /Partial pricing: true/);
+});
+
 test('unknown pricing modifiers remain unpriced in aggregate, models, trend and exports', async (t) => {
   const f = await fixture(t, 'claude');
   await f.write('one.jsonl', [assistant(5, {}, { inference_geo: 'unknown' })]);
