@@ -21,4 +21,6 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 
 Month input accepts `YYYY-M` and `YYYY-MM`; the browser stores valid values as `YYYY-MM`. Model prices support name search and natural numeric version order within each naming family. This order does not indicate release dates.
 
+The repository is now [ethan-devlab/ai-token-dashboard](https://github.com/ethan-devlab/ai-token-dashboard). The current code default for UPDATE_REPOSITORY still uses the former name shown in the table. This documentation change does not migrate existing .env values or Git remotes.
+
 With `ALLOW_REMOTE=1`, wildcard binds (`0.0.0.0` or `::`) accept the actual destination IP and configured port in the Host header, plus loopback aliases for loopback destinations. External domain names and forwarded headers do not grant access. Settings remain available to local loopback connections; LAN connections cannot access them. Diagnostics and login-plan APIs remain disabled with non-loopback binds; full paths require a loopback bind. HTTPS tunnel compatibility is not supported. See [wildcard local settings validation](archive/validation/wildcard-local-settings-validation.md) and [month, pricing and remote validation](archive/validation/month-pricing-remote-validation.md).
