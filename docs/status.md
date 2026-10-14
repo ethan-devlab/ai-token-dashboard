@@ -4,7 +4,7 @@
 
 ## Supported behavior
 
-The desktop dashboard analyzes local Codex and Claude logs, including separate Claude subagent executions. It provides timezone-aware queries, observation-level model filters, current-basis costs, guarded pagination/detail and streamed exports. Refresh builds a candidate snapshot and retains the prior complete snapshot on hard failure. Settings and pricing ownership are independent and fixed at process startup.
+The desktop dashboard analyzes local Codex .jsonl/.jsonl.zst files and Claude logs, including separate Claude subagent executions. It provides timezone-aware queries, observation-level model filters, current-basis costs, guarded pagination/detail and streamed exports. Refresh builds a candidate snapshot and retains the prior complete snapshot on hard failure. Settings and pricing ownership are independent and fixed at process startup.
 
 Normal SIGINT, SIGTERM and SIGHUP shutdown drains admitted work and releases ownership. Forced termination cannot run cleanup; the next startup recovers only a valid same-machine lock with a confirmed absent PID. Active, foreign, damaged, busy or uncertain ownership remains read-only. Readers do not promote themselves while running.
 
@@ -17,7 +17,7 @@ Normal SIGINT, SIGTERM and SIGHUP shutdown drains admitted work and releases own
 | Startup ownership recovery | [Unit, multiprocess and desktop checks](archive/validation/startup-owner-recovery-validation.md) cover confirmed absent owners, competition and refusal boundaries |
 | Pricing publication and repair | [Interrupted publication checks](archive/validation/pricing-ownership-recovery-validation.md) cover archive/cache/quarantine phases; power-loss durability is not established |
 | Query/export performance | [Measured acceptance](archive/validation/pricing-ownership-recovery-validation.md) uses 150000 observations; timing/RSS are local workload measurements, not a capacity or hardware guarantee |
-| CI on 2026-10-14 | [Run 38540223112](https://github.com/ethan-devlab/ai-token-dashboard/actions/runs/38540223112) passed Ubuntu Node 18 syntax/server and Windows Node 22 client/HTTP contract checks for 6cf50ce. [Correction record](archive/validation/windows-contract-ci-validation.md) describes the preceding local checks |
+| CI on 2026-10-14 | [Run 38566380932](https://github.com/ethan-devlab/ai-token-dashboard/actions/runs/38566380932) passed minimum Node 22.15.0 server checks and Windows Node 22 client/HTTP contract checks for 9bef33d, including compressed Codex input |
 
 These records overlap; do not add their counts as a new complete test run. A prior formal 3333 restart is a historical observation, not the current service state or a released-artifact guarantee.
 

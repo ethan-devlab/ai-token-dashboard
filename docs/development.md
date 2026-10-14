@@ -21,7 +21,7 @@ Keep current behavior in the topic guides and API reference. Put dated investiga
 
 ## Releases
 
-Push a matching `vX.Y.Z` tag to create a source ZIP, `SHA256SUMS`, v2.1 migration notes, and provenance attestation. The release job uses Node.js `24.13.1`, matching the local release runtime used for this project. Verify a downloaded archive before extracting:
+Push a matching `vX.Y.Z` tag to create a source ZIP, `SHA256SUMS`, the v3 upgrade guide, and provenance attestation. The guide also appears before the generated GitHub release notes, so runtime and nullable-cost changes remain visible. The release job uses Node.js `24.13.1`. Verify a downloaded archive before extracting:
 
 ```powershell
 Get-FileHash .\ai-token-dashboard-vX.Y.Z.zip -Algorithm SHA256

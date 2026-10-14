@@ -19,6 +19,7 @@ Use the topic guides for current behavior. Dated plans, audits, local incidents 
 | [Architecture](architecture.md) | Server/provider/browser responsibilities and persistent storage |
 | [Development and releases](development.md) | Focused checks, CI, documentation maintenance and release artifacts |
 | [Status and limits](status.md) | Supported behavior, evidence coverage and known gaps |
+| [v3 upgrade](migration-v3.md) | Runtime requirement, compressed history, historical estimates and nullable costs |
 | [v1 to v2 migration](migration-v2.md) | Aggregation, timezone and lazy detail changes |
 | [v2.0 to v2.1 migration](migration-v2.1.md) | Provider isolation and later client compatibility changes |
 

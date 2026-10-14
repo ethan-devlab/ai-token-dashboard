@@ -38,7 +38,7 @@ jobs:
           mkdir -p release
           git archive --format=zip --prefix="ai-token-dashboard-${TAG}/" --output="release/ai-token-dashboard-${TAG}.zip" "$GITHUB_SHA"
           sha256sum "release/ai-token-dashboard-${TAG}.zip" > release/SHA256SUMS
-          cp docs/migration-v2.1.md "release/MIGRATION-${TAG}.md"
+          cp docs/migration-v3.md "release/MIGRATION-${TAG}.md"
       - name: Attest source archive
         uses: actions/attest@v4
         with:
@@ -47,4 +47,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" "release/ai-token-dashboard-${TAG}.zip" release/SHA256SUMS "release/MIGRATION-${TAG}.md" --generate-notes
+        run: gh release create "$TAG" "release/ai-token-dashboard-${TAG}.zip" release/SHA256SUMS "release/MIGRATION-${TAG}.md" --notes-file docs/migration-v3.md --generate-notes
