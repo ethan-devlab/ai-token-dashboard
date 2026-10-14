@@ -4,7 +4,7 @@ A desktop dashboard for local Codex and Claude Code JSONL usage. Compare Tokens,
 
 ## Start
 
-Requires Node.js 18 or later. No dependency installation or build is required.
+Requires Node.js 22.15.0 or later. No dependency installation or build is required. Codex sources can contain plain `.jsonl` files and Zstandard-compressed `.jsonl.zst` files; both are read without extracting files to disk.
 
 1. Copy `.env.example` to `.env`.
 2. Adjust session directories if the CLI uses a non-default location.

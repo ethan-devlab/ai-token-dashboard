@@ -10,7 +10,7 @@ Settings edits stay on the current page until Save succeeds. Unsaved changes are
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | Non-loopback values require `ALLOW_REMOTE=1`; remote mode has no authentication. |
 | `PORT` | `3333` | 1–65535. |
-| `CODEX_SESSIONS_DIR` | platform Codex sessions path | Local JSONL root. |
+| `CODEX_SESSIONS_DIR` | platform Codex sessions path | Local `.jsonl` and `.jsonl.zst` root. Compressed files count toward `MAX_FILES`. |
 | `CLAUDE_SESSIONS_DIR` | `~/.claude/projects` | Local Claude Code project JSONL root. A missing directory makes Claude unavailable without preventing server startup. |
 | `MAX_FILES` | `10000` | Maximum discovered session files. |
 | `PARSE_CONCURRENCY` | `min(4, availableParallelism)` | 1–16 bounded parser workers. |

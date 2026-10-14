@@ -26,3 +26,7 @@ See [API](api-v2.md), [operations](operations.md) and [security](security.md) fo
 ## Repository rename compatibility
 
 The default update source and new-release ZIP prefix use ai-token-dashboard. Existing .env values still take precedence; change the former official repository value explicitly if desired. Blank/custom update sources are preserved. Existing published archives are not renamed or reissued. Browser preference keys retain their legacy codex-token-dashboard namespace so saved language, Provider, budgets and view settings remain available. The application version stays unchanged by the name change.
+
+## Compressed Codex history in newer source
+
+Node.js 22.15.0 or later is required. Node 18 is no longer supported. The reader includes `.jsonl.zst` files under the configured Codex sessions root, using the built-in Zstandard API (currently experimental in Node). No dependency or external decompressor is required. Source files are not changed or extracted to disk. Historical totals can increase because earlier source skipped compressed files. Dates still use usage event timestamps, not filenames or file modification times. Identical decoded content uses the existing Provider/Session deduplication policy. Decode or frame-completeness failures retain the previous complete snapshot. The separate Codex `archived_sessions` directory is not added automatically.

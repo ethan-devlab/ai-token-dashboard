@@ -6,6 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { zstdCompressSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,11 +32,11 @@ test('v2 dashboard HTTP contract is redacted, server-authoritative, and same-ori
   try {
     await mkdir(sessions);
     await mkdir(path.join(claudeSessions, 'workspace', 'claude-session', 'subagents'), { recursive: true });
-    await writeFile(path.join(sessions, 'formula.jsonl'), [
+    await writeFile(path.join(sessions, 'formula.jsonl.zst'), zstdCompressSync([
       '{"timestamp":"2026-07-29T00:00:00Z","type":"session_meta","payload":{"id":"=formula","cwd":"C:\\\\Users\\\\secret\\\\project","model":"gpt-5.6-terra"}}',
       '{"timestamp":"2026-07-29T00:00:01Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":40,"total_tokens":140}}}}',
       '{"timestamp":"2026-07-29T00:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":40,"total_tokens":140}}}}',
-    ].join('\n'));
+    ].join('\n')));
     await writeFile(path.join(claudeSessions, 'workspace', 'claude-session.jsonl'), [
       JSON.stringify({ type: 'assistant', sessionId: 'claude-session', cwd: 'C:/Users/secret/claude-workspace', version: '2.1.0', entrypoint: 'cli', timestamp: '2026-07-29T00:00:00Z', message: { id: 'claude-message', model: 'claude-opus-5', content: 'private transcript', usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 20, cache_creation: { ephemeral_5m_input_tokens: 30, ephemeral_1h_input_tokens: 40 }, inference_geo: 'global', speed: 'standard', service_tier: 'standard' } } }),
       JSON.stringify({ type: 'assistant', sessionId: 'claude-session', cwd: 'C:/Users/secret/claude-workspace', version: '2.1.0', entrypoint: 'cli', timestamp: '2026-07-29T00:00:01Z', message: { id: 'claude-message', model: 'claude-opus-5', content: 'final private transcript', usage: { input_tokens: 10, output_tokens: 7, cache_read_input_tokens: 20, cache_creation: { ephemeral_5m_input_tokens: 30, ephemeral_1h_input_tokens: 40 }, inference_geo: 'global', speed: 'standard', service_tier: 'standard' } } }),

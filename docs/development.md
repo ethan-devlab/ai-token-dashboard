@@ -13,7 +13,7 @@ npm run test:client
 npm run test:contract
 ```
 
-CI runs syntax/server checks on Ubuntu with Node 18, and client/HTTP contract checks on Windows with Node 22. A local macOS pass does not establish Windows filesystem or watcher behavior. Select ownership, pricing, calendar or export harnesses only when a change affects that surface; see the archived validation records for commands and limits. Desktop visual checks are manual and stay desktop-only.
+CI runs syntax/server checks on Ubuntu with the minimum Node 22.15.0, and client/HTTP contract checks on Windows with Node 22. A local macOS pass does not establish Windows filesystem or watcher behavior. Select ownership, pricing, calendar or export harnesses only when a change affects that surface; see the archived validation records for commands and limits. Desktop visual checks are manual and stay desktop-only.
 
 ## Documentation maintenance
 

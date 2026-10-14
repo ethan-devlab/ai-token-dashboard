@@ -12,6 +12,6 @@
     "test:server": "node --test tests/server-services.test.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.15.0"
   }
 }

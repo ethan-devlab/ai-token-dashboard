@@ -10,7 +10,7 @@ Providers initialize lazily on first data request. Refresh builds a new in-memor
 
 ## Data flow
 
-JSONL discovery and parser workers produce adopted observations. Reconciliation identifies copies and valid event versions without guessing missing identities. The query selects observations, prices them against a verified current basis and builds one projection for KPI, trend, models and Session totals. Pagination and detail use that projection guard. Export preparation retains the admitted projection; transfer uses bounded buffers and response backpressure.
+JSONL discovery and parser workers produce adopted observations. Codex workers stream both `.jsonl` and `.jsonl.zst` through the same parser. Zstandard uses the built-in Node API and does not extract files to disk. Content hashes use decoded bytes, so compressed and plain copies retain the same content proof. Decode failures reject the complete refresh and retain the previous snapshot. Reconciliation identifies copies and valid event versions without guessing missing identities. The query selects observations, prices them against a verified current basis and builds one projection for KPI, trend, models and Session totals. Pagination and detail use that projection guard. Export preparation retains the admitted projection; transfer uses bounded buffers and response backpressure.
 
 The browser requests server aggregates and renders them with local uPlot assets. It stores only permitted preferences, Provider-specific budgets and query/view state. Transcripts and credentials do not enter client storage. GET /api/providers also returns the running package version for the header.
 

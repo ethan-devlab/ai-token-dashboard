@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { zstdCompressSync } from 'node:zlib';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createZstdFrameGuard } from '../server/zstd-frame.mjs';
 import { createSummaryCache } from '../server/summary-cache.mjs';
 import { compareVersions, createUpdateChecker, validRepository } from '../server/update-checker.mjs';
 import { parseEnv, readRuntimeConfig } from '../server/config.mjs';
@@ -12,7 +16,7 @@ import { createSessionIndex, parseSessionFile } from '../server/session-index.mj
 import { parseClaudeSessionFile } from '../server/claude-session.mjs';
 import { CLAUDE_PRICING } from '../server/pricing.mjs';
 import { createClaudePricingRefreshService, parseClaudePricingMarkdown } from '../server/claude-pricing-refresh.mjs';
-import { calculateCost } from '../server/dashboard-data.mjs';
+import { buildDashboardPayload, calculateCost } from '../server/dashboard-data.mjs';
 import { readSettings, saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
 import { createAccountUsageService, normalizeClaudeUsage, normalizeCodexUsage } from '../server/account-usage.mjs';
@@ -377,6 +381,62 @@ test('session index reconciles observations and incrementally reuses an unchange
     assert.equal(third.scan.added, 1);
     assert.equal(third.scan.reused, 1);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('Zstandard frame guard accepts chunked and concatenated frames but rejects every truncated boundary', async () => {
+  const frames = [zstdCompressSync('test'), zstdCompressSync('checksummed', { params: { [(await import('node:zlib')).constants.ZSTD_c_checksumFlag]: 1 } })];
+  // A valid single-segment frame with one RLE block.
+  frames.push(Buffer.from([0x28, 0xB5, 0x2F, 0xFD, 0x20, 3, 27, 0, 0, 65]));
+  const skip = Buffer.from([0x50, 0x2A, 0x4D, 0x18, 2, 0, 0, 0, 65, 66]);
+  const combined = Buffer.concat([frames[0], skip, ...frames.slice(1)]);
+  const verify = (chunks) => pipeline(Readable.from(chunks), createZstdFrameGuard(), async (stream) => { for await (const chunk of stream) assert.ok(chunk.length); });
+  await verify([...combined].map((byte) => Buffer.from([byte])));
+  for (const frame of [...frames, skip]) for (let size = 0; size < frame.length; size += 1) await assert.rejects(verify([frame.subarray(0, size)]), { code: 'INVALID_ZSTD_FRAME' });
+  await assert.rejects(verify([Buffer.concat([frames[0], frames[1].subarray(0, -1)])]), { code: 'INVALID_ZSTD_FRAME' });
+});
+
+test('compressed Codex history uses event dates, deduplicates decoded copies and retains snapshots on decode failure', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'ai-token-dashboard-zstd-'));
+  const index = createSessionIndex({ sessionsDirectory: root, maxFiles: 10, parseConcurrency: 2, pricing: PRICING });
+  const cache = createSummaryCache(() => index.prepareRefresh());
+  try {
+    const body = [
+      { type: 'session_meta', payload: { id: 'compressed-history', model: 'gpt-5.6-terra', cwd: '/TEST_ONLY/history' } },
+      ...[['2026-09-02T00:00:00Z', 7], ['2026-10-02T00:00:00Z', 20]].map(([timestamp, input_tokens]) => ({ type: 'event_msg', timestamp, payload: { type: 'token_count', info: { total_token_usage: { input_tokens, output_tokens: 0 } } } })),
+    ].map(JSON.stringify).join('\n') + '\n';
+    const compressed = zstdCompressSync(body);
+    const file = path.join(root, 'history.jsonl.zst');
+    await writeFile(file, compressed);
+    const parsed = await parseSessionFile(file, 'history.jsonl.zst');
+    await writeFile(path.join(root, 'copy.jsonl'), body);
+    const plain = await parseSessionFile(path.join(root, 'copy.jsonl'), 'copy.jsonl');
+    assert.equal(parsed.contentHash, plain.contentHash);
+    assert.deepEqual(parsed.usage, plain.usage);
+    const first = await cache.refresh();
+    assert.equal(first.summary.scannedFileCount, 2);
+    assert.equal(first.summary.totals.totalTokens, 20);
+    const month = (summary, period) => buildDashboardPayload(summary, { range: resolveRange({ mode: 'month', period, timezone: 'Asia/Taipei' }), nowMs: Date.parse('2026-10-14T12:00Z'), q: '', sort: 'recent', offset: 0, limit: 100, filters: { models: [], workspaces: [], pricingStatus: [], usageSource: [], cliVersion: [], originator: [], executionType: [], quality: [] } }, first.summary.scan);
+    assert.equal(month(first.summary, '2026-09').totals.totalTokens, 7);
+    assert.equal(month(first.summary, '2026-10').totals.totalTokens, 13);
+    assert.equal((await cache.refresh()).summary.scan.reused, 2);
+    for (const invalid of [Buffer.from('invalid zstd'), compressed.subarray(0, compressed.length - 1)]) {
+      await writeFile(file, invalid);
+      await assert.rejects(cache.refresh(), { code: 'SESSION_REFRESH_FAILED', reason: 'file-parse' });
+      const retained = await cache.get();
+      assert.equal(retained.summary.totals.totalTokens, 20);
+      assert.equal(month(retained.summary, '2026-09').totals.totalTokens, 7);
+      assert.equal(retained.metadata.retainedSnapshot, true);
+    }
+    await writeFile(file, compressed);
+    await rm(path.join(root, 'copy.jsonl'));
+    const restored = await cache.refresh();
+    assert.equal(restored.summary.totals.totalTokens, 20);
+    assert.equal(cache.status().retainedSnapshot, false);
+    assert.deepEqual(await readdir(root), ['history.jsonl.zst']);
+  } finally {
+    await cache.close(); await index.close();
     await rm(root, { recursive: true, force: true });
   }
 });

@@ -3,8 +3,11 @@ import { createHash } from 'node:crypto';
 import { lstat, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
+import { pipeline } from 'node:stream/promises';
+import { createZstdDecompress } from 'node:zlib';
 import { Worker } from 'node:worker_threads';
 import { fileFingerprint } from './session-file-state.mjs';
+import { createZstdFrameGuard } from './zstd-frame.mjs';
 import { addUsage, sessionKey, zeroUsage } from './usage.mjs';
 import { reconcileSession, reconcileSessionFiles, selectObservationVersions, validUsage } from './usage-reconciliation.mjs';
 
@@ -44,41 +47,52 @@ export async function parseSessionFile(filePath, relativePath) {
   let lineCount = 0;
   let invalidLineCount = 0;
   const hash = createHash('sha256');
-  const input = createReadStream(filePath);
+  const source = createReadStream(filePath);
+  const compressed = filePath.toLowerCase().endsWith('.jsonl.zst');
+  const input = compressed ? createZstdDecompress() : source;
+  // Hash decoded bytes so a compressed copy has the same content identity.
+  // Handle pipeline rejection immediately; readline can fail before it settles.
+  const completion = compressed ? pipeline(source, createZstdFrameGuard(), input).then(() => null, (error) => error) : null;
   input.on('data', (chunk) => hash.update(chunk));
   const lines = readline.createInterface({ input, crlfDelay: Infinity });
-  for await (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    lineCount += 1;
-    let event;
-    try { event = JSON.parse(line); } catch { invalidLineCount += 1; continue; }
-    const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {};
-    if (event.type === 'session_meta' || event.type === 'thread.started') {
-      metadata.id ||= payload.id ?? payload.session_id ?? payload.thread_id ?? event.thread_id ?? event.session_id ?? event.id ?? null;
-      metadata.cwd ||= payload.cwd ?? payload.working_directory ?? null;
-      metadata.model ||= payload.model ?? payload.model_name ?? null;
-      metadata.modelProvider ||= payload.model_provider ?? payload.provider ?? null;
-      metadata.originator ||= payload.originator ?? payload.source ?? null;
-      metadata.cliVersion ||= payload.cli_version ?? payload.version ?? null;
+  try {
+    for await (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      lineCount += 1;
+      let event;
+      try { event = JSON.parse(line); } catch { invalidLineCount += 1; continue; }
+      const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {};
+      if (event.type === 'session_meta' || event.type === 'thread.started') {
+        metadata.id ||= payload.id ?? payload.session_id ?? payload.thread_id ?? event.thread_id ?? event.session_id ?? event.id ?? null;
+        metadata.cwd ||= payload.cwd ?? payload.working_directory ?? null;
+        metadata.model ||= payload.model ?? payload.model_name ?? null;
+        metadata.modelProvider ||= payload.model_provider ?? payload.provider ?? null;
+        metadata.originator ||= payload.originator ?? payload.source ?? null;
+        metadata.cliVersion ||= payload.cli_version ?? payload.version ?? null;
+      }
+      currentModel = eventModel(event) || currentModel || metadata.model;
+      const observedAt = timestamp(event);
+      if (observedAt) { firstTimestamp ||= observedAt; lastTimestamp = observedAt; }
+      const observationTimestamp = observedAt || lastTimestamp || fileStat.mtime.toISOString();
+      const model = currentModel || metadata.model || null;
+      const cumulativeValue = cumulativeUsage(event);
+      const turn = cumulativeValue ? null : turnUsage(event);
+      if (!cumulativeValue && !turn) continue;
+      // Session, turn, and context IDs group records; they are not unique usage IDs.
+      const explicitId = event.event_id ?? payload.event_id ?? event.usage_id ?? payload.usage_id ?? (cumulativeValue ? event.id : null);
+      const rawUsage = cumulativeValue ? (event.payload?.info?.total_token_usage ?? event.info?.total_token_usage) : (event.usage ?? payload.usage);
+      const valid = validUsage(rawUsage, ['input_tokens', 'inputTokens', 'output_tokens', 'outputTokens', 'total_tokens', 'totalTokens', 'cached_input_tokens', 'cachedInputTokens', 'cache_read_input_tokens', 'cache_write_tokens', 'cacheWriteTokens', 'reasoning_output_tokens', 'reasoningOutputTokens']);
+      observations.push({ valid, file: relativePath, identity: typeof explicitId === 'string' && explicitId ? explicitId : null, timestamp: observationTimestamp, timestampEstimated: !observedAt, model, source: cumulativeValue ? 'cumulative' : 'turn', sequence: lineCount, usage: cumulativeValue || turn });
     }
-    currentModel = eventModel(event) || currentModel || metadata.model;
-    const observedAt = timestamp(event);
-    if (observedAt) { firstTimestamp ||= observedAt; lastTimestamp = observedAt; }
-    const observationTimestamp = observedAt || lastTimestamp || fileStat.mtime.toISOString();
-    const model = currentModel || metadata.model || null;
-    const cumulativeValue = cumulativeUsage(event);
-    const turn = cumulativeValue ? null : turnUsage(event);
-    if (!cumulativeValue && !turn) continue;
-    // Session, turn, and context IDs group records; they are not unique usage IDs.
-    const explicitId = event.event_id ?? payload.event_id ?? event.usage_id ?? payload.usage_id ?? (cumulativeValue ? event.id : null);
-    const rawUsage = cumulativeValue ? (event.payload?.info?.total_token_usage ?? event.info?.total_token_usage) : (event.usage ?? payload.usage);
-    const valid = validUsage(rawUsage, ['input_tokens', 'inputTokens', 'output_tokens', 'outputTokens', 'total_tokens', 'totalTokens', 'cached_input_tokens', 'cachedInputTokens', 'cache_read_input_tokens', 'cache_write_tokens', 'cacheWriteTokens', 'reasoning_output_tokens', 'reasoningOutputTokens']);
-    observations.push({ valid, file: relativePath, identity: typeof explicitId === 'string' && explicitId ? explicitId : null, timestamp: observationTimestamp, timestampEstimated: !observedAt, model, source: cumulativeValue ? 'cumulative' : 'turn', sequence: lineCount, usage: cumulativeValue || turn });
+    const readError = await completion;
+    if (readError) throw readError;
+  } finally {
+    lines.close(); source.destroy(); input.destroy();
   }
   const selected = selectObservationVersions(observations);
   selected.observations.sort((left, right) => left.sequence - right.sequence);
-  return reconcileSession({ provider: 'codex', executionType: 'main', parentSessionKey: null, agentId: null, file: relativePath, sessionKey: sessionKey('codex', relativePath), sessionId: metadata.id || path.basename(filePath, path.extname(filePath)), ...metadata, sessionIdentity: typeof metadata.id === 'string' && metadata.id ? metadata.id : null, contentHash: hash.digest('hex'), usageObservations: observations, model: metadata.model || currentModel, firstTimestamp, lastTimestamp, modifiedAt: fileStat.mtime.toISOString(), sizeBytes: fileStat.size, lineCount, invalidLineCount, usageSource: observations.some((item) => item.source === 'cumulative') ? 'reconciled' : observations.length ? 'turn' : 'not_found' }, selected.observations, { duplicate: selected.duplicate, invalidUsage: selected.invalidUsage });
+  return reconcileSession({ provider: 'codex', executionType: 'main', parentSessionKey: null, agentId: null, file: relativePath, sessionKey: sessionKey('codex', relativePath), sessionId: metadata.id || path.basename(filePath).replace(/\.jsonl(?:\.zst)?$/i, ''), ...metadata, sessionIdentity: typeof metadata.id === 'string' && metadata.id ? metadata.id : null, contentHash: hash.digest('hex'), usageObservations: observations, model: metadata.model || currentModel, firstTimestamp, lastTimestamp, modifiedAt: fileStat.mtime.toISOString(), sizeBytes: fileStat.size, lineCount, invalidLineCount, usageSource: observations.some((item) => item.source === 'cumulative') ? 'reconciled' : observations.length ? 'turn' : 'not_found' }, selected.observations, { duplicate: selected.duplicate, invalidUsage: selected.invalidUsage });
 }
 
 function refreshFailure(reason, scan = {}, failedFiles = 0) {
@@ -86,7 +100,7 @@ function refreshFailure(reason, scan = {}, failedFiles = 0) {
   Object.assign(error, { code: 'SESSION_REFRESH_FAILED', status: 503, reason, scan, failedFiles });
   return error;
 }
-async function discover(root, maxFiles) {
+async function discover(root, maxFiles, provider) {
   const rootStat = await stat(root);
   if (!rootStat.isDirectory()) throw refreshFailure('directory-unavailable');
   const files = []; let truncated = false;
@@ -97,7 +111,7 @@ async function discover(root, maxFiles) {
       if (entry.isSymbolicLink()) continue;
       const fullPath = path.join(directory, entry.name);
       if (entry.isDirectory()) await walk(fullPath);
-      else if (entry.isFile() && entry.name.toLowerCase().endsWith('.jsonl')) {
+      else if (entry.isFile() && (entry.name.toLowerCase().endsWith('.jsonl') || (provider === 'codex' && entry.name.toLowerCase().endsWith('.jsonl.zst')))) {
         const fileStat = await lstat(fullPath, { bigint: true });
         if (!fileStat.isFile() || fileStat.isSymbolicLink()) throw refreshFailure('files-changed');
         if (files.length === maxFiles) { truncated = true; break; }
@@ -144,7 +158,7 @@ export function createSessionIndex({ provider = 'codex', sessionsDirectory, maxF
     if (closed) throw refreshFailure('closed');
     const baseRevision = revision; const discoveryStarted = Date.now();
     let discovery;
-    try { discovery = await discover(sessionsDirectory, maxFiles); }
+    try { discovery = await discover(sessionsDirectory, maxFiles, provider); }
     catch (error) { throw error.code === 'SESSION_REFRESH_FAILED' ? error : refreshFailure('directory-read'); }
     if (closed) throw refreshFailure('closed');
     const discovered = discovery.files; const next = new Map(); const paths = new Set(discovered.map((entry) => entry.relativePath));
@@ -167,7 +181,7 @@ export function createSessionIndex({ provider = 'codex', sessionsDirectory, maxF
     // Recheck membership and fingerprints, including reused files, before publication.
     const verificationStarted = Date.now();
     let verified;
-    try { verified = await discover(sessionsDirectory, maxFiles); }
+    try { verified = await discover(sessionsDirectory, maxFiles, provider); }
     catch { throw refreshFailure('files-changed', scan); }
     if (verified.truncated !== discovery.truncated || verified.files.length !== discovered.length || verified.files.some((entry, position) => entry.relativePath !== discovered[position].relativePath || entry.fingerprint !== discovered[position].fingerprint)) throw refreshFailure('files-changed', scan);
     scan.verificationDurationMs = Date.now() - verificationStarted;
