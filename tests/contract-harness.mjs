@@ -47,7 +47,9 @@ test('v2 dashboard HTTP contract is redacted, server-authoritative, and same-ori
     const providers = await (await fetch(`${base}/api/providers`)).json();
     assert.deepEqual(providers.providers.map(({ id, available }) => ({ id, available })), [{ id: 'codex', available: true }, { id: 'claude', available: true }]);
     const accountUsage = await (await fetch(`${base}/api/account-usage?provider=codex`)).json();
-    assert.deepEqual(accountUsage, { provider: 'codex', status: 'unavailable', reason: 'not-signed-in', fetchedAt: accountUsage.fetchedAt, windows: [] });
+    assert.deepEqual(accountUsage, { provider: 'codex', status: 'unavailable', reason: 'not-signed-in', fetchedAt: null, checkedAt: accountUsage.checkedAt, windows: [] });
+    assert.equal(typeof accountUsage.checkedAt, 'string');
+    assert.equal(new Date(accountUsage.checkedAt).toISOString(), accountUsage.checkedAt);
     assert.equal(JSON.stringify(accountUsage).includes('isolated-codex-home'), false);
     const blockedAccountUsageRefresh = await fetch(`${base}/api/account-usage/refresh?provider=codex`, { method: 'POST' }); assert.equal(blockedAccountUsageRefresh.status, 403); assertEnvelope(await blockedAccountUsageRefresh.json(), 'INVALID_ORIGIN');
     const refreshedAccountUsage = await fetch(`${base}/api/account-usage/refresh?provider=codex`, { method: 'POST', headers: { Origin: base } }); assert.equal(refreshedAccountUsage.status, 200); assert.equal((await refreshedAccountUsage.json()).status, 'unavailable');

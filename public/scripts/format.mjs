@@ -11,7 +11,7 @@ export function formatCost(value, partial = false) {
   if (value == null || !Number.isFinite(Number(value))) return '—';
   if (Number(value) > 0 && Number(value) < 0.000001) {
     if (!partial) return `< ${moneyFormat.format(0.000001)}`;
-    const scientific = new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD', notation: 'scientific', maximumFractionDigits: 6 }).format(Number(value));
+    const scientific = new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD', notation: 'scientific', minimumFractionDigits: 0, maximumFractionDigits: 6 }).format(Number(value));
     return `≥ ${scientific}`;
   }
   return `${partial ? '≥ ' : ''}${moneyFormat.format(Number(value))}`;

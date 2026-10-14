@@ -47,6 +47,7 @@ test('sub-micro-dollar costs do not become a false zero or contradictory bound',
   setLocale('en');
   assert.match(formatCost(0.00000002), /^< \$0\.000001$/);
   assert.match(formatCost(0.00000001, true), /^≥ \$1E-8$/);
+  assert.equal(formatCost(1.234567e-8, true), '≥ $1.234567E-8');
   assert.doesNotMatch(formatCost(0.00000001, true), /</);
   assert.equal(formatCost(0), '$0.00');
 });
