@@ -12,7 +12,7 @@ Each normal log workload starts a fresh server. Startup to listen readiness take
 
 Elapsed time uses the parent clock from fetch to complete body consumption. Test-only preload instrumentation records HTTP-handler duration and process.memoryUsage before/after the handler. External ps samples child RSS at a nominal 100 ms interval plus ps cost; an in-flight sample can finish after the response. Short operations often have one sample. Observed maximum RSS below is the maximum of sampled RSS and handler before/after RSS. It is a lower bound on the true process peak, not an exact peak or operation-only allocation. RSS includes retained memory from earlier requests in the same workload. No forced GC, heap-leak conclusion, p95 or concurrent-load claim is made. Instrumentation and external sampling add overhead.
 
-The complete final-run values, response sizes, counts, scan timings, memory snapshots and sample counts are in [performance-baseline-evidence.json](performance-baseline-evidence.json). An initial exploratory run covered two exports; the final run added both other formats and complete price-coverage assertions. Only the final 48 request measurements are reported here. These are benchmark observations, not 48 independent regression tests.
+The complete final-run values, response sizes, counts, scan timings, memory snapshots and sample counts are in [performance-baseline-evidence.json](../evidence/performance-baseline-evidence.json). An initial exploratory run covered two exports; the final run added both other formats and complete price-coverage assertions. Only the final 48 request measurements are reported here. These are benchmark observations, not 48 independent regression tests.
 
 ## Query and export results
 
@@ -63,4 +63,4 @@ The decision frontier is implementation priority and accepted workload scale. Re
 
 ## Historical checkpoint
 
-This record and raw evidence remain the capped-export baseline. The original harness is available at commit 8a488b1. The current runnable tests/performance-baseline.mjs now verifies Q40–Q50 uncapped preparation/transfer and a slow consumer, with the selected local numeric targets. See [the subsequent implementation evidence](query-export-performance-validation.md); historical 413 results above do not describe current product behavior.
+This record and raw evidence remain the capped-export baseline. The original harness is available at commit 8a488b1. The current runnable tests/performance-baseline.mjs now verifies Q40–Q50 uncapped preparation/transfer and a slow consumer, with the selected local numeric targets. See [the subsequent implementation evidence](../validation/query-export-performance-validation.md); historical 413 results above do not describe current product behavior.

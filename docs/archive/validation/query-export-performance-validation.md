@@ -12,7 +12,7 @@ Direct GET export and prepared downloads share one process-wide slot, with immed
 
 ## Local performance acceptance
 
-Final command: `node tests/performance-baseline.mjs <result.json>`. The final source includes the Provider cache key and fixed-buffer writer. [Raw evidence](query-export-performance-evidence.json) contains 63 HTTP measurements, memory snapshots, sample counts and workload checks. Earlier exploratory runs informed implementation and are not added to this count. The original [baseline](performance-baseline.md) and its 48 measurements remain historical.
+Final command: `node tests/performance-baseline.mjs <result.json>`. The final source includes the Provider cache key and fixed-buffer writer. [Raw evidence](../evidence/query-export-performance-evidence.json) contains 63 HTTP measurements, memory snapshots, sample counts and workload checks. Earlier exploratory runs informed implementation and are not added to this count. The original [baseline](../reviews/performance-baseline.md) and its 48 measurements remain historical.
 
 Environment and workload match the baseline: macOS arm64, Node v26.0.0, 12 logical CPUs, 24 GiB RAM, parse concurrency two, isolated copied app, blocked external fetch, sequential synthetic requests. Normal loads have 10000/50000/150000 observations and 100/500/1500 Sessions, two alternating models, ten workspaces and 100 shared hourly timestamps. All-time UTC and stable projection clocks are used; first queries include scanning, parsing and complete delivery. No forced GC is used.
 

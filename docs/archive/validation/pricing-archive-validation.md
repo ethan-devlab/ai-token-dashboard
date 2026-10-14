@@ -1,6 +1,6 @@
 # Pricing archive validation
 
-Date: 2026-10-01 (Asia/Taipei). Environment: macOS, Node v26.0.0. Policies: Q28–Q33 in [pricing-archive-plan.md](pricing-archive-plan.md).
+Date: 2026-10-01 (Asia/Taipei). Environment: macOS, Node v26.0.0. Policies: Q28–Q33 in [pricing-archive-plan.md](../plans/pricing-archive-plan.md).
 
 ## Result
 

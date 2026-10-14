@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,6 +45,7 @@ test('v2 dashboard HTTP contract is redacted, server-authoritative, and same-ori
     const base = `http://127.0.0.1:${serverPort}`;
     await ready(`${base}/api/dashboard?mode=all`);
     const providers = await (await fetch(`${base}/api/providers`)).json();
+    assert.equal(providers.version, JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8')).version);
     assert.deepEqual(providers.providers.map(({ id, available }) => ({ id, available })), [{ id: 'codex', available: true }, { id: 'claude', available: true }]);
     const accountUsage = await (await fetch(`${base}/api/account-usage?provider=codex`)).json();
     assert.deepEqual(accountUsage, { provider: 'codex', status: 'unavailable', reason: 'not-signed-in', fetchedAt: null, checkedAt: accountUsage.checkedAt, windows: [] });

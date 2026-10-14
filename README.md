@@ -1,123 +1,35 @@
 # Local AI Token Dashboard
 
-Desktop-local Node.js dashboard for Codex and Claude Code JSONL usage. The server uses Node.js built-ins; charts use a local, pinned uPlot 1.6.32 asset. v2.1 adds provider-isolated parsers, snapshots, pricing, filters, budgets, refresh state, and exports. Use the header dropdown to switch providers without rescanning an existing snapshot.
+A desktop dashboard for local Codex and Claude Code JSONL usage. Compare Tokens, API-equivalent cost, models and Sessions; check CLI login-plan quota and export filtered reports. The server uses Node.js built-ins and serves its chart assets locally.
 
-## Run
+## Start
 
-Copy `.env.example` to `.env`, configure the local session directory if needed, then run:
+Requires Node.js 18 or later. No dependency installation or build is required.
 
-```powershell
-npm start
-```
+1. Copy `.env.example` to `.env`.
+2. Adjust session directories if the CLI uses a non-default location.
+3. Run `npm start`, then open [localhost:3333](http://localhost:3333).
 
-Open `http://localhost:3333`. The dashboard is desktop-only and keeps session data in the local server process.
+The header shows the running Dashboard version from `package.json`. Settings saved in the UI take effect after a restart. Keep the default loopback bind for local use.
 
-## Charts
+## What to expect
 
-Select a single metric, stacked Token/cost plots, or dual axes; use bars or unsmoothed lines. The dashboard retains existing view preferences and saves the new layout and mark choices locally. Pointer movement shows a compact preview. Click a bucket to pin its complete values, or use Left/Right/Home/End and Enter. The data table exposes the same amounts and cost qualifiers.
+- Codex and Claude have separate snapshots, filters, budgets and pricing. Claude subagent usage is included by default.
+- Periods and comparisons use the selected timezone. Charts, Sessions and exports share the same filtered usage.
+- Costs are public API-equivalent estimates, not subscription bills. Unknown prices and incomplete usage stay visible as quality warnings.
+- Downloads include all matching Sessions across pages and use the browser download manager.
+- Refresh failures retain the previous complete snapshot. Settings and pricing each have one writer; startup can recover only a verified absent local owner.
 
-Drag across complete buckets or use the start/end boundary selects. **Zoom** changes only the plot. **Apply** updates the local usage query, URL, KPIs, model list, sessions, and export scope. Account quota retains its own service period. **Return** restores the prior query during the same page session. Reload preserves the current exact interval, including DST offsets, but clears the Return history. Editing the query clears the chart interval and zoom; view changes preserve them.
+## Find the right guide
 
-All chart assets are served locally. See the [MIT license](public/scripts/vendor/uplot-LICENSE.txt) and the [archived engine comparison](docs/chart-engine-comparison.md).
-
-The overview uses short costs and optional exact values. Partial amounts remain lower bounds. A compact account-quota strip below the KPIs shows the service's remaining quota, reset times, and check time. Expand it for complete quota details and source information. Session rows scroll within a bounded table; its header and paging remain available. Failed queries mark the retained data's original scope and provide **Retry** and **Return to displayed query**.
-
-## Configuration
-
-`.env` is ignored by Git. `UPDATE_REPOSITORY` is read only from this file; other launch values may be temporarily overridden through the process environment. The **Settings** link opens `/settings.html`: it validates and atomically writes only the documented `.env` keys, preserves unrelated lines, and requires a dashboard restart before saved values take effect. Settings require a loopback connection and a local loopback URL. This permits local administration through `localhost`, `127.0.0.1` or `[::1]` even with a wildcard bind; remote connections cannot read or edit settings.
-
-Settings edits stay on the current page until Save succeeds. Unsaved changes are marked. Returning to the dashboard offers **Keep editing** or **Discard and return**; browser exit/reload registers its native warning while changes are unsaved. A failed save retains edits. No draft is stored in local storage.
-
-| Setting | Default | Notes |
-| --- | --- | --- |
-| `HOST` | `127.0.0.1` | Non-loopback values require `ALLOW_REMOTE=1`; remote mode has no authentication. |
-| `PORT` | `3333` | 1–65535. |
-| `CODEX_SESSIONS_DIR` | platform Codex sessions path | Local JSONL root. |
-| `CLAUDE_SESSIONS_DIR` | `~/.claude/projects` | Local Claude Code project JSONL root. A missing directory makes Claude unavailable without preventing server startup. |
-| `MAX_FILES` | `10000` | Maximum discovered session files. |
-| `PARSE_CONCURRENCY` | `min(4, availableParallelism)` | 1–16 bounded parser workers. |
-| `EXPOSE_FULL_PATHS` | `0` | Only allowed with a loopback host. |
-| `AUTO_REFRESH` | `0` | Uses a debounced filesystem hint; manual refresh remains available. |
-| `AUTO_REFRESH_DEBOUNCE_MS` | `1500` | Coalescing delay for the optional watcher. |
-| `UPDATE_REPOSITORY` | `ethan-devlab/codex-token-dashboard` | Canonical `owner/repo` for user-triggered release checks. An explicit blank value disables checks; a custom value selects another repository. |
-
-Month input accepts `YYYY-M` and `YYYY-MM`; the browser stores valid values as `YYYY-MM`. Model prices support name search and natural numeric version order within each naming family. This order does not indicate release dates.
-
-With `ALLOW_REMOTE=1`, wildcard binds (`0.0.0.0` or `::`) accept the actual destination IP and configured port in the Host header, plus loopback aliases for loopback destinations. External domain names and forwarded headers do not grant access. Settings remain available to local loopback connections; LAN connections cannot access them. Diagnostics and login-plan APIs remain disabled with non-loopback binds; full paths require a loopback bind. HTTPS tunnel compatibility is not supported. See [wildcard local settings validation](docs/wildcard-local-settings-validation.md) and [month, pricing and remote validation](docs/month-pricing-remote-validation.md).
-
-## API v2
-
-All requests must pass the Host gate. API GET requests accept absent source headers for direct local tools, but reject explicit cross-origin or conflicting browser source headers. POST requires an exact same-origin Origin. These checks do not authenticate local processes or establish proxy trust. See [request policy and validation](docs/local-host-origin-validation.md).
-
-| Endpoint | Purpose |
+| Need | Guide |
 | --- | --- |
-| `GET /api/providers` | Provider availability without exposing local paths. |
-| `GET /api/account-usage` | Loopback-only, cached login-plan quota windows for the selected provider. |
-| `POST /api/account-usage/refresh` | Loopback-only, same-origin manual quota refresh for the selected provider. |
-| `GET /api/dashboard` | Timezone-aware aggregates, comparison, quality, facets, trend/models, scan state, and first summary-only session page. |
-| `GET /api/sessions` | Filtered and paged session summaries. |
-| `GET /api/sessions/:sessionKey` | Lazy redacted detail with bounded accepted observations. |
-| `POST /api/refresh` | The only rescan route; requires same-origin `Origin` and atomically retains the prior snapshot on failure. |
-| `GET /api/export` | Stream `csv-sessions`, `csv-trend`, `json-report`, or `markdown-summary`. |
-| `POST /api/export/prepare` | Same-origin, guarded preparation for the displayed projection. |
-| `GET /api/export/download/:ticket` | One-use native download of the prepared projection. |
-| `GET /api/diagnostics` | Redacted process/index information; disabled in remote mode. |
-| `GET /api/summary` | Deprecated v1 compatibility response. |
-| `POST /api/update` | Same-origin, body-free GitHub latest stable release check. GET returns 405 without an upstream request. |
-| `POST /api/pricing/refresh` | Same-origin, writer-only manual price refresh; not limited by the daily cadence. |
-| `POST /api/pricing/load` | Same-origin load of the latest verified publication; available to readers and the writer. |
-| `POST /api/pricing/repair` | Same-origin, writer-only repair of current pricing storage; no arbitrary path or history selection. |
-| `GET /api/pricing/versions` | Provider-scoped read-only archive list; limit 1–100 and offset 0–1,000,000. |
-| `GET /api/pricing/versions/:revision` | Verified complete pricing basis and observation metadata for one revision. |
-| `GET /api/settings` | Loopback-only current `.env` values and revision for the settings page. |
-| `POST /api/settings` | Loopback-only, same-origin, bounded JSON save with quoted `If-Match` revision; missing version returns 428, stale version returns 409; restart required. |
+| Use filters, charts, quota and downloads | [Dashboard guide](docs/usage.md) |
+| Change directories, watching or network settings | [Configuration](docs/configuration.md) |
+| Resolve read-only settings or pricing errors | [Operations and recovery](docs/operations.md) |
+| Understand privacy and LAN restrictions | [Security model](docs/security.md) |
+| Build an API client | [API reference](docs/api-v2.md) |
+| Develop, validate or publish a release | [Development and releases](docs/development.md) |
+| Review limitations or previous evidence | [Status and limits](docs/status.md) · [Historical records](docs/archive/README.md) |
 
-All dashboard, session, refresh, pricing, export, diagnostics, and deprecated summary requests accept `provider=codex|claude`; omission remains Codex-compatible. The URL provider takes precedence over the saved dropdown selection. Other query fields include `mode`, `period`, `start`, `end`, `timezone`, `q`, `sort`, `offset`, `limit`, and repeated filters, including `executionType=main|subagent`. Errors use `{ "error": { "code", "message", "requestId" } }`. List payloads never contain raw JSONL, conversation content, or full event streams.
-
-Each provider scans lazily on first use. Range, search, filter, pagination, export, detail, and provider switching reuse the latest successful memory snapshot. **Reparse JSONL** refreshes only the selected provider and replaces that snapshot only after a successful incremental parse. Claude subagents are separate child sessions and are included by default; use the execution-type filter to exclude them.
-
-## Downloads
-
-Download verifies the displayed projection, then hands the file to the browser download manager. Use the browser to save or cancel. The UI does not confirm disk completion. If the data version changed, the full dashboard reloads; review it and press Download again. A transfer that already started keeps its original query, snapshot and pricing basis through later refresh or Provider changes.
-
-Exports cover every matching Session and have no fixed 32 MiB cap. One prepared or active export is allowed per process; another request reports busy. An unused preparation expires after two minutes. The server stops transfers after 60 seconds without transport progress or 30 minutes total. Interrupted downloads restart from the Dashboard; partial files remain under browser control and Range resume is unsupported. See [the API contract](docs/api-v2.md) and [isolated performance/desktop evidence](docs/query-export-performance-validation.md).
-
-## Privacy and pricing
-
-Snapshots and the incremental file index are memory-only. Paths are redacted server-side by default. The settings endpoint never accepts arbitrary paths, URLs, or keys, and only writes local configuration after same-origin validation. No JSONL, local usage data, CWD, prompt, response, or session metadata is sent to GitHub, OpenAI, or Anthropic. GitHub release checking only happens after an explicit UI action.
-
-The **Login plan usage** panel is available only on a loopback bind. The local server reads the existing Codex or Claude CLI credential file and sends only the provider-required authorization and account context to that provider's fixed official usage endpoint. Tokens, account identifiers, email addresses, and credential paths never enter browser responses, diagnostics, or logs. Results are cached for 60 seconds; **Check again** bypasses that cache. The dashboard does not refresh or write Claude credentials. When login expires or is rejected, update it in the local CLI, then check again. This is a best-effort service response: unsupported or unavailable provider responses do not affect local JSONL analytics.
-
-One dashboard process owns settings writes for this app's .env, regardless of its bind address. Additional processes can analyze/export usage and read settings through local loopback connections, but cannot save. Ownership is fixed at startup; reload does not acquire it. Stop the owning dashboard before an external .env edit, then restart. Normal SIGINT (Ctrl+C), SIGTERM, SIGHUP and failed listen drain admitted work and release ownership. An abnormal exit can leave .env.settings-lock. At startup, the dashboard automatically retires a valid same-machine lease only when the owner PID is confirmed absent, then competes for a new lease. Active, foreign, damaged, busy or uncertain leases remain read-only. The absent-owner check runs again inside guarded retirement. Use `node server.mjs --unlock-settings` for explicit recovery when appropriate, then restart. This explicit command refuses active or uncertain ownership, has no force mode, and performs no pricing, scan or network work. Do not delete an active lock. Settings and pricing ownership are independent. See [startup recovery validation](docs/startup-owner-recovery-validation.md) and [earlier settings ownership validation](docs/settings-ownership-validation.md).
-
-Each normal run creates a private JSONL lifecycle record under ignored `.lifecycle/`. Records contain UTC time, local PID/run identity and fixed startup/shutdown events with restricted signals, exit codes or reasons. They contain no request data, paths, credentials or error text/stack. Records remain until explicit manual cleanup; there is no automatic deletion. A record failure stops further recording for that run but keeps analysis available. Loopback **Diagnostics** reports only availability, a safe error code and the last successful record time. Restart creates a separate record. No record reader or recovery API is exposed.
-
-The first shutdown signal stops new admission and active downloads, then waits up to 30 seconds for admitted startup, handlers, parsing and pricing work before releasing locks. Repeated signals do not restart cleanup or extend that deadline. Cleanup failure or timeout exits nonzero and retains unreleased ownership; the next startup applies the same restricted absent-owner recovery, while uncertain state still requires explicit inspection. Fatal exceptions retain Node's normal crash path and locks; SIGKILL cannot record a final event. The timer requires a responsive event loop, and records do not guarantee power-loss durability or identify every termination cause. Keep `npm start`; this change does not install a service manager. See [lifecycle validation](docs/process-lifecycle-validation.md).
-
-One pricing writer per app directory owns both Provider stores, including caches, archives and check metadata. The ignored `.pricing.writer-lock/` is separate from settings ownership. Other processes do not fetch or write rates. **Load published rates** explicitly validates and loads the latest publication into the full dashboard. A failed load retains the old basis only while it remains valid. Writer access is fixed at startup; a running reader does not take over after the writer exits. Stop the writer before external pricing-file edits. After an abnormal exit, startup applies the same restricted automatic recovery of a valid, confirmed absent same-machine owner. Active or uncertain leases remain read-only. The explicit `node server.mjs --unlock-pricing` command remains available. The command only accepts a confirmed absent owner on this machine; active, foreign, malformed or uncertain ownership is refused. It performs no price fetch or repair.
-
-Codex and Claude keep independent public-price caches and refresh state. With valid current pricing, the writer checks each Provider's fixed official Markdown source at most once per UTC day. **Update model prices** performs an explicit refresh. A failed or invalid fetch keeps previously verified prices. Per-Provider operations run in order; attempt metadata cannot overwrite a newer basis. The ignored `.pricing-cache.json` and `.claude-pricing-cache.json` are the current publication records. Version-1 publications remain supported when their complete basis matches a valid archive.
-
-Costs use the current retained basis, including for historical events. Each complete basis remains under ignored `.pricing-archive/<provider>/`, without automatic deletion or a history switcher. JSON/Markdown include rules, rates, multipliers and revision; CSV references the revision and availability. New rates activate after both archive and publication succeed. Each new cost response or export preparation verifies the active basis again. Invalid storage leaves Tokens available and costs unknown. Already prepared downloads keep their admitted data. Invalid check metadata makes check time unknown and adds a warning; it does not invalidate verified rates.
-
-Only a genuinely empty Provider store is initialized with sealed and published bundled rates by the writer. Missing or damaged existing publication state does not select a historical archive. **Repair pricing archive** uses a complete basis previously verified by that process, or newly fetched and validated rates. It retains damaged files in unique quarantine files and never replaces a valid basis. An interrupted or unpublished repair keeps a `.repairing` marker next to the cache; affected costs remain unknown until an explicit writer action completes publication. Repair preserves a previously verified first archive time when available; a new source-based reconstruction uses its actual new archive time. Permanent retention also covers quarantine records. These checks cover process interruption and restart, not power-loss durability or a tamper-proof ledger. See [pricing ownership and recovery validation](docs/pricing-ownership-recovery-validation.md).
-
-Claude costs are Anthropic API-equivalent token estimates, not Claude Pro or Max subscription charges. The estimate includes base input, cache read, 5-minute and 1-hour cache writes, and output when an official rule matches. It excludes web search, code execution, and other non-token tool fees. Unknown models or modifiers remain visible as partial coverage. Neither provider sends prompts, responses, tool results, CWD, or usage data to OpenAI or Anthropic.
-
-## Updates and releases
-
-Push a matching `vX.Y.Z` tag to create a source ZIP, `SHA256SUMS`, v2.1 migration notes, and provenance attestation. The release job uses Node.js `24.13.1`, matching the local release runtime used for this project. Verify a downloaded archive before extracting:
-
-```powershell
-Get-FileHash .\codex-token-dashboard-vX.Y.Z.zip -Algorithm SHA256
-gh attestation verify .\codex-token-dashboard-vX.Y.Z.zip -R owner/repo
-```
-
-## Validation
-
-```powershell
-npm run check
-npm run test:server
-npm run test:client
-npm run test:contract
-```
+[Documentation index](docs/README.md) includes architecture and migration notes. Historical plans and test records are kept in the archive; current behavior is described in the guides above.

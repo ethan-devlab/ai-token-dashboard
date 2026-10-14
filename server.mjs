@@ -174,7 +174,7 @@ async function handleRequest(req, res) {
     finish = lifecycle.admit();
     if (!['GET', 'POST'].includes(req.method || '')) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
     if (requestUrl.pathname === '/api/update' && req.method !== 'POST') { res.setHeader('Allow', 'POST'); throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Use POST to check for updates.'); }
-    if (req.method === 'GET' && requestUrl.pathname === '/api/providers') { json(res, 200, await providerRegistry.list(), id); return; }
+    if (req.method === 'GET' && requestUrl.pathname === '/api/providers') { json(res, 200, { ...await providerRegistry.list(), version: CURRENT_VERSION }, id); return; }
     if (req.method === 'GET' && requestUrl.pathname === '/api/pricing/versions') {
       const service = pricingServices[providerId(requestUrl)];
       const offset = parseInteger(requestUrl.searchParams.get('offset'), 'offset', 0, 1_000_000);

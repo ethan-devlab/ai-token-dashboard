@@ -1,6 +1,6 @@
 # Pricing ownership and recovery validation
 
-Date: 2026-10-01 (Asia/Taipei). Policy checkpoint: 38e6d2d. Q51–Q60 are implemented under [the confirmed plan](pricing-ownership-recovery-plan.md). Work used copied apps, disposable files, synthetic logs/prices and blocked child fetch implementations. Production port 3333, real caches/settings/credentials, upstream services and releases were not used.
+Date: 2026-10-01 (Asia/Taipei). Policy checkpoint: 38e6d2d. Q51–Q60 are implemented under [the confirmed plan](../plans/pricing-ownership-recovery-plan.md). Work used copied apps, disposable files, synthetic logs/prices and blocked child fetch implementations. Production port 3333, real caches/settings/credentials, upstream services and releases were not used.
 
 ## Delivered behavior
 
@@ -67,7 +67,7 @@ Earlier query/export delivery already verified actual Safari Save/Cancel/Stop an
 
 ## Resource acceptance
 
-[Raw evidence](pricing-ownership-performance-evidence.json) contains 63 sequential HTTP samples from the existing isolated benchmark, including 10000/50000/150000 observations, complete four-format exports, a >32 MiB CSV and 1–10000 pricing versions. Numeric assertions passed with the selected workload and method.
+[Raw evidence](../evidence/pricing-ownership-performance-evidence.json) contains 63 sequential HTTP samples from the existing isolated benchmark, including 10000/50000/150000 observations, complete four-format exports, a >32 MiB CSV and 1–10000 pricing versions. Numeric assertions passed with the selected workload and method.
 
 | 150000-observation operation | Observed | Target |
 | --- | --- | --- |

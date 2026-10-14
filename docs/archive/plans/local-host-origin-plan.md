@@ -1,13 +1,13 @@
 # Local Host and Origin protection plan
 
-Date: 2026-10-02 (Asia/Taipei). Design source checkpoint: bd040cb; approved plan commit: 33f1b89. Status: implemented in f1629c5, validated in isolated services and loaded on formal 3333 after separate restart authorization. See [implementation and restart evidence](local-host-origin-validation.md). The default update repository was delivered in bd040cb.
+Date: 2026-10-02 (Asia/Taipei). Design source checkpoint: bd040cb; approved plan commit: 33f1b89. Status: implemented in f1629c5, validated in isolated services and loaded on formal 3333 after separate restart authorization. See [implementation and restart evidence](../validation/local-host-origin-validation.md). The default update repository was delivered in bd040cb.
 
 ## Confirmed scope
 
 - Q64/Q67 replace the earlier fixed-domain selection: keep localhost/127.0.0.1 and existing IPv6 loopback support. No Tunnel, public hostname, DNS, certificate, proxy-trust configuration or cloud resource is included.
 - Q68: keep valid local GET requests without Origin or Fetch Metadata for direct API tools. Reject explicit cross-origin browser requests. POST still requires a precise same-origin Origin. This does not authenticate another local process.
 - Q69: local update checks use POST /api/update. GET returns 405 and causes no upstream request. The UI remains a manual button. Each installation reads public GitHub Releases anonymously through the existing server-side GET.
-- The user requested the default update source `ethan-devlab/codex-token-dashboard`. It is delivered separately; explicit blank disables checks, a custom repository takes precedence, and process environment overrides remain ignored. See [source validation](update-source-validation.md).
+- The user requested the default update source `ethan-devlab/codex-token-dashboard`. It is delivered separately; explicit blank disables checks, a custom repository takes precedence, and process environment overrides remain ignored. See [source validation](../validation/update-source-validation.md).
 
 Existing opt-in remote-bind behavior and its private API/full-path restrictions are retained. This phase designs local protections and makes the shared update-method change. It does not remove the previously delivered LAN feature, add remote authentication or certify proxy access. No new local login, CSRF secret, dependency or background update schedule is introduced.
 

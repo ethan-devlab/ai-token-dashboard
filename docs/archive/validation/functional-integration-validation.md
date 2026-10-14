@@ -42,7 +42,7 @@ Proof: integration-retained-page-fixed-960.png shows retained 289 input Tokens, 
 
 ## Remaining inventory
 
-The table below retains this checkpoint's scope with later dispositions. [functional-status-inventory.md](functional-status-inventory.md) is the complete current register at source checkpoint c520717, including storage, resource and platform gaps.
+The table below retains this checkpoint's scope with later dispositions. [functional-status-inventory.md](../reviews/functional-status-inventory.md) is the complete current register at source checkpoint c520717, including storage, resource and platform gaps.
 
 | Item | Current evidence and boundary | Next decision or check |
 | --- | --- | --- |

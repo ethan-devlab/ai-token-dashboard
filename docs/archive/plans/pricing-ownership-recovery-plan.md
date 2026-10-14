@@ -1,6 +1,6 @@
 # Pricing ownership and recovery plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: implemented after user authorization; see [delivery validation](pricing-ownership-recovery-validation.md). Q51–Q60 remain the selected policy. Source checkpoint: 348a8ba. This phase addresses R02 from [the functional inventory](functional-status-inventory.md). Existing Q28–Q33 current-basis, archive-before-activation, read-only history and permanent retention remain. Q40–Q50 query/export behavior and targets remain.
+Date: 2026-10-01 (Asia/Taipei). Status: implemented after user authorization; see [delivery validation](../validation/pricing-ownership-recovery-validation.md). Q51–Q60 remain the selected policy. Source checkpoint: 348a8ba. This phase addresses R02 from [the functional inventory](../reviews/functional-status-inventory.md). Existing Q28–Q33 current-basis, archive-before-activation, read-only history and permanent retention remain. Q40–Q50 query/export behavior and targets remain.
 
 ## Confirmed decisions
 

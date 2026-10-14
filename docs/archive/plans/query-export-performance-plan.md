@@ -1,6 +1,6 @@
 # Query and streamed export performance plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Q40–Q50 implemented and verified; see [delivery evidence](query-export-performance-validation.md). Source baseline: a0ad92c. Measurement checkpoint: 8a488b1 and [performance-baseline.md](performance-baseline.md).
+Date: 2026-10-01 (Asia/Taipei). Status: Q40–Q50 implemented and verified; see [delivery evidence](../validation/query-export-performance-validation.md). Source baseline: a0ad92c. Measurement checkpoint: 8a488b1 and [performance-baseline.md](../reviews/performance-baseline.md).
 
 ## Selected scope and targets
 
@@ -37,7 +37,7 @@ The route and cache boundaries above are implementation details chosen to preser
 
 ## Focused acceptance
 
-Implement before adding focused regression checks. Keep [performance-baseline-evidence.json](performance-baseline-evidence.json) immutable as the historical capped-export measurement. Update the runnable benchmark for the new policy or add a focused acceptance harness; do not leave the historical 413 assertion as the current behavior. Retain its 10000/50000/150000 workloads and archive checks. Add the following only where needed:
+Implement before adding focused regression checks. Keep [performance-baseline-evidence.json](../evidence/performance-baseline-evidence.json) immutable as the historical capped-export measurement. Update the runnable benchmark for the new policy or add a focused acceptance harness; do not leave the historical 413 assertion as the current behavior. Retain its 10000/50000/150000 workloads and archive checks. Add the following only where needed:
 
 - Correctness: selected observation totals, complete/partial/unknown pricing, archive-unavailable cost, cumulative/reset/conflict quality, mixed-model facets, query/search/sort membership, full unpaged export scope and Session-detail limits. Run affected existing accounting/projection/calendar/client checks, not an unrelated broad matrix. Use copied HTTP fixtures with all upstream fetch blocked.
 - Isolation: cache miss/hit and new filter, same-version failure warning, Provider switch, pricing availability/revision change, new snapshot and time-bound changes. Cached projection and an active old-version export must never mutate after a refresh. Exercise query/export overlap without claiming a general concurrent-load SLA.

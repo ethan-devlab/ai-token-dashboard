@@ -1,6 +1,6 @@
 # Startup recovery of absent owners
 
-Date: 2026-10-03 (Asia/Taipei). Environment: macOS, Node v26.0.0. Decision Q78 supersedes the manual-only recovery of a valid confirmed absent local owner in Q37/Q39/Q58. The user selected this change after [terminal stop investigation](terminal-stop-lock-investigation.md). Normal shutdown still drains work and releases its own generations.
+Date: 2026-10-03 (Asia/Taipei). Environment: macOS, Node v26.0.0. Decision Q78 supersedes the manual-only recovery of a valid confirmed absent local owner in Q37/Q39/Q58. The user selected this change after [terminal stop investigation](../reviews/terminal-stop-lock-investigation.md). Normal shutdown still drains work and releases its own generations.
 
 ## Delivered behavior
 

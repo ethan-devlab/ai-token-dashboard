@@ -26,7 +26,7 @@ The pinned version is uPlot 1.6.32. Its official distribution and API are descri
 
 `sha512-KIMVnG68zvu5XXUbC4LQEPnhwOxBuLyW1AHtpm6IKTXImkbLgkMy+jabjLgSLMasNuGGzQm/ep3tOkyTxpiQIw==`
 
-The local module contains the official minified IIFE distribution with only `export default uPlot;` appended. The official minified CSS and [MIT license](../public/scripts/vendor/uplot-LICENSE.txt) are retained. There is no package installation, bundler, CDN, remote font, or external usage-data request.
+The local module contains the official minified IIFE distribution with only `export default uPlot;` appended. The official minified CSS and [MIT license](../../../public/scripts/vendor/uplot-LICENSE.txt) are retained. There is no package installation, bundler, CDN, remote font, or external usage-data request.
 
 | Candidate | Added vendor runtime bytes | Gzip estimate |
 | --- | ---: | ---: |

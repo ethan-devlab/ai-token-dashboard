@@ -4,7 +4,7 @@ Date: 2026-10-03 (Asia/Taipei). Source checkpoint: 4b7d857. Scope: inspect start
 
 ## Established local facts
 
-The earlier settings investigation found both owner records pointing to absent PID 69544. The user-started reader PID 72927 ran node server.mjs under npm start from a VS Code integrated zsh terminal. Its parent chain was npm PID 72912, shell PID 29453 and VS Code. Restricted recovery and normal restart restored settings and pricing writer access, as recorded in [recovery validation](settings-ownership-validation.md#2026-10-03-stale-owner-recovery-and-settings-spacing).
+The earlier settings investigation found both owner records pointing to absent PID 69544. The user-started reader PID 72927 ran node server.mjs under npm start from a VS Code integrated zsh terminal. Its parent chain was npm PID 72912, shell PID 29453 and VS Code. Restricted recovery and normal restart restored settings and pricing writer access, as recorded in [recovery validation](../validation/settings-ownership-validation.md#2026-10-03-stale-owner-recovery-and-settings-spacing).
 
 The replacement listener PID 73255 runs node server.mjs under npm PID 73241, Codex CLI PID 69710 and the desktop app PID 69663. Standard input is /dev/null; stdout/stderr are pipes rather than an application-owned persistent log. This is a tool-started process, not an independently managed startup service.
 
@@ -33,7 +33,7 @@ A disposable copy of server/public/package.json used synthetic missing-data path
 | SIGHUP | terminated by SIGHUP | Retained | Retained | No graceful handler ran |
 | Restart after SIGHUP | Service started | Still retained | Still retained | Settings writable=false, writeReason=occupied |
 
-The SIGHUP path reproduces the observed lock/read-only pattern. It does not identify the cause of the historical incident. All probe children and copied files were removed; the formal listener was not signalled during this investigation. Prior [ownership checks](settings-ownership-validation.md) already cover SIGKILL/manual recovery and live-owner refusal.
+The SIGHUP path reproduces the observed lock/read-only pattern. It does not identify the cause of the historical incident. All probe children and copied files were removed; the formal listener was not signalled during this investigation. Prior [ownership checks](../validation/settings-ownership-validation.md) already cover SIGKILL/manual recovery and live-owner refusal.
 
 ## Next decision
 

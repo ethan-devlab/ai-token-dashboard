@@ -1,6 +1,6 @@
 # Pricing basis archive plan
 
-Date: 2026-10-01 (Asia/Taipei). Status: Q28–Q33 implemented and validated. See [pricing-archive-validation.md](pricing-archive-validation.md).
+Date: 2026-10-01 (Asia/Taipei). Status: Q28–Q33 implemented and validated. See [pricing-archive-validation.md](../validation/pricing-archive-validation.md).
 
 ## Decisions
 

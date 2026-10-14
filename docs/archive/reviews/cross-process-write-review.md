@@ -1,6 +1,6 @@
 # Cross-process write boundary review
 
-Date: 2026-10-01 (Asia/Taipei). Source baseline: 83ba020 on main. Runtime: Node v26.0.0 on macOS. The original checkpoint added a diagnostic probe and decisions only. Q34–Q39 subsequently change product behavior; see [settings-ownership-validation.md](settings-ownership-validation.md).
+Date: 2026-10-01 (Asia/Taipei). Source baseline: 83ba020 on main. Runtime: Node v26.0.0 on macOS. The original checkpoint added a diagnostic probe and decisions only. Q34–Q39 subsequently change product behavior; see [settings-ownership-validation.md](../validation/settings-ownership-validation.md).
 
 ## Write ownership at baseline
 

@@ -1,6 +1,6 @@
 # Graceful shutdown and lifecycle record plan
 
-Date: 2026-10-03 (Asia/Taipei). Design checkpoint: f017d95. Plan commit: 7f63b6f. Status: user-confirmed implementation completed; see [validation](process-lifecycle-validation.md). The user separately authorized and completed the formal 3333 restart after implementation commit 4b79358. See the [process investigation](process-lifecycle-investigation.md). The exact termination cause of historical PID 69544 remains unknown.
+Date: 2026-10-03 (Asia/Taipei). Design checkpoint: f017d95. Plan commit: 7f63b6f. Status: user-confirmed implementation completed; see [validation](../validation/process-lifecycle-validation.md). The user separately authorized and completed the formal 3333 restart after implementation commit 4b79358. See the [process investigation](../reviews/process-lifecycle-investigation.md). The exact termination cause of historical PID 69544 remains unknown.
 
 ## Confirmed decisions
 

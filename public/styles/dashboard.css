@@ -80,6 +80,8 @@ footer { margin-block-start: var(--space-4); color: var(--color-subtle); font-si
 
 .dashboard-page .app-shell { padding-block: var(--space-6); }
 .dashboard-page .app-header { flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-block-end: var(--space-4); }
+.dashboard-page .app-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.dashboard-page .app-version { margin: 0; color: var(--color-muted); font: var(--text-xs) var(--font-mono); white-space: nowrap; }
 .dashboard-page h1 { font-size: var(--text-xl); }
 .dashboard-page .subtitle { font-size: var(--text-sm); }
 .dashboard-page .header-actions { flex-wrap: wrap; gap: var(--space-2); }
