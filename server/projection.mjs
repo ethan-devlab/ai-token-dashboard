@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { pricingRevision as basisRevision } from './pricing-basis.mjs';
+import { PRICING_POLICY } from './pricing.mjs';
 
 const epoch = randomUUID();
 
@@ -13,7 +14,7 @@ export function projectionIdentity(summary, request, scan) {
   // A check-only pricing refresh does not change the calculation basis.
   const pricingRevision = basisRevision(pricing);
   // Versions restart at one after a server restart. The epoch prevents false matches.
-  const identity = { epoch, provider: summary.provider || 'codex', snapshotVersion: scan.snapshotVersion, pricingRevision, pricingAvailable: pricing.archive?.available !== false, query, at: request.nowMs };
+  const identity = { epoch, provider: summary.provider || 'codex', snapshotVersion: scan.snapshotVersion, pricingRevision, pricingPolicy: PRICING_POLICY, pricingAvailable: pricing.archive?.available !== false, query, at: request.nowMs };
   return { ...identity, key: digest(identity) };
 }
 

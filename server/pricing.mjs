@@ -73,10 +73,13 @@ function freezeRates(rates) {
   ));
 }
 
-export function matchPricingRule(pricing, model, timestamp) {
+export const PRICING_POLICY = 'current-rates-all-event-dates-v1';
+
+export function matchPricingRule(pricing, model) {
   const normalized = String(model || '').trim().toLowerCase();
-  const at = Date.parse(timestamp || '') || Date.now();
-  const matches = pricing.rules.filter((rule) => rule.effectiveFromMs <= at && (rule.aliases.includes(normalized) || rule.matcher.test(normalized)));
+  // This is a current-rate estimate. Retained rule dates are provenance, not
+  // historical billing cutoffs or model release dates.
+  const matches = pricing.rules.filter((rule) => rule.aliases.includes(normalized) || rule.matcher.test(normalized));
   if (!matches.length) return null;
   return matches.sort((left, right) => right.id.length - left.id.length || right.effectiveFromMs - left.effectiveFromMs)[0];
 }

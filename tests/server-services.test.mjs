@@ -16,7 +16,8 @@ import { createSessionIndex, parseSessionFile } from '../server/session-index.mj
 import { parseClaudeSessionFile } from '../server/claude-session.mjs';
 import { CLAUDE_PRICING } from '../server/pricing.mjs';
 import { createClaudePricingRefreshService, parseClaudePricingMarkdown } from '../server/claude-pricing-refresh.mjs';
-import { buildDashboardPayload, calculateCost } from '../server/dashboard-data.mjs';
+import { buildDashboardPayload, buildExport, calculateCost } from '../server/dashboard-data.mjs';
+import { pricingBasis, pricingFromBasis, pricingRevision } from '../server/pricing-basis.mjs';
 import { readSettings, saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
 import { createAccountUsageService, normalizeClaudeUsage, normalizeCodexUsage } from '../server/account-usage.mjs';
@@ -199,6 +200,49 @@ test('pricing rules are validated and choose effective aliases deterministically
     { id: 'one', aliases: ['shared'], pattern: '^one$', effectiveFrom: '2026-01-01', rates: {} },
     { id: 'two', aliases: ['shared'], pattern: '^two$', effectiveFrom: '2026-01-01', rates: {} },
   ] }), /Overlapping pricing alias/);
+});
+
+test('current rates price historical usage and distinguish unknown, partial, free and empty totals', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'ai-dashboard-current-rates-'));
+  const index = createSessionIndex({ sessionsDirectory: root, maxFiles: 10, parseConcurrency: 1, pricing: PRICING });
+  const request = { range: resolveRange({ mode: 'month', period: '2026-06', timezone: 'UTC' }), nowMs: Date.parse('2026-10-14T12:00Z'), q: '', sort: 'recent', offset: 0, limit: 100, filters: { models: [], workspaces: [], pricingStatus: [], usageSource: [], cliVersion: [], originator: [], executionType: [], quality: [] } };
+  const revision = pricingRevision(PRICING);
+  const body = (model, input) => JSON.stringify({ type: 'turn.completed', timestamp: '2026-06-15T12:00:00Z', model, usage: { input_tokens: input, output_tokens: 0 } }) + '\n';
+  try {
+    const historical = matchPricingRule(pricingFromBasis(pricingBasis(PRICING)), 'gpt-5.5', '2026-06-15T12:00Z');
+    assert.equal(historical.id, 'gpt-5.5');
+    assert.equal(historical.effectiveFrom, PRICING.rules.find((rule) => rule.id === 'gpt-5.5').effectiveFrom);
+    await writeFile(path.join(root, 'known.jsonl'), body('gpt-5.5', 10));
+    let dashboard = buildDashboardPayload(await index.refresh(), request, {});
+    assert.equal(dashboard.cost.total, 10 * historical.rates.input / PRICING.unitTokens);
+    assert.equal(dashboard.cost.available, true);
+    assert.equal(dashboard.pricingCoverage.partial, false);
+    assert.equal(dashboard.pricing.revision, revision);
+    assert.equal(dashboard.pricing.calculationPolicy, dashboard.projection.pricingPolicy);
+    await writeFile(path.join(root, 'unknown.jsonl'), body('no-public-rate', 20));
+    dashboard = buildDashboardPayload(await index.refresh(), request, {});
+    assert.equal(dashboard.cost.pricedTokens, 10); assert.equal(dashboard.cost.unpricedTokens, 20);
+    assert.equal(dashboard.cost.available, true); assert.equal(dashboard.pricingCoverage.partial, true);
+    assert.equal(dashboard.trend.points[0].cost, dashboard.cost.total);
+    assert.equal(dashboard.models.find((item) => item.model === 'no-public-rate').cost, null);
+    await rm(path.join(root, 'known.jsonl'));
+    dashboard = buildDashboardPayload(await index.refresh(), request, {});
+    assert.equal(dashboard.cost.total, null); assert.equal(dashboard.cost.available, false);
+    assert.equal(dashboard.cost.unavailableReason, 'unpriced-usage'); assert.equal(dashboard.pricingCoverage.ratio, 0);
+    assert.equal(dashboard.trend.points[0].cost, null); assert.equal(dashboard.models[0].cost, null);
+    assert.equal(dashboard.sessions[0].pricingStatus, 'unknown');
+    assert.equal(JSON.parse(buildExport('json-report', dashboard).body).cost.total, null);
+    assert.match(buildExport('markdown-summary', dashboard).body, /Known token cost: unknown/);
+    for (const format of ['csv-sessions', 'csv-trend']) {
+      const [header, row] = buildExport(format, dashboard).body.split('\r\n');
+      assert.equal(row.split(',')[header.split(',').indexOf('cost')], '""');
+    }
+    const event = { model: 'gpt-5.5', timestamp: '2026-06-15T12:00Z', usage: { uncachedInputTokens: 10, cachedInputTokens: 0, cacheWriteTokens: 0, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0, outputTokens: 0 } };
+    const free = calculateCost(createPricing({ ...PRICING, rules: [{ ...historical, rates: { ...historical.rates, input: 0 } }] }), [event]);
+    assert.equal(free.total, 0); assert.equal(free.available, true); assert.equal(free.pricedTokens, 10);
+    assert.equal(calculateCost(PRICING, []).total, 0);
+    assert.equal(pricingRevision(PRICING), revision);
+  } finally { await index.close(); await rm(root, { recursive: true, force: true }); }
 });
 
 const pricingMarkdown = `# Pricing
@@ -489,7 +533,9 @@ test('Claude pricing parser and cost calculator preserve cache duration and expl
   assert.equal(explicit.total, 11);
   assert.equal(explicit.unknownModifiers.size, 0);
   const unknown = calculateCost(CLAUDE_PRICING, [{ model: 'claude-opus-5', timestamp: '2026-08-18T00:00:00Z', usage: baseUsage, pricingModifiers: { inferenceGeo: 'not_available', speed: 'standard', serviceTier: 'standard' } }]);
-  assert.equal(unknown.total, 0);
+  assert.equal(unknown.total, null);
+  assert.equal(unknown.available, false);
+  assert.equal(unknown.unavailableReason, 'unpriced-usage');
   assert.equal(unknown.unpricedTokens, 1_000_000);
   assert.deepEqual([...unknown.unknownModifiers], ['claude-opus-5:inferenceGeo=not_available']);
 });

@@ -8,6 +8,8 @@ Select Codex or Claude from the header. Filters and budgets are separate for eac
 
 Ranges use the selected IANA timezone and half-open boundaries [from,to). Calendar comparisons use the same local progress in the previous period; custom ranges use equal elapsed time. Invalid or ambiguous civil times are rejected. Model filters count only selected-model observations.
 
+Costs use the current verified rates for all selected event dates. Rule check/start dates do not prevent pricing older usage. These are current-rate estimates, not historical bills. Partial pricing shows the known subtotal with ≥. If no billable usage has a known price, cost is unknown (—), not zero. An empty range or confirmed free usage can still show $0.00. Exports retain the pricing basis and calculation policy.
+
 ## Charts and sessions
 
 Select a single metric, stacked Token/cost plots, or dual axes; use bars or unsmoothed lines. The dashboard retains existing view preferences and saves the new layout and mark choices locally. Pointer movement shows a compact preview. Click a bucket to pin its complete values, or use Left/Right/Home/End and Enter. The data table exposes the same amounts and cost qualifiers.

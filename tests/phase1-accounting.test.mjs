@@ -66,7 +66,10 @@ test('unknown pricing modifiers remain unpriced in aggregate, models, trend and 
   const f = await fixture(t, 'claude');
   await f.write('one.jsonl', [assistant(5, {}, { inference_geo: 'unknown' })]);
   const dashboard = buildDashboardPayload(await f.index.refresh(), request, {});
-  assert.equal(dashboard.cost.total, 0);
+  assert.equal(dashboard.cost.total, null);
+  assert.equal(dashboard.cost.unavailableReason, 'unpriced-usage');
+  assert.equal(dashboard.models[0].cost, null);
+  assert.equal(dashboard.trend.points[0].cost, null);
   assert.equal(dashboard.cost.unpricedTokens, 15);
   assert.equal(dashboard.cost.pricingCoverage.partial, true);
   assert.equal(dashboard.models[0].partialCost, true);
