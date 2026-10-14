@@ -1,6 +1,6 @@
 # v2.0 to v2.1 migration
 
-The product name is Local AI Token Dashboard. The package name remains `codex-token-dashboard`; the repository is now [ethan-devlab/ai-token-dashboard](https://github.com/ethan-devlab/ai-token-dashboard). Archived records can still use the former repository name.
+The product name is Local AI Token Dashboard. The package and repository name are now `ai-token-dashboard`: [ethan-devlab/ai-token-dashboard](https://github.com/ethan-devlab/ai-token-dashboard). Archived records can still use the former repository name.
 
 - Existing API calls without `provider` still select Codex.
 - Add `CLAUDE_SESSIONS_DIR` only when the default `~/.claude/projects` path is not correct.
@@ -22,3 +22,7 @@ The product name is Local AI Token Dashboard. The package name remains `codex-to
 | Application version | GET /api/providers adds version from the running package; existing providers remains unchanged |
 
 See [API](api-v2.md), [operations](operations.md) and [security](security.md) for full semantics. These source compatibility notes do not imply that every change was published as a tagged release.
+
+## Repository rename compatibility
+
+The default update source and new-release ZIP prefix use ai-token-dashboard. Existing .env values still take precedence; change the former official repository value explicitly if desired. Blank/custom update sources are preserved. Existing published archives are not renamed or reissued. Browser preference keys retain their legacy codex-token-dashboard namespace so saved language, Provider, budgets and view settings remain available. The application version stays unchanged by the name change.

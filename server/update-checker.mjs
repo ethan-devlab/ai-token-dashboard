@@ -47,7 +47,7 @@ export function createUpdateChecker({ repository, currentVersion, fetchImpl = fe
           headers: {
             Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
-            'User-Agent': 'codex-token-dashboard-update-check',
+            'User-Agent': 'ai-token-dashboard-update-check',
           },
           signal: AbortSignal.timeout(8_000),
         });

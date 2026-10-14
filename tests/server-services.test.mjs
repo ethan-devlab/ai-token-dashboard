@@ -11,7 +11,7 @@ import { createPricingRefreshService, parseStandardPricingMarkdown } from '../se
 import { createSessionIndex, parseSessionFile } from '../server/session-index.mjs';
 import { parseClaudeSessionFile } from '../server/claude-session.mjs';
 import { CLAUDE_PRICING } from '../server/pricing.mjs';
-import { parseClaudePricingMarkdown } from '../server/claude-pricing-refresh.mjs';
+import { createClaudePricingRefreshService, parseClaudePricingMarkdown } from '../server/claude-pricing-refresh.mjs';
 import { calculateCost } from '../server/dashboard-data.mjs';
 import { readSettings, saveSettings, settingsPayload } from '../server/settings.mjs';
 import { bucketFor, nextBucketFor, resolveRange } from '../server/timezone.mjs';
@@ -145,15 +145,15 @@ test('update checker validates its fixed GitHub repository and handles stable re
   const available = createUpdateChecker({
     repository: 'owner/repo',
     currentVersion: '1.0.0',
-    fetchImpl: async () => new Response(JSON.stringify({
+    fetchImpl: async (_url, options) => { assert.equal(options.headers['User-Agent'], 'ai-token-dashboard-update-check'); return new Response(JSON.stringify({
       tag_name: 'v1.1.0', html_url: 'https://github.test/owner/repo/releases/v1.1.0', body: 'Changes',
-      assets: [{ name: 'codex-token-dashboard-v1.1.0.zip', browser_download_url: 'https://github.test/download.zip', digest: 'sha256:abc123' }],
-    }), { status: 200 }),
+      assets: [{ name: 'codex-token-dashboard-v1.1.0.zip', browser_download_url: 'https://github.test/download.zip', digest: 'sha256:abc123' }, { name: 'ai-token-dashboard-v1.1.0.zip', browser_download_url: 'https://github.test/new.zip', digest: 'sha256:def456' }],
+    }), { status: 200 }); },
   });
   const update = await available.check();
   assert.equal(update.status, 'available');
   assert.equal(update.latestVersion, '1.1.0');
-  assert.deepEqual(update.assets, [{ name: 'codex-token-dashboard-v1.1.0.zip', downloadUrl: 'https://github.test/download.zip', sha256: 'abc123' }]);
+  assert.deepEqual(update.assets, [{ name: 'codex-token-dashboard-v1.1.0.zip', downloadUrl: 'https://github.test/download.zip', sha256: 'abc123' }, { name: 'ai-token-dashboard-v1.1.0.zip', downloadUrl: 'https://github.test/new.zip', sha256: 'def456' }]);
 
   const offline = createUpdateChecker({ repository: 'owner/repo', currentVersion: '1.0.0', fetchImpl: async () => { throw new Error('offline'); } });
   assert.deepEqual(await offline.check(), { enabled: true, status: 'unavailable', code: 'network' });
@@ -163,6 +163,19 @@ test('update checker validates its fixed GitHub repository and handles stable re
 
   const invalid = createUpdateChecker({ repository: 'owner/repo', currentVersion: '1.0.0', fetchImpl: async () => new Response(JSON.stringify({ tag_name: 'preview', prerelease: false, draft: false }), { status: 200 }) });
   assert.deepEqual(await invalid.check(), { enabled: true, status: 'unavailable', code: 'invalid-release' });
+});
+
+test('both pricing providers identify the renamed application on fixed source requests', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'ai-token-dashboard-agents-'));
+  try {
+    for (const [provider, create, baseline] of [['codex', createPricingRefreshService, PRICING], ['claude', createClaudePricingRefreshService, CLAUDE_PRICING]]) {
+      let called = false;
+      const service = create({ baseline, cachePath: path.join(directory, `${provider}.json`), fetchImpl: async (_url, options) => {
+        assert.equal(options.headers['User-Agent'], 'ai-token-dashboard-pricing-check'); called = true; return new Response('', { status: 503 });
+      } });
+      await assert.rejects(service.refresh({ manual: true }), error => error.code === 'http'); assert.equal(called, true); await service.close();
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test('codex-auto-review pricing leaves unsupported cache components unavailable', () => {
@@ -269,7 +282,8 @@ test('runtime configuration keeps update repository local and rejects an acciden
   assert.equal(config.updateRepository, 'owner/repo');
   assert.equal(config.port, 4242);
   const defaults = readRuntimeConfig({ environment: { UPDATE_REPOSITORY: 'other/repo' } });
-  assert.equal(defaults.updateRepository, 'ethan-devlab/codex-token-dashboard');
+  assert.equal(defaults.updateRepository, 'ethan-devlab/ai-token-dashboard');
+  assert.equal(readRuntimeConfig({ environment: {}, localConfig: { UPDATE_REPOSITORY: 'ethan-devlab/codex-token-dashboard' } }).updateRepository, 'ethan-devlab/codex-token-dashboard');
   assert.equal(settingsPayload({}, defaults).settings.UPDATE_REPOSITORY, defaults.updateRepository);
   const disabled = readRuntimeConfig({ environment: {}, localConfig: { UPDATE_REPOSITORY: '' } });
   assert.equal(disabled.updateRepository, '');

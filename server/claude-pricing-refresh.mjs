@@ -51,6 +51,6 @@ export function createClaudePricingRefreshService(options) {
     documentUrl: CLAUDE_PRICING_DOCUMENT_URL,
     sourceUrl: CLAUDE_PRICING_PAGE_URL,
     parseDocument: parseClaudePricingMarkdown,
-    userAgent: 'local-ai-token-dashboard/2.1',
+    userAgent: 'ai-token-dashboard-pricing-check',
   });
 }

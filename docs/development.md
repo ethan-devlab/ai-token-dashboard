@@ -24,8 +24,10 @@ Keep current behavior in the topic guides and API reference. Put dated investiga
 Push a matching `vX.Y.Z` tag to create a source ZIP, `SHA256SUMS`, v2.1 migration notes, and provenance attestation. The release job uses Node.js `24.13.1`, matching the local release runtime used for this project. Verify a downloaded archive before extracting:
 
 ```powershell
-Get-FileHash .\codex-token-dashboard-vX.Y.Z.zip -Algorithm SHA256
-gh attestation verify .\codex-token-dashboard-vX.Y.Z.zip -R owner/repo
+Get-FileHash .\ai-token-dashboard-vX.Y.Z.zip -Algorithm SHA256
+gh attestation verify .\ai-token-dashboard-vX.Y.Z.zip -R ethan-devlab/ai-token-dashboard
 ```
 
 The package version in package.json is the application version returned by the server. Update it as part of an intentional release; usage snapshots and pricing revisions have their own identities. The header remains unknown if the server cannot supply its version.
+
+New releases use ai-token-dashboard-vX.Y.Z.zip with an ai-token-dashboard-vX.Y.Z/ directory prefix. Existing releases retain their original filenames and digests; verify the actual downloaded file against its release checksum and attestation. The update checker accepts assets under either naming scheme. No tag or release is created by changing the package name.

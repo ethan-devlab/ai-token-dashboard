@@ -91,7 +91,7 @@ When AUTO_REFRESH is enabled, each provider owns one watcher, a debounce timer, 
 
 ## Updates
 
-`POST /api/update` performs the manual latest stable release check with an anonymous server-side GET to the configured public GitHub repository. No request body is allowed: nonzero Content-Length or any Transfer-Encoding returns 413 `BODY_NOT_ALLOWED`. Direct tools must supply the exact Origin and an empty, non-chunked request. `GET /api/update` returns 405 `METHOD_NOT_ALLOWED` with `Allow: POST` and makes no upstream request; callers must migrate to POST. Missing repository configuration defaults to `ethan-devlab/codex-token-dashboard`; an explicit blank disables checks and a custom repository takes precedence.
+`POST /api/update` performs the manual latest stable release check with an anonymous server-side GET to the configured public GitHub repository. No request body is allowed: nonzero Content-Length or any Transfer-Encoding returns 413 `BODY_NOT_ALLOWED`. Direct tools must supply the exact Origin and an empty, non-chunked request. `GET /api/update` returns 405 `METHOD_NOT_ALLOWED` with `Allow: POST` and makes no upstream request; callers must migrate to POST. Missing repository configuration defaults to `ethan-devlab/ai-token-dashboard`; an explicit blank disables checks and a custom repository takes precedence.
 
 ## Diagnostics and shutdown
 

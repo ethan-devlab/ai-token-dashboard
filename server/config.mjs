@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { isIP } from 'node:net';
 
-export const DEFAULT_UPDATE_REPOSITORY = 'ethan-devlab/codex-token-dashboard';
+export const DEFAULT_UPDATE_REPOSITORY = 'ethan-devlab/ai-token-dashboard';
 
 export function parseEnv(text) {
   const values = {};

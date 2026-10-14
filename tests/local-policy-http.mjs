@@ -65,7 +65,7 @@ try {
   for(const [control,expected] of [[{status:200,tag:'v2.2.0'},'available'],[{status:200,tag:'v2.1.0'},'current'],[{status:404},'unavailable'],[{status:429},'unavailable'],[{network:true},'unavailable']]) {
     await writeFile(path.join(fixture.app,'control.json'),JSON.stringify(control));const before=await stats(fixture);
     const response=await raw(fixture,{method:'POST',route:'/api/update',headers:{Origin:fixture.base,'Sec-Fetch-Site':'same-origin'}});assert.equal(response.status,200);assert.equal(JSON.parse(response.body).status,expected);
-    const after=await stats(fixture);assert.equal(after.upstream.length,before.upstream.length+1);assert.deepEqual(after.upstream.at(-1),{url:'https://api.github.com/repos/ethan-devlab/codex-token-dashboard/releases/latest',method:'GET',authorization:false});
+    const after=await stats(fixture);assert.equal(after.upstream.length,before.upstream.length+1);assert.deepEqual(after.upstream.at(-1),{url:'https://api.github.com/repos/ethan-devlab/ai-token-dashboard/releases/latest',method:'GET',authorization:false});
   }
   checks.push('update GET 405/Allow without fetch; valid POST anonymous GitHub GET; rejected origins/bodies have zero fetch; available/current/404/rate-limit/network');
   for(const [name,repository] of [['custom','other/repo'],['disabled','']]) {

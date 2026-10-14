@@ -78,7 +78,7 @@ try {
   const denied = await launch('denied', { HOST:'0.0.0.0', ALLOW_REMOTE:'0' }, true); assert.match(denied.output,/requires ALLOW_REMOTE=1/);
   const conflicting = await launch('conflicting', { HOST:'0.0.0.0', ALLOW_REMOTE:'1', EXPOSE_FULL_PATHS:'1' }, true); assert.match(conflicting.output,/requires a loopback HOST/);
   evidence.checks.push('non-loopback bind requires opt-in; non-loopback full-path combination refused before serving');
-  const settings=await json(local,'/api/settings'); assert.equal(settings.settings.UPDATE_REPOSITORY,'ethan-devlab/codex-token-dashboard');
+  const settings=await json(local,'/api/settings'); assert.equal(settings.settings.UPDATE_REPOSITORY,'ethan-devlab/ai-token-dashboard');
   evidence.checks.push('absent update configuration exposes the project repository default through the actual settings API');
   const september = await json(local,'/api/dashboard?mode=month&period=2026-9&timezone=Asia%2FTaipei'); assert.equal(september.totals.totalTokens,7); assert.equal(september.range.fromMs,Date.parse('2026-08-31T16:00Z')); assert.equal(september.range.toMs,Date.parse('2026-09-30T16:00Z'));
   for(const period of ['2026-0','2026-13','2026-009']) await json(local,`/api/dashboard?mode=month&period=${period}`,400);

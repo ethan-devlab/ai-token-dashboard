@@ -109,7 +109,7 @@ function errorCode(error) {
   return 'network';
 }
 
-export function createPricingRefreshService({ baseline, cachePath, archiveDirectory = `${cachePath}.archive`, archiveStore, owner, fetchImpl = fetch, now = () => new Date(), timeoutMs = 10_000, documentUrl = PRICING_DOCUMENT_URL, sourceUrl = PRICING_PAGE_URL, parseDocument = parseStandardPricingMarkdown, userAgent = 'codex-token-dashboard/2.0' }) {
+export function createPricingRefreshService({ baseline, cachePath, archiveDirectory = `${cachePath}.archive`, archiveStore, owner, fetchImpl = fetch, now = () => new Date(), timeoutMs = 10_000, documentUrl = PRICING_DOCUMENT_URL, sourceUrl = PRICING_PAGE_URL, parseDocument = parseStandardPricingMarkdown, userAgent = 'ai-token-dashboard-pricing-check' }) {
   // Standalone service consumers own their storage. The server always supplies its process owner.
   const authority = owner || { status: () => ({ writable: true, writeReason: null }), assertWritable: async () => {} };
   const archive = archiveStore || createPricingArchive({ directory: archiveDirectory, provider: baseline.provider || 'codex', now, beforeWrite: authority.assertWritable });
