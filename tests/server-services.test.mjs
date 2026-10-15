@@ -339,6 +339,32 @@ test('runtime configuration keeps update repository local and rejects an acciden
   assert.throws(() => readRuntimeConfig({ environment: { HOST: '0.0.0.0' } }), /Non-loopback HOST requires ALLOW_REMOTE=1/);
 });
 
+test('session directories expand only a leading home shorthand for either provider', () => {
+  for (const slash of ['/', '\\']) {
+    const config = readRuntimeConfig({ environment: {}, localConfig: parseEnv(`CODEX_SESSIONS_DIR=~${slash}.codex${slash}sessions\nCLAUDE_SESSIONS_DIR=~${slash}.claude${slash}projects`) });
+    assert.equal(config.codexSessionsDirectory, path.join(os.homedir(), '.codex', 'sessions'));
+    assert.equal(config.claudeSessionsDirectory, path.join(os.homedir(), '.claude', 'projects'));
+  }
+  const home = readRuntimeConfig({ environment: { CODEX_SESSIONS_DIR: '~', CLAUDE_SESSIONS_DIR: '~' } });
+  assert.equal(home.codexSessionsDirectory, os.homedir());
+  assert.equal(home.claudeSessionsDirectory, os.homedir());
+  const relative = readRuntimeConfig({ environment: {}, localConfig: { CODEX_SESSIONS_DIR: './sessions/~literal', CLAUDE_SESSIONS_DIR: '~another/projects' } });
+  assert.equal(relative.codexSessionsDirectory, path.resolve('./sessions/~literal'));
+  assert.equal(relative.claudeSessionsDirectory, path.resolve('~another/projects'));
+});
+
+test('detail observation limit validates env configuration without changing parse limits', () => {
+  assert.equal(readRuntimeConfig({ environment: {} }).detailObservationLimit, 2000);
+  const config = readRuntimeConfig({ environment: {}, localConfig: parseEnv('DETAIL_OBSERVATION_LIMIT=5000\nMAX_FILES=42') });
+  assert.equal(config.detailObservationLimit, 5000);
+  assert.equal(config.maxFiles, 42);
+  assert.equal(readRuntimeConfig({ environment: { DETAIL_OBSERVATION_LIMIT: '1' }, localConfig: { DETAIL_OBSERVATION_LIMIT: '5000' } }).detailObservationLimit, 1);
+  assert.equal(readRuntimeConfig({ environment: { DETAIL_OBSERVATION_LIMIT: '100000' } }).detailObservationLimit, 100000);
+  for (const invalid of ['0', '-1', '1.5', '100001', '', 'NaN']) {
+    assert.throws(() => readRuntimeConfig({ environment: {}, localConfig: { DETAIL_OBSERVATION_LIMIT: invalid } }), /Invalid DETAIL_OBSERVATION_LIMIT/);
+  }
+});
+
 test('settings persistence validates before atomically replacing the local env file', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-settings-'));
   const envPath = path.join(directory, '.env');
@@ -347,12 +373,14 @@ test('settings persistence validates before atomically replacing the local env f
     ALLOW_REMOTE: '0', EXPOSE_FULL_PATHS: '0', AUTO_REFRESH: '1', AUTO_REFRESH_DEBOUNCE_MS: '250', UPDATE_REPOSITORY: 'owner/repo',
   };
   try {
-    await writeFile(envPath, '# local settings\nCUSTOM_VALUE=preserve\nPORT=3333\n');
+    await writeFile(envPath, '# local settings\nCUSTOM_VALUE=preserve\nPORT=3333\nDETAIL_OBSERVATION_LIMIT=5000\n');
     const current = await readSettings(envPath, readRuntimeConfig({ environment: {}, localConfig: {} }));
     const { localConfig: saved, revision } = await saveSettings(envPath, values, { revision: current.revision });
     const persisted = await readFile(envPath, 'utf8');
     assert.match(persisted, /^# local settings\nCUSTOM_VALUE=preserve\nPORT=3344/m);
     assert.equal(saved.UPDATE_REPOSITORY, 'owner/repo');
+    assert.equal(saved.DETAIL_OBSERVATION_LIMIT, '5000');
+    assert.equal(readRuntimeConfig({ environment: {}, localConfig: saved }).detailObservationLimit, 5000);
     assert.equal(settingsPayload(saved, readRuntimeConfig({ environment: {}, localConfig: saved })).restartRequired, true);
 
     const beforeInvalidSave = persisted;

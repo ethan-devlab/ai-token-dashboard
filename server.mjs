@@ -120,7 +120,7 @@ async function serveStatic(pathname, res, id) {
   const body = await readFile(target);
   res.writeHead(200, headers(contentType, body.length, contentType.startsWith('text/html') ? PAGE_CSP : API_CSP, id)); res.end(body); return true;
 }
-function options() { return { exposeFullPaths: CONFIG.exposeFullPaths }; }
+function options() { return { exposeFullPaths: CONFIG.exposeFullPaths, detailObservationLimit: CONFIG.detailObservationLimit }; }
 function providerId(requestUrl) {
   const id = requestUrl.searchParams.get('provider') || 'codex';
   if (!['codex', 'claude'].includes(id)) throw new ApiError(400, 'INVALID_PROVIDER', 'Invalid provider.');

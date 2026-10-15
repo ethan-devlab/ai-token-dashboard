@@ -12,6 +12,8 @@ Requires Node.js 22.15.0+ (22.x), 23.8.0+ (23.x), or 24+. No dependency installa
 
 The header shows the running Dashboard version from `package.json`. Settings saved in the UI take effect after a restart. Keep the default loopback bind for local use.
 
+Both session directories accept `~` and `~/` paths, such as `~/.codex/sessions` and `~/.claude/projects`, on Windows, Linux, and macOS. Set `DETAIL_OBSERVATION_LIMIT=5000` in `.env` to return up to 5,000 observations in a Session detail response (default 2,000; valid range 1–100,000). This does not limit JSONL parsing or token/cost totals. Restart the server after changing `.env`.
+
 ## What to expect
 
 - Codex and Claude have separate snapshots, filters, budgets and pricing. Claude subagent usage is included by default.

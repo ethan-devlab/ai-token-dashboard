@@ -21,6 +21,19 @@ test('detail reports exact zero, limit, and over-limit counts while preserving c
   }
 });
 
+test('configured detail limits can reduce or raise the response cap without clipping totals', () => {
+  const full = summary(5001);
+  for (const limit of [1, 5000, 100000]) {
+    const detail = buildSessionDetail(full, request, 'detail', { detailObservationLimit: limit });
+    assert.equal(detail.observationLimit, limit);
+    assert.equal(detail.observationCount, 5001);
+    assert.equal(detail.returnedObservationCount, Math.min(5001, limit));
+    assert.equal(detail.observationsTruncated, limit < 5001);
+    assert.equal(detail.usage.totalTokens, 5001);
+    assert.ok(Math.abs(detail.cost.total - 5001 * 0.000005) < 1e-12);
+  }
+});
+
 test('detail counts only adopted observations selected by model and exact time bounds', () => {
   const full = summary(2001, true);
   const filtered = { ...request, filters: { ...request.filters, models: ['gpt-5.6-terra'] } };

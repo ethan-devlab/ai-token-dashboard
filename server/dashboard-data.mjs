@@ -214,7 +214,7 @@ export function buildSessionDetail(summary, request, sessionKey, options = {}) {
   const candidate = summary.sessions.find((item) => item.sessionKey === sessionKey);
   const session = candidate && filteredSessions({ ...summary, sessions: [candidate] }, request, options)[0];
   if (!session) return null;
-  const observationLimit = 2_000;
+  const observationLimit = options.detailObservationLimit ?? 2_000;
   const observationCount = session.usageEvents.length;
   const observations = session.usageEvents.slice(0, observationLimit).map((event) => ({ timestamp: event.timestamp, timestampEstimated: event.timestampEstimated, model: event.model, source: event.source, sequence: event.sequence, usage: event.usage }));
   return { ...sessionSummary(session, options), lineCount: session.lineCount, observations, observationLimit, observationCount, returnedObservationCount: observations.length, observationsTruncated: observations.length < observationCount, pricingDiagnostics: session.cost.pricingCoverage };

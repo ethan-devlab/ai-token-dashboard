@@ -44,6 +44,12 @@ function flag(value, name) {
   throw new Error(`Invalid ${name}.`);
 }
 
+function sessionsDirectory(value) {
+  if (value === '~') return os.homedir();
+  if (/^~[/\\]/.test(value)) return path.resolve(path.join(os.homedir(), ...value.slice(2).split(/[/\\]/)));
+  return path.resolve(value);
+}
+
 export function isLoopbackHost(host) {
   const normalized = String(host).trim().toLowerCase();
   return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1' || normalized === '[::1]';
@@ -95,8 +101,8 @@ export function readRuntimeConfig({ environment = process.env, localConfig = {} 
   }
   const defaultCodexSessionsDirectory = path.join(os.homedir(), '.codex', 'sessions');
   const defaultClaudeSessionsDirectory = path.join(os.homedir(), '.claude', 'projects');
-  const codexSessionsDirectory = path.resolve(value(environment, localConfig, 'CODEX_SESSIONS_DIR', defaultCodexSessionsDirectory));
-  const claudeSessionsDirectory = path.resolve(value(environment, localConfig, 'CLAUDE_SESSIONS_DIR', defaultClaudeSessionsDirectory));
+  const codexSessionsDirectory = sessionsDirectory(value(environment, localConfig, 'CODEX_SESSIONS_DIR', defaultCodexSessionsDirectory));
+  const claudeSessionsDirectory = sessionsDirectory(value(environment, localConfig, 'CLAUDE_SESSIONS_DIR', defaultClaudeSessionsDirectory));
   return Object.freeze({
     host,
     port,
@@ -104,6 +110,7 @@ export function readRuntimeConfig({ environment = process.env, localConfig = {} 
     codexSessionsDirectory,
     claudeSessionsDirectory,
     maxFiles: integer(value(environment, localConfig, 'MAX_FILES', '10000'), 'MAX_FILES', 1, 100_000),
+    detailObservationLimit: integer(value(environment, localConfig, 'DETAIL_OBSERVATION_LIMIT', '2000'), 'DETAIL_OBSERVATION_LIMIT', 1, 100_000),
     parseConcurrency,
     allowRemote,
     exposeFullPaths,
