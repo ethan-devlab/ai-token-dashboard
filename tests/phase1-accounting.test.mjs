@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { zstdCompressSync } from 'node:zlib';
 import { createSessionIndex, parseSessionFile } from '../server/session-index.mjs';
 import { parseClaudeSessionFile } from '../server/claude-session.mjs';
 import { CLAUDE_PRICING, PRICING } from '../server/pricing.mjs';
@@ -25,6 +26,145 @@ async function fixture(t, provider = 'codex') {
   const index = createSessionIndex({ provider, sessionsDirectory: root, maxFiles: 100, parseConcurrency: 2, pricing: provider === 'claude' ? CLAUDE_PRICING : PRICING });
   return { root, write, index };
 }
+
+test('Codex paginated continuation and fork charge only usage after the exact UTF-8 history boundary', async (t) => {
+  const f = await fixture(t);
+  const parent = '11111111-1111-1111-1111-111111111111';
+  const child = '22222222-2222-2222-2222-222222222222';
+  const continuation = '33333333-3333-3333-3333-333333333333';
+  const base = [meta(parent), { type: 'ignored', text: '繁中 byte boundary' }, cumulative(100, 10)];
+  const bytes = Buffer.from(base.map(JSON.stringify).join('\r\n') + '\r\n');
+  await writeFile(path.join(f.root, `${parent}.jsonl.zst`), zstdCompressSync(bytes));
+  const linked = (id, threadId, byteOffset) => ({ ...meta(id), payload: { ...meta(id).payload, history_base: { thread_id: threadId, end_byte_offset: byteOffset } } });
+  await f.write(`${parent}_${continuation}.jsonl`, [linked(parent, parent, bytes.length), cumulative(120, 12)]);
+  // Fork before the parent's new usage. Do not subtract the parent's final counter.
+  await f.write(`${child}.jsonl`, [linked(child, parent, bytes.length), cumulative(100, 10), cumulative(130, 13)]);
+  const summary = await f.index.refresh();
+  assert.equal(summary.sessions.length, 2);
+  assert.equal(summary.sessions.find((s) => s.sessionId === parent).usage.totalTokens, 132);
+  assert.equal(summary.sessions.find((s) => s.sessionId === child).usage.totalTokens, 33);
+  const dashboard = buildDashboardPayload(summary, request, {});
+  assert.equal(dashboard.totals.totalTokens, 165);
+  assert.equal(dashboard.trend.points.reduce((sum, p) => sum + p.tokens, 0), 165);
+  assert.doesNotMatch(JSON.stringify(dashboard), /historyBase|storageIdentity|attributedUsage|byteEnd/);
+  const reused = await f.index.refresh();
+  assert.equal(buildDashboardPayload(reused, request, {}).totals.totalTokens, 165);
+});
+
+test('Codex history prefix without local usage resolves the inherited ancestor recursively', async (t) => {
+  const f = await fixture(t);
+  const a = '11111111-1111-1111-1111-111111111111';
+  const b = '22222222-2222-2222-2222-222222222222';
+  const c = '33333333-3333-3333-3333-333333333333';
+  const rows = [meta(a), cumulative(100, 10)];
+  const boundary = Buffer.byteLength(rows.map(JSON.stringify).join('\n') + '\n');
+  await f.write(`${a}.jsonl`, rows);
+  const header = { ...meta(b), payload: { ...meta(b).payload, history_base: { thread_id: a, end_byte_offset: boundary } } };
+  await f.write(`${b}.jsonl`, [header, cumulative(100, 10)]);
+  const inheritedBoundary = Buffer.byteLength(JSON.stringify(header) + '\n');
+  await f.write(`${b}_${c}.jsonl`, [{ ...header, payload: { ...header.payload, history_base: { thread_id: b, end_byte_offset: inheritedBoundary } } }, cumulative(120, 12)]);
+  const summary = await f.index.refresh();
+  const child = summary.sessions.find((s) => s.sessionId === b);
+  assert.equal(child.usage.totalTokens, 22);
+  assert.equal(child.reconciliation.incomplete, 0);
+});
+
+test('Codex missing history never charges the inherited first counter and reports incomplete usage', async (t) => {
+  const f = await fixture(t);
+  await f.write('orphan.jsonl', [{ ...meta(), payload: { ...meta().payload, history_base: { thread_id: 'missing', end_byte_offset: 100 } } }, cumulative(100000, 1000), cumulative(100010, 1002)]);
+  const summary = await f.index.refresh();
+  assert.equal(summary.sessions[0].usage.totalTokens, 12);
+  assert.equal(summary.sessions[0].reconciliation.incomplete, 1);
+});
+
+test('Claude copied fork responses deduplicate across Session IDs but retain new billable responses', async (t) => {
+  const f = await fixture(t, 'claude');
+  await f.write('parent.jsonl', [assistant(5, { sessionId: 'parent' })]);
+  const fresh = assistant(7, { sessionId: 'child' }); fresh.message.id = 'new-response';
+  await f.write('child.jsonl', [assistant(5, { sessionId: 'child' }), fresh]);
+  const summary = await f.index.refresh();
+  const dashboard = buildDashboardPayload(summary, request, {});
+  assert.equal(dashboard.totals.totalTokens, 32);
+  assert.ok(Math.abs(dashboard.cost.total - (20 * 5 + 12 * 25) / 1e6) < 1e-12);
+  assert.equal(dashboard.sessions.reduce((sum, s) => sum + s.usage.totalTokens, 0), 32);
+  assert.equal(dashboard.sessions.reduce((sum, s) => sum + buildSessionDetail(summary, request, s.sessionKey).usage.totalTokens, 0), 32);
+});
+
+test('Claude cross-Session response updates choose the newest confirmed version and retain it on conflicts', async (t) => {
+  const f = await fixture(t, 'claude');
+  await f.write('parent.jsonl', [assistant(5, { sessionId: 'parent' })]);
+  await f.write('child.jsonl', [assistant(8, { sessionId: 'child', timestamp: '2026-09-15T12:01:00Z' })]);
+  assert.equal(buildDashboardPayload(await f.index.refresh(), request, {}).totals.totalTokens, 18);
+  await f.write('parent.jsonl', [assistant(9, { sessionId: 'parent', timestamp: '2026-09-15T12:01:00Z' })]);
+  const conflicted = buildDashboardPayload(await f.index.refresh(), request, {});
+  assert.equal(conflicted.totals.totalTokens, 18);
+  assert.equal(conflicted.quality.range.usage.incomplete, true);
+  assert.equal(buildDashboardPayload(await f.index.refresh(), request, {}).totals.totalTokens, 18);
+});
+
+test('Codex linked files preserve genuine resets and do not merge an unlinked same-ID file', async (t) => {
+  const f = await fixture(t);
+  const id = '11111111-1111-1111-1111-111111111111';
+  const next = '22222222-2222-2222-2222-222222222222';
+  const rows = [meta(id), cumulative(100, 10)];
+  await f.write(`${id}.jsonl`, rows);
+  const offset = Buffer.byteLength(rows.map(JSON.stringify).join('\n') + '\n');
+  await f.write(`${id}_${next}.jsonl`, [{ ...meta(id), payload: { ...meta(id).payload, history_base: { thread_id: id, end_byte_offset: offset } } }, cumulative(0, 0), cumulative(100, 10)]);
+  await f.write('independent.jsonl', [meta(id), { type: 'ignored' }, cumulative(100, 10)]);
+  const summary = await f.index.refresh();
+  assert.equal(summary.sessions.length, 2);
+  assert.equal(summary.totals.totalTokens, 330);
+  assert.equal(summary.sessions.reduce((sum, s) => sum + s.reconciliation.fullReset, 0), 1);
+});
+
+test('Claude distinct response IDs with identical counters remain billable across Sessions', async (t) => {
+  const f = await fixture(t, 'claude');
+  const second = assistant(5, { sessionId: 'child' }); second.message.id = 'different-response';
+  await f.write('one.jsonl', [assistant(5, { sessionId: 'parent' })]);
+  await f.write('two.jsonl', [second]);
+  assert.equal((await f.index.refresh()).totals.totalTokens, 30);
+});
+
+test('Codex reused child resolves a recovered ancestor and rejects cyclic history safely', async (t) => {
+  const f = await fixture(t);
+  const id = '11111111-1111-1111-1111-111111111111';
+  const rows = [meta('ancestor'), cumulative(99990, 1000)];
+  const offset = Buffer.byteLength(rows.map(JSON.stringify).join('\n') + '\n');
+  await f.write('child.jsonl', [{ ...meta('child'), payload: { ...meta('child').payload, history_base: { thread_id: id, end_byte_offset: offset } } }, cumulative(100000, 1000), cumulative(100010, 1002)]);
+  assert.equal((await f.index.refresh()).sessions[0].usage.totalTokens, 12);
+  await f.write(`${id}.jsonl`, rows);
+  const recovered = await f.index.refresh();
+  assert.equal(recovered.scan.reused, 1);
+  const child = recovered.sessions.find((s) => s.sessionId === 'child');
+  assert.equal(child.usage.totalTokens, 22);
+  assert.equal(child.reconciliation.incomplete, 0);
+  const second = '22222222-2222-2222-2222-222222222222';
+  const header = (self, target) => ({ ...meta(self), payload: { ...meta(self).payload, history_base: { thread_id: target, end_byte_offset: 1 } } });
+  await f.write(`${id}.jsonl`, [header(id, second), cumulative(100, 10)]);
+  await f.write(`${second}.jsonl`, [header(second, id), cumulative(100, 10)]);
+  const cyclic = await f.index.refresh();
+  assert.ok(cyclic.sessions.filter((s) => s.sessionId === id || s.sessionId === second).every((s) => s.reconciliation.incomplete === 1 && s.usage.totalTokens === 0));
+});
+
+test('Codex inherited explicit event replay cannot erase its original charged delta', async (t) => {
+  const f = await fixture(t);
+  const id = '11111111-1111-1111-1111-111111111111';
+  const next = '22222222-2222-2222-2222-222222222222';
+  const rows = [meta(id), cumulative(10, 0, { id: 'start' }), cumulative(20, 0, { id: 'shared' })];
+  await f.write(`${id}.jsonl`, rows);
+  const offset = Buffer.byteLength(rows.map(JSON.stringify).join('\n') + '\n');
+  await f.write(`${id}_${next}.jsonl`, [{ ...meta(id), payload: { ...meta(id).payload, history_base: { thread_id: id, end_byte_offset: offset } } }, cumulative(20, 0, { id: 'shared', timestamp: '2026-09-15T12:00:01Z' }), cumulative(25, 0, { id: 'new' })]);
+  assert.equal((await f.index.refresh()).totals.totalTokens, 25);
+  assert.equal((await f.index.refresh()).totals.totalTokens, 25);
+});
+
+test('Codex fork metadata without a resolvable boundary warns instead of claiming exact deduplication', async (t) => {
+  const f = await fixture(t);
+  await f.write('unbounded.jsonl', [{ ...meta(), payload: { ...meta().payload, forked_from_id: 'ancestor' } }, cumulative(100, 10)]);
+  const dashboard = buildDashboardPayload(await f.index.refresh(), request, {});
+  assert.equal(dashboard.quality.range.usage.incomplete, true);
+  assert.equal(dashboard.quality.range.usage.possibleDuplicate, true);
+});
 
 test('generic Claude cache writes preserve tokens and price only confirmed duration', async (t) => {
   const f = await fixture(t, 'claude');

@@ -2,7 +2,6 @@ import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import readline from 'node:readline';
 import { pipeline } from 'node:stream/promises';
 import { createZstdDecompress } from 'node:zlib';
 import { Worker } from 'node:worker_threads';
@@ -37,6 +36,25 @@ function turnUsage(event) {
   return event?.type === 'turn_completed' && event.payload?.usage ? usage(event.payload.usage) : null;
 }
 
+async function* decodedLines(input) {
+  let pending = []; let offset = 0;
+  for await (const chunk of input) {
+    let start = 0; let end;
+    while ((end = chunk.indexOf(10, start)) >= 0) {
+      pending.push(chunk.subarray(start, end + 1));
+      const bytes = Buffer.concat(pending);
+      offset += bytes.length;
+      yield { text: bytes.toString('utf8').replace(/\r?\n$/, ''), byteEnd: offset };
+      pending = []; start = end + 1;
+    }
+    if (start < chunk.length) pending.push(chunk.subarray(start));
+  }
+  if (pending.length) {
+    const bytes = Buffer.concat(pending);
+    yield { text: bytes.toString('utf8'), byteEnd: offset + bytes.length };
+  }
+}
+
 export async function parseSessionFile(filePath, relativePath) {
   const fileStat = await stat(filePath);
   const metadata = { id: null, cwd: null, model: null, modelProvider: null, originator: null, cliVersion: null };
@@ -46,6 +64,9 @@ export async function parseSessionFile(filePath, relativePath) {
   let lastTimestamp = null;
   let lineCount = 0;
   let invalidLineCount = 0;
+  let historyBase = null;
+  let forkedFromIdentity = null;
+  let decodedSize = 0;
   const hash = createHash('sha256');
   const source = createReadStream(filePath);
   const compressed = filePath.toLowerCase().endsWith('.jsonl.zst');
@@ -54,9 +75,9 @@ export async function parseSessionFile(filePath, relativePath) {
   // Handle pipeline rejection immediately; readline can fail before it settles.
   const completion = compressed ? pipeline(source, createZstdFrameGuard(), input).then(() => null, (error) => error) : null;
   input.on('data', (chunk) => hash.update(chunk));
-  const lines = readline.createInterface({ input, crlfDelay: Infinity });
   try {
-    for await (const rawLine of lines) {
+    for await (const { text: rawLine, byteEnd } of decodedLines(input)) {
+      decodedSize = byteEnd;
       const line = rawLine.trim();
       if (!line) continue;
       lineCount += 1;
@@ -64,6 +85,9 @@ export async function parseSessionFile(filePath, relativePath) {
       try { event = JSON.parse(line); } catch { invalidLineCount += 1; continue; }
       const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {};
       if (event.type === 'session_meta' || event.type === 'thread.started') {
+        const base = payload.history_base;
+        if (typeof base?.thread_id === 'string' && Number.isSafeInteger(base.end_byte_offset) && base.end_byte_offset > 0) historyBase = { threadId: base.thread_id, byteOffset: base.end_byte_offset };
+        if (typeof payload.forked_from_id === 'string' && payload.forked_from_id) forkedFromIdentity = payload.forked_from_id;
         metadata.id ||= payload.id ?? payload.session_id ?? payload.thread_id ?? event.thread_id ?? event.session_id ?? event.id ?? null;
         metadata.cwd ||= payload.cwd ?? payload.working_directory ?? null;
         metadata.model ||= payload.model ?? payload.model_name ?? null;
@@ -83,16 +107,17 @@ export async function parseSessionFile(filePath, relativePath) {
       const explicitId = event.event_id ?? payload.event_id ?? event.usage_id ?? payload.usage_id ?? (cumulativeValue ? event.id : null);
       const rawUsage = cumulativeValue ? (event.payload?.info?.total_token_usage ?? event.info?.total_token_usage) : (event.usage ?? payload.usage);
       const valid = validUsage(rawUsage, ['input_tokens', 'inputTokens', 'output_tokens', 'outputTokens', 'total_tokens', 'totalTokens', 'cached_input_tokens', 'cachedInputTokens', 'cache_read_input_tokens', 'cache_write_tokens', 'cacheWriteTokens', 'reasoning_output_tokens', 'reasoningOutputTokens']);
-      observations.push({ valid, file: relativePath, identity: typeof explicitId === 'string' && explicitId ? explicitId : null, timestamp: observationTimestamp, timestampEstimated: !observedAt, model, source: cumulativeValue ? 'cumulative' : 'turn', sequence: lineCount, usage: cumulativeValue || turn });
+      observations.push({ valid, byteEnd, file: relativePath, identity: typeof explicitId === 'string' && explicitId ? explicitId : null, timestamp: observationTimestamp, timestampEstimated: !observedAt, model, source: cumulativeValue ? 'cumulative' : 'turn', sequence: lineCount, usage: cumulativeValue || turn });
     }
     const readError = await completion;
     if (readError) throw readError;
   } finally {
-    lines.close(); source.destroy(); input.destroy();
+    source.destroy(); input.destroy();
   }
   const selected = selectObservationVersions(observations);
   selected.observations.sort((left, right) => left.sequence - right.sequence);
-  return reconcileSession({ provider: 'codex', executionType: 'main', parentSessionKey: null, agentId: null, file: relativePath, sessionKey: sessionKey('codex', relativePath), sessionId: metadata.id || path.basename(filePath).replace(/\.jsonl(?:\.zst)?$/i, ''), ...metadata, sessionIdentity: typeof metadata.id === 'string' && metadata.id ? metadata.id : null, contentHash: hash.digest('hex'), usageObservations: observations, model: metadata.model || currentModel, firstTimestamp, lastTimestamp, modifiedAt: fileStat.mtime.toISOString(), sizeBytes: fileStat.size, lineCount, invalidLineCount, usageSource: observations.some((item) => item.source === 'cumulative') ? 'reconciled' : observations.length ? 'turn' : 'not_found' }, selected.observations, { duplicate: selected.duplicate, invalidUsage: selected.invalidUsage });
+  const storageIdentity = path.basename(relativePath).match(/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.jsonl(?:\.zst)?$/i)?.[1] || null;
+  return reconcileSession({ provider: 'codex', historyBase, forkedFromIdentity, storageIdentity, decodedSize, executionType: 'main', parentSessionKey: null, agentId: null, file: relativePath, sessionKey: sessionKey('codex', relativePath), sessionId: metadata.id || path.basename(filePath).replace(/\.jsonl(?:\.zst)?$/i, ''), ...metadata, sessionIdentity: typeof metadata.id === 'string' && metadata.id ? metadata.id : null, contentHash: hash.digest('hex'), usageObservations: observations, model: metadata.model || currentModel, firstTimestamp, lastTimestamp, modifiedAt: fileStat.mtime.toISOString(), sizeBytes: fileStat.size, lineCount, invalidLineCount, usageSource: observations.some((item) => item.source === 'cumulative') ? 'reconciled' : observations.length ? 'turn' : 'not_found' }, selected.observations, { duplicate: selected.duplicate, invalidUsage: selected.invalidUsage });
 }
 
 function refreshFailure(reason, scan = {}, failedFiles = 0) {
