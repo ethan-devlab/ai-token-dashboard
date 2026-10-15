@@ -16,6 +16,19 @@ import { comparisonFixture } from './fixtures/chart-fixtures.mjs';
 import { countdownParts, formatCountdown, windowLabelKey, remainingPercent } from '../public/scripts/account-usage.mjs';
 import { chartColumns, chartDomain, chartValue, nearestBucketIndex, numericScale, snappedInterval } from '../public/scripts/chart-geometry.mjs';
 
+test('detail limit settings copy is bilingual and its edits participate in dirty state', () => {
+  const saved = { DETAIL_OBSERVATION_LIMIT: '2000' };
+  assert.equal(settingsChanged(saved, { DETAIL_OBSERVATION_LIMIT: '7500' }), true);
+  assert.equal(settingsChanged(saved, { ...saved }), false);
+  setLocale('en');
+  assert.equal(t('settings.detailObservationLimit'), 'Detail observation limit');
+  assert.match(t('settings.detailObservationHint'), /totals use all observations/);
+  setLocale('zh-Hant');
+  assert.equal(t('settings.detailObservationLimit'), '詳細資料觀測值上限');
+  assert.match(t('settings.detailObservationHint'), /總量仍使用全部資料/);
+  setLocale('en');
+});
+
 test('comparison charts preserve sparse intervals, unknown values and bucket snapping', () => {
   const { points } = comparisonFixture('sparse');
   assert.deepEqual(chartDomain(points), [points[0].fromMs, points.at(-1).toMs]);

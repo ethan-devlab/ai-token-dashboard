@@ -369,7 +369,7 @@ test('settings persistence validates before atomically replacing the local env f
   const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-token-dashboard-settings-'));
   const envPath = path.join(directory, '.env');
   const values = {
-    HOST: '127.0.0.1', PORT: '3344', CODEX_SESSIONS_DIR: directory, CLAUDE_SESSIONS_DIR: directory, MAX_FILES: '100', PARSE_CONCURRENCY: '2',
+    HOST: '127.0.0.1', PORT: '3344', CODEX_SESSIONS_DIR: directory, CLAUDE_SESSIONS_DIR: directory, MAX_FILES: '100', DETAIL_OBSERVATION_LIMIT: '7500', PARSE_CONCURRENCY: '2',
     ALLOW_REMOTE: '0', EXPOSE_FULL_PATHS: '0', AUTO_REFRESH: '1', AUTO_REFRESH_DEBOUNCE_MS: '250', UPDATE_REPOSITORY: 'owner/repo',
   };
   try {
@@ -379,8 +379,12 @@ test('settings persistence validates before atomically replacing the local env f
     const persisted = await readFile(envPath, 'utf8');
     assert.match(persisted, /^# local settings\nCUSTOM_VALUE=preserve\nPORT=3344/m);
     assert.equal(saved.UPDATE_REPOSITORY, 'owner/repo');
-    assert.equal(saved.DETAIL_OBSERVATION_LIMIT, '5000');
-    assert.equal(readRuntimeConfig({ environment: {}, localConfig: saved }).detailObservationLimit, 5000);
+    assert.equal(saved.DETAIL_OBSERVATION_LIMIT, '7500');
+    assert.equal(readRuntimeConfig({ environment: {}, localConfig: saved }).detailObservationLimit, 7500);
+    assert.equal(settingsPayload({}, readRuntimeConfig({ environment: {} })).settings.DETAIL_OBSERVATION_LIMIT, '2000');
+    for (const limit of ['0', '100001', '1.5']) {
+      assert.throws(() => saveSettings(envPath, { ...values, DETAIL_OBSERVATION_LIMIT: limit }, { revision }), (error) => error?.code === 'INVALID_SETTINGS');
+    }
     assert.equal(settingsPayload(saved, readRuntimeConfig({ environment: {}, localConfig: saved })).restartRequired, true);
 
     const beforeInvalidSave = persisted;

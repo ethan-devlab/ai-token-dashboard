@@ -2,7 +2,7 @@ import { applyDocumentTranslations, detectLocale, setLocale, t } from './i18n.mj
 import { setButtonBusy } from './button-state.mjs';
 import { settingsChanged } from './settings-state.mjs';
 
-const SETTINGS_KEYS = Object.freeze(['HOST', 'PORT', 'CODEX_SESSIONS_DIR', 'CLAUDE_SESSIONS_DIR', 'MAX_FILES', 'PARSE_CONCURRENCY', 'ALLOW_REMOTE', 'EXPOSE_FULL_PATHS', 'AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS', 'UPDATE_REPOSITORY']);
+const SETTINGS_KEYS = Object.freeze(['HOST', 'PORT', 'CODEX_SESSIONS_DIR', 'CLAUDE_SESSIONS_DIR', 'MAX_FILES', 'DETAIL_OBSERVATION_LIMIT', 'PARSE_CONCURRENCY', 'ALLOW_REMOTE', 'EXPOSE_FULL_PATHS', 'AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS', 'UPDATE_REPOSITORY']);
 const form = document.getElementById('settingsForm');
 const notice = document.getElementById('settingsNotice');
 const remoteWarning = document.getElementById('remoteWarning');
@@ -73,7 +73,7 @@ for (const key of SETTINGS_KEYS) {
   if (labelText) { labelText.id = `label-${key}`; input.setAttribute('aria-labelledby', labelText.id); }
   const error = document.createElement('span'); error.id = `error-${key}`; error.className = 'field-error'; error.hidden = true;
   input.parentElement.append(error);
-  const hint = ['MAX_FILES', 'PARSE_CONCURRENCY'].includes(key) ? 'parseHint' : ['HOST', 'PORT', 'EXPOSE_FULL_PATHS'].includes(key) ? 'networkHint' : ['AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS'].includes(key) ? 'watcherHint' : '';
+  const hint = key === 'DETAIL_OBSERVATION_LIMIT' ? 'detailObservationHint' : ['MAX_FILES', 'PARSE_CONCURRENCY'].includes(key) ? 'parseHint' : ['HOST', 'PORT', 'EXPOSE_FULL_PATHS'].includes(key) ? 'networkHint' : ['AUTO_REFRESH', 'AUTO_REFRESH_DEBOUNCE_MS'].includes(key) ? 'watcherHint' : '';
   input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'), hint, error.id].filter(Boolean).join(' '));
   input.addEventListener('invalid', () => { input.setAttribute('aria-invalid', 'true'); error.textContent = input.validationMessage; error.hidden = false; setNotice(t('settings.invalid'), 'error'); notice.dataset.validation = 'true'; });
   input.addEventListener('input', () => { if (input.validity.valid) { input.removeAttribute('aria-invalid'); error.hidden = true; if (notice.dataset.validation === 'true' && !form.querySelector('[aria-invalid="true"]')) setNotice(t('settings.restart')); } });

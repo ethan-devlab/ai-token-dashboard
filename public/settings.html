@@ -31,9 +31,11 @@
             <label class="control settings-control"><span data-i18n="settings.claudeDirectory">Claude sessions 目錄</span><input name="CLAUDE_SESSIONS_DIR" type="text" autocomplete="off" required aria-describedby="directoryHint" /></label>
             <label class="control settings-control"><span data-i18n="settings.maxFiles">最大檔案數</span><input name="MAX_FILES" type="number" min="1" max="100000" required /></label>
             <label class="control settings-control"><span data-i18n="settings.parseConcurrency">解析並行數</span><input name="PARSE_CONCURRENCY" type="number" min="1" max="16" required /></label>
+            <label class="control settings-control"><span data-i18n="settings.detailObservationLimit">詳細資料觀測值上限</span><input name="DETAIL_OBSERVATION_LIMIT" type="number" min="1" max="100000" step="1" required /></label>
           </div>
           <p id="directoryHint" class="muted settings-hint" data-i18n="settings.pathHint">此本機路徑不會傳送至外部服務。</p>
           <p id="parseHint" class="muted settings-hint" data-i18n="settings.parseHint">最大檔案數 1–100000；解析並行數 1–16。</p>
+          <p id="detailObservationHint" class="muted settings-hint" data-i18n="settings.detailObservationHint">每個 Session 詳細資料回傳 1–100000 筆觀測值；預設 2000。僅限制回傳筆數，解析與 token／費用總量仍使用全部資料。</p>
         </fieldset>
 
         <fieldset class="surface settings-group">
