@@ -4,23 +4,50 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  node-minimum:
-    runs-on: ubuntu-latest
+  test:
+    name: Node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: '22.15.0'
+          - os: windows-latest
+            node: '24'
+          - os: macos-latest
+            node: '24'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
         with:
-          node-version: 22.15.0
-      - run: npm run check
-      - run: npm run test:server
-  windows-contract:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - name: Set up Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
-      - run: npm run test:client
-      - run: npm run test:contract
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - name: Check syntax
+        run: npm run check
+      - name: Test server
+        run: npm run test:server
+      - name: Test client
+        run: npm run test:client
+      - name: Test HTTP contracts
+        run: npm run test:contract
+      - name: Test accounting and detail limits
+        run: node --test tests/phase1-accounting.test.mjs tests/detail-completeness.test.mjs
+      - name: Test configured detail response over HTTP
+        run: node tests/detail-completeness-http.mjs --configured-limit
